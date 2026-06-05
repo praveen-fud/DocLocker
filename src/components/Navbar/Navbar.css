@@ -1,0 +1,234 @@
+/* ==========================================================================
+   1. Structural Floating Substrate Canvas
+   ========================================================================== */
+
+.premium-navbar-blur {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: rgba(3, 7, 18, 0.45); /* Soft, dark translucent base */
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+}
+
+.navbar-container-core {
+  max-width: 1400px; /* Aligned exactly with the home split layout width max */
+  margin: 0 auto;
+  padding: 0 32px;
+  height: 68px; /* Slightly deeper visual baseline tracking */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ==========================================================================
+   2. Integrated Premium Logo and Corporate Identity
+   ========================================================================== */
+
+.navbar-brand-anchor {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-decoration: none;
+  transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.navbar-brand-anchor:hover {
+  opacity: 0.9;
+}
+
+/* Micro-lens container design inherited from the home hero framework */
+.navbar-logo-lens-capsule {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 2px;
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.navbar-lens-flare {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.4) 0%,
+    transparent 60%
+  );
+  z-index: 2;
+  pointer-events: none;
+}
+
+.navbar-lens-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.navbar-brand-typography {
+  display: flex;
+  flex-direction: column;
+}
+
+.navbar-brand-name {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  line-height: 1.1;
+}
+
+.navbar-brand-tagline {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #0ea5e9;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+}
+
+/* ==========================================================================
+   3. Navigation Link Actions & Micro-Glint States
+   ========================================================================== */
+
+.navbar-actions-deck {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.navbar-deck-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  color: #9ca3af;
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.navbar-deck-link:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.navbar-deck-link.active {
+  color: #38bdf8;
+  background: rgba(14, 165, 233, 0.06);
+}
+
+/* High-fidelity fluid anchor line transition */
+.navbar-link-active-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #38bdf8, #6366f1);
+  transform: translateX(-50%);
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 100px;
+  pointer-events: none;
+}
+
+.navbar-deck-link.active .navbar-link-active-indicator,
+.navbar-deck-link:hover .navbar-link-active-indicator {
+  width: 60%;
+}
+
+/* Special styling wrapper targeting the Admin login variant hook */
+.navbar-deck-link.admin-secure-trigger {
+  color: #9ca3af;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.navbar-deck-link.admin-secure-trigger:hover {
+  border-color: rgba(99, 102, 241, 0.3);
+  color: #818cf8;
+  background: rgba(99, 102, 241, 0.04);
+}
+
+/* ==========================================================================
+   4. Monolithic Functional Destruction Triggers (Exit Call)
+   ========================================================================== */
+
+.navbar-exit-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  border-radius: 8px;
+  color: #fca5a5;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.navbar-exit-trigger:hover {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #ffffff;
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.25);
+  transform: translateY(-1px);
+}
+
+.navbar-exit-trigger:active {
+  transform: translateY(0);
+}
+
+/* ==========================================================================
+   5. Responsive Adapters
+   ========================================================================== */
+
+@media (max-width: 640px) {
+  .navbar-container-core {
+    padding: 0 16px;
+    height: 60px;
+  }
+
+  .navbar-logo-lens-capsule {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+  }
+
+  .navbar-brand-name {
+    font-size: 14px;
+  }
+
+  .navbar-brand-tagline {
+    display: none; /* Strip minor metadata on tiny viewports to avoid block clashing */
+  }
+
+  .navbar-deck-link span,
+  .navbar-exit-trigger span {
+    display: none; /* Collapse string parameters into icon grids on compact displays */
+  }
+
+  .navbar-deck-link,
+  .navbar-exit-trigger {
+    padding: 8px 12px;
+  }
+}

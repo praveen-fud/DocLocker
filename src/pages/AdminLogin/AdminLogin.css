@@ -1,0 +1,25 @@
+.admin-login-page {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; padding: 64px 24px 24px;
+}
+.admin-login-container {
+  max-width: 380px; width: 100%; text-align: center;
+}
+.admin-login-icon {
+  width: 70px; height: 70px; border-radius: 20px; margin: 0 auto 20px;
+  background: linear-gradient(135deg, var(--blue), var(--blue-dark));
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 8px 32px rgba(50,128,195,0.3);
+}
+.admin-login-container h1 { font-size: 26px; font-weight: 800; margin-bottom: 8px; }
+.admin-login-container > p { font-size: 13px; color: var(--gray-400); margin-bottom: 28px; }
+.admin-login-form { text-align: left; margin-bottom: 16px; }
+.password-wrap { position: relative; }
+.password-wrap .input-field { padding-right: 44px; }
+.show-pass {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: var(--gray-400); cursor: pointer;
+}
+.show-pass:hover { color: white; }
+.admin-hint { font-size: 12px; color: var(--gray-500); }
+.admin-hint code { background: rgba(255,255,255,0.08); padding: 1px 6px; border-radius: 4px; font-size: 11px; }

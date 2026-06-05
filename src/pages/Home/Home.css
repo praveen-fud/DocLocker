@@ -1,0 +1,677 @@
+/* ==========================================================================
+   1. Viewport Structure & Layout Systems
+   ========================================================================== */
+
+.home-page.dashboard-viewport {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
+  background-color: #030712;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 50px;
+}
+
+.home-split-layout {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 60px 24px;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 64px;
+  align-items: center;
+}
+
+/* ==========================================================================
+   2. Workspace Embedded Highlight Logo Structure
+   ========================================================================== */
+
+.brand-hero-logo-anchor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 100%;
+  margin-bottom: 28px; /* Clean spacing block directly above the 'Get Started' text */
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05); /* Soft split line within the workspace */
+}
+
+.logo-glow-underlay {
+  position: absolute;
+  width: 110px;
+  height: 110px;
+  background: radial-gradient(
+    circle,
+    rgba(14, 165, 233, 0.2) 0%,
+    transparent 70%
+  );
+  z-index: 1;
+  pointer-events: none;
+  filter: blur(8px);
+}
+
+.hero-showcase-logo {
+  position: relative;
+  z-index: 2;
+  width: 90px; /* Refined layout dimensions to blend within card boundaries */
+  height: 90px;
+  border-radius: 20px;
+  object-fit: cover;
+  background: #ffffff;
+  padding: 6px;
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 0 20px rgba(14, 165, 233, 0.1);
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.brand-hero-logo-anchor:hover .hero-showcase-logo {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow:
+    0 16px 35px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(14, 165, 233, 0.25),
+    0 0 25px rgba(14, 165, 233, 0.25);
+}
+
+.logo-brand-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+  margin-top: 12px;
+  margin-bottom: 2px;
+}
+
+.logo-brand-subtitle {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #0ea5e9;
+  letter-spacing: 0.08em;
+}
+
+/* ==========================================================================
+   3. Dynamic Ambient Background Canvas
+   ========================================================================== */
+
+.ambient-glow-network {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.glow-cluster {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(140px);
+  opacity: 0.15;
+  mix-blend-mode: screen;
+}
+
+.core-teal-glow {
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(circle, #0ea5e9 0%, transparent 70%);
+  top: -10%;
+  left: -10%;
+  animation: warmPulseTeal 18s ease-in-out infinite alternate;
+}
+
+.core-blue-glow {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, #2563eb 0%, transparent 70%);
+  bottom: -5%;
+  right: -5%;
+  animation: warmPulseBlue 22s ease-in-out infinite alternate;
+}
+
+@keyframes warmPulseTeal {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.12;
+  }
+  100% {
+    transform: translate(80px, 40px) scale(1.15);
+    opacity: 0.18;
+  }
+}
+
+@keyframes warmPulseBlue {
+  0% {
+    transform: translate(0, 0) scale(1.1);
+    opacity: 0.15;
+  }
+  100% {
+    transform: translate(-60px, -50px) scale(0.9);
+    opacity: 0.12;
+  }
+}
+
+/* ==========================================================================
+   4. Left Column Content
+   ========================================================================== */
+
+.brand-hero-column {
+  display: flex;
+  flex-direction: column;
+}
+
+.main-display-headline {
+  font-size: 54px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: #f9fafb;
+  margin-bottom: 20px;
+}
+
+.gradient-text-block {
+  display: block;
+  font-family: "Sora", sans-serif;
+  font-size: 38px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--blue-light), var(--accent));
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.editorial-sub-headline {
+  font-size: 17px;
+  color: #9ca3af;
+  line-height: 1.65;
+  max-width: 540px;
+  margin-bottom: 40px;
+}
+
+/* ==========================================================================
+   5. Asymmetric Feature Matrix Component
+   ========================================================================== */
+
+.asymmetric-feature-matrix {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 560px;
+}
+
+.matrix-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.01);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  border-radius: 16px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.matrix-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(14, 165, 233, 0.15);
+  transform: translateX(6px);
+}
+
+.matrix-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(14, 165, 233, 0.08);
+  color: #38bdf8;
+  flex-shrink: 0;
+  border: 1px solid rgba(14, 165, 233, 0.1);
+}
+
+.matrix-body {
+  flex: 1;
+}
+
+.matrix-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.matrix-body h4 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #f3f4f6;
+}
+
+.matrix-micro-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #9ca3af;
+}
+
+.matrix-item:hover .matrix-micro-badge {
+  background: rgba(14, 165, 233, 0.15);
+  color: #38bdf8;
+}
+
+.matrix-body p {
+  font-size: 13px;
+  color: #9ca3af;
+  line-height: 1.5;
+}
+
+/* ==========================================================================
+   6. Right Column: Workspace Architecture Setup
+   ========================================================================== */
+
+.interactive-panel-column {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+
+.glass-workspace-card {
+  width: 100%;
+  max-width: 480px;
+  min-height: 520px;
+  padding: 36px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 24px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+}
+
+.spark-icon-container {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.15) 0%,
+    rgba(14, 165, 233, 0.15) 100%
+  );
+  border: 1px solid rgba(14, 165, 233, 0.18);
+  margin-bottom: 16px;
+}
+
+.accent-color-icon {
+  color: #38bdf8;
+}
+
+.workspace-header h2 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+
+.workspace-header p {
+  font-size: 14px;
+  color: #9ca3af;
+  line-height: 1.5;
+  margin-bottom: 24px;
+}
+
+.text-center {
+  text-align: center;
+}
+
+/* ==========================================================================
+   7. Action Cards Deck Setup
+   ========================================================================== */
+
+.action-card-deck {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.premium-interactive-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 22px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  font-family: inherit;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-glint-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.03),
+    transparent
+  );
+  transform: translateX(-100%);
+  transition: transform 0.6s ease;
+}
+
+.premium-interactive-card:hover .card-glint-overlay {
+  transform: translateX(100%);
+}
+
+.card-icon-frame {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.25s ease;
+}
+
+.new-node .card-icon-frame {
+  background: rgba(14, 165, 233, 0.1);
+  color: #38bdf8;
+  border: 1px solid rgba(14, 165, 233, 0.15);
+}
+
+.returning-node .card-icon-frame {
+  background: rgba(99, 102, 241, 0.1);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+.premium-interactive-card:hover .card-icon-frame {
+  transform: scale(1.05);
+}
+
+.new-node:hover {
+  background: rgba(14, 165, 233, 0.04);
+  border-color: rgba(14, 165, 233, 0.4);
+  box-shadow: 0 10px 30px rgba(14, 165, 233, 0.1);
+}
+
+.returning-node:hover {
+  background: rgba(99, 102, 241, 0.04);
+  border-color: rgba(99, 102, 241, 0.4);
+  box-shadow: 0 10px 30px rgba(99, 102, 241, 0.1);
+}
+
+.card-seo-content {
+  flex: 1;
+}
+
+.card-seo-content h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+
+.card-seo-content p {
+  font-size: 12px;
+  color: #9ca3af;
+  line-height: 1.4;
+}
+
+.card-action-indicator {
+  color: #4b5563;
+  transition: all 0.2s ease;
+}
+
+.premium-interactive-card:hover .card-action-indicator {
+  color: #ffffff;
+  transform: translateX(4px);
+}
+
+/* ==========================================================================
+   8. Form Structures & Modular Elements
+   ========================================================================== */
+
+.workspace-form-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.workspace-form-header {
+  margin-bottom: 24px;
+}
+
+.minimal-back-action {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 14px;
+  font-family: inherit;
+  transition: color 0.15s ease;
+}
+
+.minimal-back-action:hover {
+  color: #38bdf8;
+}
+
+.workspace-form-header h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 6px;
+}
+
+.workspace-form-header p {
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.modular-form-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.interactive-input-block {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.interactive-input-block label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #d1d5db;
+}
+
+.required-accent {
+  color: #06b6d4;
+  margin-left: 2px;
+}
+
+.premium-styled-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  font-size: 14px;
+  color: #ffffff;
+  font-family: inherit;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.premium-styled-input::placeholder {
+  color: #4b5563;
+}
+
+.premium-styled-input:focus {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(14, 165, 233, 0.5);
+}
+
+.input-focus-border-line {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #38bdf8, #6366f1);
+  transition: all 0.3s ease;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.premium-styled-input:focus ~ .input-focus-border-line {
+  width: 80%;
+  border-radius: 100px;
+}
+
+/* ==========================================================================
+   9. Buttons, Handlers, & Feedback Node Overlays
+   ========================================================================== */
+
+.action-submit-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 13px 22px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  margin-top: 6px;
+}
+
+.action-submit-button.call-to-action {
+  background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 20px rgba(14, 165, 233, 0.25);
+}
+
+.action-submit-button.call-to-action:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(14, 165, 233, 0.4);
+}
+
+.action-submit-button.lookup-action {
+  background: linear-gradient(135deg, #4f46e5 0%, #312e81 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 20px rgba(79, 70, 229, 0.25);
+}
+
+.action-submit-button.lookup-action:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(79, 70, 229, 0.4);
+}
+
+.action-submit-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.action-submit-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.panel-error-alert {
+  padding: 12px 16px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 10px;
+  color: #fca5a5;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   10. Media Adaptation Layer (Responsive Controls)
+   ========================================================================== */
+
+@media (max-width: 1100px) {
+  .home-split-layout {
+    grid-template-columns: 1fr;
+    gap: 48px;
+    max-width: 640px;
+    padding: 40px 24px 100px;
+  }
+
+  .brand-hero-column {
+    text-align: center;
+    align-items: center;
+  }
+
+  .main-display-headline {
+    font-size: 42px;
+  }
+
+  .editorial-sub-headline {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .asymmetric-feature-matrix {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .matrix-item:hover {
+    transform: translateY(-2px);
+  }
+
+  .glass-workspace-card {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-display-headline {
+    font-size: 34px;
+  }
+
+  .hero-showcase-logo {
+    width: 80px;
+    height: 80px;
+  }
+
+  .logo-brand-title {
+    font-size: 22px;
+  }
+
+  .glass-workspace-card {
+    padding: 24px;
+  }
+}
