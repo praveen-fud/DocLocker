@@ -30,7 +30,6 @@ const SECTIONS = [
   { id: "otherDocs", label: "Other Documents", icon: FolderPlus },
 ];
 
-// Co-Applicant schemas with 3 separate explicit yearly ITR fields
 const LOCAL_CO_APPLICANT_SCHEMA = {
   salaried: [
     {
@@ -165,7 +164,6 @@ export default function Portal() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
 
-  // FIX: student identifier (email/phone) for collision-safe Drive folder key
   const studentIdentifier = student?.email || student?.phone || "";
 
   const uploadsRef = useRef(uploads);
@@ -204,7 +202,6 @@ export default function Portal() {
       coApplicants: coCountRef.current,
     };
     setStudent(updated);
-    // FIX: saveStudentMeta is void — not awaited
     saveStudentMeta(student.name, updated, studentIdentifier);
   };
 
@@ -222,7 +219,6 @@ export default function Portal() {
       coApplicants: coCountRef.current,
     };
     setStudent(updated);
-    // FIX: saveStudentMeta is void — not awaited
     saveStudentMeta(student.name, updated, studentIdentifier);
     setSaved(true);
     setSaving(false);
@@ -238,14 +234,13 @@ export default function Portal() {
     (k) => k.startsWith("ref") && personalInfo[k],
   ).length;
 
-  // FIX: dynamic total from schema helper — no more hardcoded 22
   const dynamicTotal = getTotalRequiredFields(coCount, personalInfo);
 
   const progressSections = [
     {
       id: "personal",
       label: "Personal",
-      total: 12,
+      total: 44, // Adjusted for comprehensive tracking form inputs
       uploaded: Object.keys(personalInfo).filter(
         (k) =>
           !k.startsWith("ref") && !k.startsWith("co_info_") && personalInfo[k],
@@ -269,7 +264,6 @@ export default function Portal() {
       total: Array.from({ length: coCount }, (_, i) => {
         const coInfo = personalInfo[`co_info_${i}`] || {};
         const financialStatus = coInfo.financialStatus || "financial";
-
         if (financialStatus === "non-financial") return 3;
         const empType = coInfo.empType || "salaried";
         return (
@@ -328,7 +322,6 @@ export default function Portal() {
 
         {saveError && <div className="save-error-toast">{saveError}</div>}
 
-        {/* FIX: show dynamic total in progress bar title */}
         <div className="portal-progress-info">
           <span className="progress-total-note">
             {Object.values(uploads).reduce(
@@ -416,7 +409,6 @@ export default function Portal() {
               onUploaded={(fieldId, result) =>
                 handleUploaded("otherDocs", fieldId, result)
               }
-              // FIX: pass removal handler so deleted items clear from state
               onRemoved={(fieldId) => {
                 const updated = { ...uploadsRef.current };
                 if (updated.otherDocs) {
@@ -466,7 +458,7 @@ export default function Portal() {
   );
 }
 
-// ─── Personal Section ─────────────────────────────────────────────────────────
+// ─── Personal Field Helper ──────────────────────────────────────────────────
 function PersonalField({
   label,
   k,
@@ -489,120 +481,501 @@ function PersonalField({
   );
 }
 
+// ─── Personal Section (UPDATED: Segmented into Step Sub-navigation) ──────────────
 function PersonalSection({ info, onChange }) {
+  const [subStep, setSubStep] = useState(1);
+
   return (
     <div className="section-panel">
       <div className="section-intro">
-        <h2>Personal Information</h2>
-        <p>This information will be used to identify your folder and profile</p>
+        <h2>Personal Profile Configuration</h2>
+        <p>Complete your registration info profiles using the wizard below</p>
       </div>
-      <div className="grid-2">
-        <PersonalField
-          label="Full Name"
-          k="fullName"
-          placeholder="As per passport"
-          info={info}
-          onChange={onChange}
-        />
-        <PersonalField
-          label="Email Address"
-          k="email"
-          type="email"
-          placeholder="rahul@example.com"
-          info={info}
-          onChange={onChange}
-        />
-        <PersonalField
-          label="Contact Number"
-          k="phone"
-          placeholder="+91 98765 43210"
-          info={info}
-          onChange={onChange}
-        />
-        <div className="input-group">
-          <label>Marital Status</label>
-          <select
-            className="input-field"
-            value={info.marital || ""}
-            onChange={(e) => onChange("marital", e.target.value)}
+
+      {/* Internal Sub-wizard progress line bar */}
+      <div
+        className="sub-step-navigator"
+        style={{ display: "flex", gap: 8, marginBottom: 24 }}
+      >
+        {[1, 2, 3, 4].map((stepNum) => (
+          <button
+            key={stepNum}
+            type="button"
+            className={`btn btn-sm ${subStep === stepNum ? "btn-primary" : "btn-secondary"}`}
+            style={{ flex: 1 }}
+            onClick={() => setSubStep(stepNum)}
           >
-            <option value="">Select</option>
-            <option value="Single">Single</option>
-            <option value="Married">Married</option>
-          </select>
-        </div>
-        <PersonalField
-          label="Loan Amount Required"
-          k="loanAmount"
-          placeholder="e.g. ₹50,00,000"
-          info={info}
-          onChange={onChange}
-        />
-        <div className="input-group">
-          <label>10th Percentage</label>
-          <input
-            className="input-field"
-            placeholder="e.g. 85.4"
-            value={info.pct10 || ""}
-            onChange={(e) => onChange("pct10", e.target.value)}
-          />
-        </div>
-        <div className="input-group">
-          <label>12th Percentage</label>
-          <input
-            className="input-field"
-            placeholder="e.g. 82.0"
-            value={info.pct12 || ""}
-            onChange={(e) => onChange("pct12", e.target.value)}
-          />
-        </div>
-        <div className="input-group">
-          <label>Graduation % / CGPA</label>
-          <input
-            className="input-field"
-            placeholder="e.g. 8.2 CGPA"
-            value={info.pctGrad || ""}
-            onChange={(e) => onChange("pctGrad", e.target.value)}
-          />
-        </div>
+            Page {stepNum}
+          </button>
+        ))}
       </div>
-      <div className="divider" />
-      <h3 className="sub-heading">Address Details</h3>
-      <div className="input-group">
-        <label>Current Address</label>
-        <textarea
-          className="input-field"
-          rows={2}
-          placeholder="Door no, Street, City, State, PIN"
-          value={info.currentAddress || ""}
-          onChange={(e) => onChange("currentAddress", e.target.value)}
-        />
-      </div>
-      <div className="input-group">
-        <label>Permanent Address</label>
-        <textarea
-          className="input-field"
-          rows={2}
-          placeholder="Door no, Street, City, State, PIN"
-          value={info.permanentAddress || ""}
-          onChange={(e) => onChange("permanentAddress", e.target.value)}
-        />
-      </div>
-      <div className="divider" />
-      <h3 className="sub-heading">Family Details</h3>
-      <div className="grid-2">
-        <PersonalField
-          label="Maternal Grandmother Name"
-          k="maternalGrandma"
-          info={info}
-          onChange={onChange}
-        />
-        <PersonalField
-          label="Paternal Grandmother Name"
-          k="paternalGrandma"
-          info={info}
-          onChange={onChange}
-        />
+
+      {/* PAGE 1: Base Identity, Scores, & Academic Details */}
+      {subStep === 1 && (
+        <div className="animate-fade-in">
+          <h3 className="sub-heading">Identity & Academic Parameters</h3>
+          <div className="grid-2">
+            <PersonalField
+              label="Student Full Name"
+              k="fullName"
+              placeholder="As per passport"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Mobile & WhatsApp Number"
+              k="phone"
+              placeholder="+91 XXXXX XXXXX"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Email Identity Address"
+              k="email"
+              type="email"
+              placeholder="name@example.com"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Required Loan Amount"
+              k="loanAmount"
+              placeholder="e.g. ₹50,00,000"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Student CIBIL Score"
+              k="studentCibil"
+              placeholder="e.g. 750"
+              info={info}
+              onChange={onChange}
+            />
+
+            <div className="input-group">
+              <label>Marital Status</label>
+              <select
+                className="input-field"
+                value={info.marital || ""}
+                onChange={(e) => onChange("marital", e.target.value)}
+              >
+                <option value="">Select</option>
+                <option value="Single">Single</option>
+                <option value="Married">Married</option>
+              </select>
+            </div>
+
+            <PersonalField
+              label="Qualification & Passed Year"
+              k="qualPassedYear"
+              placeholder="e.g. B.Tech 2024"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="10th Percentage & Year"
+              k="pct10"
+              placeholder="e.g. 85.4% - 2018"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Inter/12th Percentage & Year"
+              k="pct12"
+              placeholder="e.g. 82.0% - 2020"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Graduation CGPA / % & Year"
+              k="pctGrad"
+              placeholder="e.g. 8.2 CGPA - 2024"
+              info={info}
+              onChange={onChange}
+            />
+
+            <div className="input-group">
+              <label>Any Active/Past Backlogs?</label>
+              <select
+                className="input-field"
+                value={info.hasBacklogs || ""}
+                onChange={(e) => onChange("hasBacklogs", e.target.value)}
+              >
+                <option value="">Select</option>
+                <option value="No">No</option>
+                <option value="Yes">Yes</option>
+              </select>
+            </div>
+            {info.hasBacklogs === "Yes" && (
+              <PersonalField
+                label="Number of Backlogs"
+                k="backlogCount"
+                placeholder="e.g. 2"
+                info={info}
+                onChange={onChange}
+              />
+            )}
+          </div>
+
+          <div className="divider" />
+          <h3 className="sub-heading">Standardized Test Metrics</h3>
+          <div className="grid-2">
+            <PersonalField
+              label="GRE Score"
+              k="greScore"
+              placeholder="e.g. 312"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="IELTS Score"
+              k="ieltsScore"
+              placeholder="e.g. 7.0"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Duolingo Score"
+              k="duolingoScore"
+              placeholder="e.g. 120"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="TOEFL Score"
+              k="toeflScore"
+              placeholder="e.g. 98"
+              info={info}
+              onChange={onChange}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* PAGE 2: Target Profiles, Visa Metrics, & Residence */}
+      {subStep === 2 && (
+        <div className="animate-fade-in">
+          <h3 className="sub-heading">Destination & Application Context</h3>
+          <div className="grid-2">
+            <div className="input-group">
+              <label>Loan Application Track For</label>
+              <select
+                className="input-field"
+                value={info.loanTrack || ""}
+                onChange={(e) => onChange("loanTrack", e.target.value)}
+              >
+                <option value="">Select Option</option>
+                <option value="MS">Master of Science (MS)</option>
+                <option value="Under Graduation">Under Graduation (UG)</option>
+              </select>
+            </div>
+
+            <PersonalField
+              label="Traveling Country & University"
+              k="targetUniversity"
+              placeholder="e.g. USA - UT Dallas"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Course Name & University"
+              k="courseNameUniversity"
+              placeholder="e.g. Computer Science - UTD"
+              info={info}
+              onChange={onChange}
+            />
+
+            <div className="input-group">
+              <label>I20 Document Received?</label>
+              <select
+                className="input-field"
+                value={info.i20Received || ""}
+                onChange={(e) => onChange("i20Received", e.target.value)}
+              >
+                <option value="">Select Option</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+
+            <div className="input-group">
+              <label>Visa Slot Booked Or Not?</label>
+              <select
+                className="input-field"
+                value={info.visaBooked || ""}
+                onChange={(e) => onChange("visaBooked", e.target.value)}
+              >
+                <option value="">Select Status</option>
+                <option value="No">No</option>
+                <option value="Yes">Yes</option>
+              </select>
+            </div>
+            {info.visaBooked === "Yes" && (
+              <PersonalField
+                label="Visa Slot Booked Date"
+                k="visaSlotDate"
+                type="date"
+                info={info}
+                onChange={onChange}
+              />
+            )}
+          </div>
+
+          <div className="divider" />
+          <h3 className="sub-heading">Residential Tracking Matrices</h3>
+          <div className="input-group">
+            <label>Present Address (With Landmark)</label>
+            <textarea
+              className="input-field"
+              rows={2}
+              placeholder="Door no, Street, Landmark, PIN Code"
+              value={info.currentAddress || ""}
+              onChange={(e) => onChange("currentAddress", e.target.value)}
+            />
+          </div>
+          <div className="input-group">
+            <label>Permanent Address (With Landmark)</label>
+            <textarea
+              className="input-field"
+              rows={2}
+              placeholder="Same as above or structural fallback layout"
+              value={info.permanentAddress || ""}
+              onChange={(e) => onChange("permanentAddress", e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* PAGE 3: Parents Information, Credit Values, & Guarantors */}
+      {subStep === 3 && (
+        <div className="animate-fade-in">
+          <h3 className="sub-heading">Paternal & Maternal Baselines</h3>
+          <div className="grid-2">
+            <PersonalField
+              label="Father Name"
+              k="fatherName"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Father Mobile No. & Mail Id"
+              k="fatherContact"
+              placeholder="Phone / Email info"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Father CIBIL Score"
+              k="fatherCibil"
+              placeholder="e.g. 780"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Mother Name"
+              k="motherName"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Mother Mobile No. & Mail Id"
+              k="motherContact"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Mother CIBIL Score"
+              k="motherCibil"
+              info={info}
+              onChange={onChange}
+            />
+          </div>
+
+          <div className="divider" />
+          <h3 className="sub-heading">Financial Guarantor Setup</h3>
+          <div className="grid-2">
+            <PersonalField
+              label="Financial Guarantee Name"
+              k="guarantorName"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Financial Guarantee Relationship"
+              k="guarantorRelation"
+              placeholder="e.g. Uncle"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Financial Guarantee Mobile No."
+              k="guarantorMobile"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Financial Guarantee CIBIL Score"
+              k="guarantorCibil"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Financial Guarantee Sector (Job / Business)"
+              k="guarantorSector"
+              placeholder="e.g. Software Business"
+              info={info}
+              onChange={onChange}
+            />
+
+            <div className="input-group">
+              <label>Income Documents Available?</label>
+              <select
+                className="input-field"
+                value={info.guarantorDocsAvailable || ""}
+                onChange={(e) =>
+                  onChange("guarantorDocsAvailable", e.target.value)
+                }
+              >
+                <option value="">Select Option</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="divider" />
+          <h3 className="sub-heading">Extended Lineage References</h3>
+          <div className="grid-2">
+            <PersonalField
+              label="Maternal Grandmother Name"
+              k="maternalGrandma"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Paternal Grandmother Name"
+              k="paternalGrandma"
+              info={info}
+              onChange={onChange}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* PAGE 4: Pre-applied Actions, Employment, & Agency Context */}
+      {subStep === 4 && (
+        <div className="animate-fade-in">
+          <h3 className="sub-heading">Prior History & Assets</h3>
+          <div className="grid-2">
+            <div className="input-group">
+              <label>Applied Any Bank Before?</label>
+              <select
+                className="input-field"
+                value={info.priorBankApplied || ""}
+                onChange={(e) => onChange("priorBankApplied", e.target.value)}
+              >
+                <option value="">Select Option</option>
+                <option value="No">No</option>
+                <option value="Yes">Yes</option>
+              </select>
+            </div>
+            {info.priorBankApplied === "Yes" && (
+              <PersonalField
+                label="If applied, rejection reason"
+                k="priorBankRejectionReason"
+                placeholder="Describe reason"
+                info={info}
+                onChange={onChange}
+              />
+            )}
+
+            <div className="input-group">
+              <label>Family Own House Available Or Not?</label>
+              <select
+                className="input-field"
+                value={info.ownHouseStatus || ""}
+                onChange={(e) => onChange("ownHouseStatus", e.target.value)}
+              >
+                <option value="">Select Status</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="divider" />
+          <h3 className="sub-heading">Applicant Professional Status</h3>
+          <div className="grid-2">
+            <div className="input-group">
+              <label>If Any Job Details (Yes/No)</label>
+              <select
+                className="input-field"
+                value={info.hasJobDetails || ""}
+                onChange={(e) => onChange("hasJobDetails", e.target.value)}
+              >
+                <option value="">Select</option>
+                <option value="No">No</option>
+                <option value="Yes">Yes</option>
+              </select>
+            </div>
+            {info.hasJobDetails === "Yes" && (
+              <PersonalField
+                label="Salary per Month & Total Experience"
+                k="jobSpecs"
+                placeholder="e.g. ₹45,000 - 2 Years"
+                info={info}
+                onChange={onChange}
+              />
+            )}
+          </div>
+
+          <div className="divider" />
+          <h3 className="sub-heading">
+            Overseas Consultants Reference Mapping
+          </h3>
+          <div className="grid-2">
+            <PersonalField
+              label="Overseas Consultants Name, Location"
+              k="consultantNameLoc"
+              placeholder="Name and city branch"
+              info={info}
+              onChange={onChange}
+            />
+            <PersonalField
+              label="Consultant Phone No. & Mail ID"
+              k="consultantContact"
+              placeholder="Contact details string"
+              info={info}
+              onChange={onChange}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Simple navigation button clusters to toggle between wizard pages */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          marginTop: 24,
+        }}
+      >
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={subStep === 1}
+          onClick={() => setSubStep((p) => p - 1)}
+        >
+          ← Prev Form Page
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={subStep === 4}
+          onClick={() => setSubStep((p) => p + 1)}
+        >
+          Next Form Page →
+        </button>
       </div>
     </div>
   );
@@ -1079,7 +1452,6 @@ function ReferencesSection({ info, onChange }) {
 }
 
 // ─── Other Documents Section ──────────────────────────────────────────────────
-// FIX: accepts `onRemoved` callback so deleted items are cleared from uploads state
 function OtherDocumentsSection({
   studentName,
   studentIdentifier,
@@ -1101,7 +1473,6 @@ function OtherDocumentsSection({
     setItems((prev) => [...prev, { id: newId, fileName: "" }]);
   };
 
-  // FIX: also notify parent to clear the upload from state
   const removeItem = (id) => {
     setItems((prev) => prev.filter((item) => item.id !== id));
     if (onRemoved) onRemoved(id);
