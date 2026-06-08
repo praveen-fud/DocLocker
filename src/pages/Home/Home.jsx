@@ -13,6 +13,7 @@ import { useStudent } from "../../context/StudentContext";
 import {
   saveStudentMeta,
   searchStudentByIdentifier,
+  checkIdentifierExists,
 } from "../../utils/driveApi";
 
 import "./Home.css";
@@ -26,36 +27,67 @@ export default function Home() {
   const { setStudent } = useStudent();
   const navigate = useNavigate();
 
+  // ── New registration with duplicate check ─────────────────────────────────
   const handleNewStudent = async (e) => {
     e.preventDefault();
-    if (!form.name.trim()) return setError("Please enter your full name");
-    if (!form.email.trim() && !form.phone.trim())
-      return setError("Please enter email or phone number");
-    setLoading(true);
-    const studentData = {
-      name: form.name.trim(),
-      email: form.email.trim(),
-      phone: form.phone.trim(),
-      createdAt: new Date().toISOString(),
-      coApplicants: 1,
-      uploads: {},
-      personalInfo: {},
-    };
-    try {
-      await saveStudentMeta(form.name.trim(), studentData);
-    } catch (err) {
-      console.warn("Could not pre-save student meta:", err?.message);
+    if (!form.name.trim()) {
+      setError("Please enter your full name");
+      return;
     }
-    setStudent(studentData);
-    navigate("/portal");
-    setLoading(false);
-  };
+    if (!form.email.trim() && !form.phone.trim()) {
+      setError("Please enter email or phone number");
+      return;
+    }
 
-  const handleReturning = async (e) => {
-    e.preventDefault();
-    if (!lookup.trim()) return setError("Enter your email or phone number");
     setLoading(true);
     setError("");
+
+    try {
+      // Check if the email or phone already exists in Drive/localStorage
+      const identifier = form.email.trim() || form.phone.trim();
+      const exists = await checkIdentifierExists(identifier);
+
+      if (exists) {
+        setError(
+          "An application already exists with this email/phone. Please use 'Resume Submission' to continue.",
+        );
+        setLoading(false);
+        return;
+      }
+
+      const studentData = {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        createdAt: new Date().toISOString(),
+        coApplicants: 1,
+        uploads: {},
+        personalInfo: {},
+      };
+
+      // Save to Drive & localStorage (safe to await, it's a background sync)
+      await saveStudentMeta(form.name.trim(), studentData);
+      setStudent(studentData);
+      navigate("/portal");
+    } catch (err) {
+      console.error("New student creation error:", err);
+      setError("Could not create application. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Resume existing application ──────────────────────────────────────────
+  const handleReturning = async (e) => {
+    e.preventDefault();
+    if (!lookup.trim()) {
+      setError("Enter your email or phone number");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
     try {
       const found = await searchStudentByIdentifier(lookup.trim());
       if (found) {
@@ -63,15 +95,18 @@ export default function Home() {
         navigate("/portal");
       } else {
         setError(
-          "No active file found. Please double check or create a new application.",
+          "No active file found. Please double‑check your details or create a new application.",
         );
       }
-    } catch {
+    } catch (err) {
+      console.error("Resume lookup error:", err);
       setError("Unable to connect. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="home-page dashboard-viewport">
       {/* Dynamic Ambient Background Canvas */}
@@ -137,8 +172,6 @@ export default function Home() {
         {/* Right Column: Interactive Processing Panel Container */}
         <div className="interactive-panel-column animate-fade-in">
           <div className="glass-workspace-card">
-            {/* Logo integrated right inside the workspace wrapper to sit above content */}
-
             {mode === "welcome" && (
               <div className="workspace-welcome-view">
                 <div className="workspace-header text-center">

@@ -1,4 +1,4 @@
-# AbroadDocs — Student Document Portal
+# DocLocker — Student Document Portal
 
 A production-ready, no-backend document portal for students applying to universities abroad.
 Built with React + Vite. All files go directly to Google Drive via a Google Apps Script proxy.
