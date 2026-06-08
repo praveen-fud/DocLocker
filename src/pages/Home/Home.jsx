@@ -14,6 +14,8 @@ import {
   saveStudentMeta,
   searchStudentByIdentifier,
   checkIdentifierExists,
+  isValidPhone,
+  isValidEmail,
 } from "../../utils/driveApi";
 
 import "./Home.css";
@@ -30,12 +32,28 @@ export default function Home() {
   // ── New registration with duplicate check ─────────────────────────────────
   const handleNewStudent = async (e) => {
     e.preventDefault();
+
     if (!form.name.trim()) {
-      setError("Please enter your full name");
+      setError("Please enter your full name.");
       return;
     }
     if (!form.email.trim() && !form.phone.trim()) {
-      setError("Please enter email or phone number");
+      setError("Please enter at least one of email or phone number.");
+      return;
+    }
+
+    // Validate formats before hitting the network
+    if (form.email.trim() && !isValidEmail(form.email.trim())) {
+      setError("Please enter a valid email address (e.g. name@example.com).");
+      return;
+    }
+
+    // Clean and validate phone number
+    const cleanedPhone = form.phone.trim().replace(/\s+/g, "");
+    if (form.phone.trim() && !isValidPhone(cleanedPhone)) {
+      setError(
+        "Please enter a valid 10-digit mobile number (e.g. 9876543210).",
+      );
       return;
     }
 
@@ -43,13 +61,13 @@ export default function Home() {
     setError("");
 
     try {
-      // Check if the email or phone already exists in Drive/localStorage
-      const identifier = form.email.trim() || form.phone.trim();
+      // Prioritize email as primary tracking key if both are given, else use cleaned phone
+      const identifier = form.email.trim() || cleanedPhone;
       const exists = await checkIdentifierExists(identifier);
 
       if (exists) {
         setError(
-          "An application already exists with this email/phone. Please use 'Resume Submission' to continue.",
+          "An application already exists with this email/phone. Use 'Resume Submission' to continue.",
         );
         setLoading(false);
         return;
@@ -58,15 +76,16 @@ export default function Home() {
       const studentData = {
         name: form.name.trim(),
         email: form.email.trim(),
-        phone: form.phone.trim(),
+        phone: cleanedPhone,
         createdAt: new Date().toISOString(),
         coApplicants: 1,
         uploads: {},
         personalInfo: {},
       };
 
-      // Save to Drive & localStorage (safe to await, it's a background sync)
-      await saveStudentMeta(form.name.trim(), studentData);
+      // saveStudentMeta is intentionally NOT awaited — it does a fire-and-forget Drive sync.
+      saveStudentMeta(studentData.name, studentData, identifier);
+
       setStudent(studentData);
       navigate("/portal");
     } catch (err) {
@@ -77,11 +96,13 @@ export default function Home() {
     }
   };
 
-  // ── Resume existing application ──────────────────────────────────────────
+  // ── Resume existing application (FIXED: Handles both phone & email auto-detection) ───────────────────
   const handleReturning = async (e) => {
     e.preventDefault();
-    if (!lookup.trim()) {
-      setError("Enter your email or phone number");
+
+    const cleanLookup = lookup.trim();
+    if (!cleanLookup) {
+      setError("Enter your registered email or phone number.");
       return;
     }
 
@@ -89,34 +110,54 @@ export default function Home() {
     setError("");
 
     try {
-      const found = await searchStudentByIdentifier(lookup.trim());
+      let finalIdentifier = cleanLookup;
+
+      // 1. Check if it's an email
+      if (cleanLookup.includes("@")) {
+        if (!isValidEmail(cleanLookup)) {
+          setError("Please enter a valid email format.");
+          setLoading(false);
+          return;
+        }
+      } else {
+        // 2. Treat as phone number: Strip any spaces or special characters user might have typed
+        finalIdentifier = cleanLookup.replace(/[^0-9+]/g, "");
+        if (!isValidPhone(finalIdentifier)) {
+          setError("Please enter a valid registered 10-digit mobile number.");
+          setLoading(false);
+          return;
+        }
+      }
+
+      // 3. Request search from file backend utils
+      const found = await searchStudentByIdentifier(finalIdentifier);
       if (found) {
         setStudent(found);
         navigate("/portal");
       } else {
         setError(
-          "No active file found. Please double‑check your details or create a new application.",
+          "No active file found matching this detail. Please verify your entry or create a new application.",
         );
       }
     } catch (err) {
       console.error("Resume lookup error:", err);
-      setError("Unable to connect. Please try again.");
+      setError(
+        "Unable to connect to service. Please check your network and try again.",
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="home-page dashboard-viewport">
-      {/* Dynamic Ambient Background Canvas */}
       <div className="ambient-glow-network">
         <div className="glow-cluster core-teal-glow" />
         <div className="glow-cluster core-blue-glow" />
       </div>
 
       <div className="home-split-layout">
-        {/* Left Column: Premium Brand Identity Statement */}
+        {/* Left Column */}
         <div className="brand-hero-column animate-fade-in">
           <div className="brand-wrapper">
             <h1 className="main-display-headline">
@@ -130,7 +171,6 @@ export default function Home() {
               single, high-fidelity deployment platform.
             </p>
 
-            {/* Asymmetric Feature Matrix */}
             <div className="asymmetric-feature-matrix">
               {[
                 {
@@ -169,7 +209,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Right Column: Interactive Processing Panel Container */}
+        {/* Right Column */}
         <div className="interactive-panel-column animate-fade-in">
           <div className="glass-workspace-card">
             {mode === "welcome" && (
@@ -284,7 +324,7 @@ export default function Home() {
                     <label>Phone Number</label>
                     <input
                       className="premium-styled-input"
-                      placeholder="+91 98765 43210"
+                      placeholder="e.g. 9876543210"
                       value={form.phone}
                       onChange={(e) =>
                         setForm({ ...form, phone: e.target.value })
@@ -326,10 +366,7 @@ export default function Home() {
                     ← Back to selection
                   </button>
                   <h2>Resume Progress</h2>
-                  <p>
-                    Provide verified identification keys to pull remote files
-                    states
-                  </p>
+                  <p>Enter your registered email or phone to continue</p>
                 </div>
 
                 <form
@@ -338,12 +375,12 @@ export default function Home() {
                 >
                   <div className="interactive-input-block">
                     <label>
-                      Email or Verified Phone{" "}
+                      Email or Phone Number{" "}
                       <span className="required-accent">*</span>
                     </label>
                     <input
                       className="premium-styled-input"
-                      placeholder="Enter submission identifier string"
+                      placeholder="name@example.com or 9876543210"
                       value={lookup}
                       onChange={(e) => setLookup(e.target.value)}
                     />

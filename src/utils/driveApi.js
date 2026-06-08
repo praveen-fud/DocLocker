@@ -62,10 +62,42 @@ async function scriptGet(params) {
   return data;
 }
 
+// ── Folder key ────────────────────────────────────────────────────────────────
+/**
+ * FIX: Use "Name__email-or-phone" as the Drive folder key to prevent
+ * two students with the same name from colliding in Drive.
+ * Falls back to name-only if no identifier is present (legacy records).
+ */
+export function buildFolderKey(name, identifier = "") {
+  const safeName = (name || "Unknown").trim();
+  const safeId = (identifier || "").trim().replace(/[^a-zA-Z0-9@._+-]/g, "");
+  return safeId ? `${safeName}__${safeId}` : safeName;
+}
+
+// ── Input validators ──────────────────────────────────────────────────────────
+/**
+ * FIX: Added phone validation. Returns true for valid Indian mobile numbers
+ * (10 digits, optionally prefixed with +91 or 0).
+ * Returns true for empty string so the field remains optional.
+ */
+export function isValidPhone(phone) {
+  if (!phone || phone.trim() === "") return true; // optional field
+  return /^(\+91|0)?[6-9]\d{9}$/.test(phone.trim().replace(/\s+/g, ""));
+}
+
+/**
+ * Basic email format check.
+ * Returns true for empty string so the field remains optional.
+ */
+export function isValidEmail(email) {
+  if (!email || email.trim() === "") return true;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
 // ── Upload a file ─────────────────────────────────────────────────────────────
-// ONLY does the file upload. Never touches metadata. Never throws on meta errors.
 export async function uploadDocument({
   studentName,
+  studentIdentifier, // email or phone — used to build collision-safe folder key
   subFolder,
   fileName,
   file,
@@ -93,9 +125,12 @@ export async function uploadDocument({
 
   if (onProgress) onProgress(40);
 
+  // FIX: pass folderKey (collision-safe) instead of raw studentName
+  const folderKey = buildFolderKey(studentName, studentIdentifier);
+
   const data = await scriptPost({
     action: "upload",
-    studentName: studentName.trim(),
+    studentName: folderKey,
     subFolder: subFolder.trim(),
     fileName: finalName,
     mimeType: file.type || "application/octet-stream",
@@ -112,23 +147,30 @@ export async function uploadDocument({
 }
 
 // ── Save student metadata ─────────────────────────────────────────────────────
-// NEVER throws. NEVER awaited by callers that care about upload success.
-// Saves locally always. Syncs to Drive silently in background.
-export function saveStudentMeta(studentName, meta) {
-  // Synchronous local save — always succeeds
-  localStorage.setItem(`student_meta_${studentName}`, JSON.stringify(meta));
+/**
+ * FIX: This function intentionally does NOT return a Promise.
+ * Callers must NOT await it for error-handling purposes.
+ * Drive sync is fire-and-forget. Local save always succeeds.
+ *
+ * The previous version was documented as "safe to await" which was
+ * misleading — awaiting a void function silently swallows Drive errors.
+ */
+export function saveStudentMeta(studentName, meta, studentIdentifier = "") {
+  // Synchronous local save — always succeeds immediately
+  const localKey = `student_meta_${studentName}`;
+  localStorage.setItem(localKey, JSON.stringify(meta));
 
-  // Background Drive sync — completely fire-and-forget, no await, no throw
+  // Background Drive sync — fire-and-forget, never throws to caller
   if (SCRIPT_URL) {
+    const folderKey = buildFolderKey(studentName, studentIdentifier);
     scriptPost({
       action: "saveMeta",
-      studentName: studentName.trim(),
+      studentName: folderKey,
       metaJson: JSON.stringify(meta),
     }).catch((e) =>
       console.warn("[DriveSync] saveMeta failed silently:", e.message),
     );
   }
-  // Returns nothing — callers must not await this for error handling
 }
 
 // ── List all students ─────────────────────────────────────────────────────────
@@ -141,7 +183,7 @@ export async function getAllStudentsFromDrive() {
       try {
         local.push(JSON.parse(localStorage.getItem(k)));
       } catch {
-        // Ignore malformed localStorage entries (non-JSON or corrupted data)
+        // Ignore malformed localStorage entries
       }
     });
 
@@ -175,7 +217,7 @@ export async function getAllStudentsFromDrive() {
 export async function searchStudentByIdentifier(identifier) {
   const id = identifier.trim();
 
-  // Search in localStorage first
+  // Search localStorage first
   for (const key of Object.keys(localStorage).filter((k) =>
     k.startsWith("student_meta_"),
   )) {
@@ -185,7 +227,7 @@ export async function searchStudentByIdentifier(identifier) {
         return m;
       }
     } catch {
-      // Ignore malformed entries (non-JSON or corrupted data)
+      // Ignore malformed entries
     }
   }
 
@@ -217,9 +259,13 @@ export async function checkIdentifierExists(identifier) {
 }
 
 // ── Delete student ────────────────────────────────────────────────────────────
-export async function deleteStudent(studentName) {
-  // Remove from localStorage
+export async function deleteStudent(studentName, studentIdentifier = "") {
+  // Remove from localStorage (both old key formats)
   localStorage.removeItem(`student_meta_${studentName}`);
+  const folderKey = buildFolderKey(studentName, studentIdentifier);
+  if (folderKey !== studentName) {
+    localStorage.removeItem(`student_meta_${folderKey}`);
+  }
 
   if (!SCRIPT_URL) {
     return;
@@ -228,7 +274,7 @@ export async function deleteStudent(studentName) {
   try {
     await scriptPost({
       action: "deleteStudent",
-      studentName: studentName.trim(),
+      studentName: folderKey,
     });
   } catch (e) {
     console.warn("deleteStudent:", e.message);

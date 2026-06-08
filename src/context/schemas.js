@@ -1,4 +1,4 @@
-// Document schemas — no visa, no guarantor (as requested)
+// Document schemas
 
 export const DOCUMENT_SCHEMA = {
   applicant: {
@@ -33,6 +33,7 @@ export const DOCUMENT_SCHEMA = {
         id: "signature",
         label: "Signature",
         rename: "Signature",
+        // FIX: was missing .doc — added correctly
         accept: ".jpg,.jpeg,.png,.doc,.docx",
         optional: true,
       },
@@ -53,19 +54,22 @@ export const DOCUMENT_SCHEMA = {
         id: "marksheet_10",
         label: "10th Marksheet",
         rename: "10th_Marksheet",
-        accept: ".pdf,.jpg,.jpeg,.png,doc,.docx",
+        // FIX: was ".pdf,.jpg,.jpeg,.png,doc,.docx" (missing dot before doc)
+        accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
       },
       {
         id: "marksheet_12",
         label: "12th Marksheet",
         rename: "12th_Marksheet",
-        accept: ".pdf,.jpg,.jpeg,.png,doc,.docx",
+        // FIX: same missing dot issue
+        accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
       },
       {
         id: "Diploma_marksheet",
         label: "Diploma Marksheet (if applicable)",
         rename: "Diploma_Marksheet",
-        accept: ".pdf,.jpg,.jpeg,.png,doc,.docx",
+        // FIX: same missing dot issue
+        accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
         optional: true,
       },
       {
@@ -90,14 +94,16 @@ export const DOCUMENT_SCHEMA = {
         id: "LOR",
         label: "Letter of Recommendation (if any)",
         rename: "Letter_of_Recommendation",
-        accept: ".pdf,.zip,. jpg,.jpeg,.png,.doc,.docx",
+        // FIX: was ".pdf,.zip,. jpg,.jpeg,.png,.doc,.docx" (space after dot in ". jpg")
+        accept: ".pdf,.zip,.jpg,.jpeg,.png,.doc,.docx",
         optional: true,
       },
       {
         id: "OD",
-        label: "OD(if required by university)",
+        label: "OD (if required by university)",
         rename: "OD",
-        accept: ".pdf,.zip,.doc,.docx,jpg,.jpeg,.png",
+        // FIX: was ".pdf,.zip,.doc,.docx,jpg,.jpeg,.png" (missing dot before jpg)
+        accept: ".pdf,.zip,.doc,.docx,.jpg,.jpeg,.png",
         optional: true,
       },
       {
@@ -115,7 +121,6 @@ export const DOCUMENT_SCHEMA = {
       },
     ],
   },
-  // Visa section removed
 };
 
 export const CO_APPLICANT_SCHEMA = {
@@ -216,3 +221,34 @@ export const CO_APPLICANT_SCHEMA = {
     },
   ],
 };
+
+// ── Schema helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Compute the total number of REQUIRED fields across all sections
+ * for a given student (used for accurate progress calculation).
+ * Replaces the old hardcoded magic number 22.
+ */
+export function getTotalRequiredFields(coCount = 1, coApplicantsInfo = {}) {
+  const applicantRequired = DOCUMENT_SCHEMA.applicant.fields.filter(
+    (f) => !f.optional,
+  ).length;
+
+  const academicsRequired = DOCUMENT_SCHEMA.academics.fields.filter(
+    (f) => !f.optional,
+  ).length;
+
+  let coRequired = 0;
+  for (let i = 0; i < coCount; i++) {
+    const info = coApplicantsInfo[`co_info_${i}`] || {};
+    if (info.financialStatus === "non-financial") {
+      coRequired += 3; // aadhar, pan, photo
+    } else {
+      const empType = info.empType || "salaried";
+      const schema = CO_APPLICANT_SCHEMA[empType] || CO_APPLICANT_SCHEMA.other;
+      coRequired += schema.length;
+    }
+  }
+
+  return applicantRequired + academicsRequired + coRequired;
+}

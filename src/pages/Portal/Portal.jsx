@@ -16,12 +16,11 @@ import {
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import { saveStudentMeta } from "../../utils/driveApi";
-import { DOCUMENT_SCHEMA } from "../../context/schemas";
+import { DOCUMENT_SCHEMA, getTotalRequiredFields } from "../../context/schemas";
 import FileUploadBox from "../../components/FileUploadBox/FileUploadBox";
 import ProgressBar from "../../components/ProgressBar/ProgressBar";
 import "./Portal.css";
 
-// Sections: removed visa and guarantor
 const SECTIONS = [
   { id: "personal", label: "Personal Info", icon: User },
   { id: "student", label: "Student Documents", icon: FileText },
@@ -166,6 +165,9 @@ export default function Portal() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
 
+  // FIX: student identifier (email/phone) for collision-safe Drive folder key
+  const studentIdentifier = student?.email || student?.phone || "";
+
   const uploadsRef = useRef(uploads);
   const personalRef = useRef(personalInfo);
   const coCountRef = useRef(coCount);
@@ -202,7 +204,8 @@ export default function Portal() {
       coApplicants: coCountRef.current,
     };
     setStudent(updated);
-    saveStudentMeta(student.name, updated);
+    // FIX: saveStudentMeta is void — not awaited
+    saveStudentMeta(student.name, updated, studentIdentifier);
   };
 
   const updatePersonal = (key, value) => {
@@ -219,7 +222,8 @@ export default function Portal() {
       coApplicants: coCountRef.current,
     };
     setStudent(updated);
-    saveStudentMeta(student.name, updated);
+    // FIX: saveStudentMeta is void — not awaited
+    saveStudentMeta(student.name, updated, studentIdentifier);
     setSaved(true);
     setSaving(false);
     setTimeout(() => setSaved(false), 2500);
@@ -234,6 +238,9 @@ export default function Portal() {
     (k) => k.startsWith("ref") && personalInfo[k],
   ).length;
 
+  // FIX: dynamic total from schema helper — no more hardcoded 22
+  const dynamicTotal = getTotalRequiredFields(coCount, personalInfo);
+
   const progressSections = [
     {
       id: "personal",
@@ -247,13 +254,13 @@ export default function Portal() {
     {
       id: "student",
       label: "Student Docs",
-      total: applicantDocs.length,
+      total: applicantDocs.filter((f) => !f.optional).length,
       uploaded: Object.keys(getUploadsFor("applicant")).length,
     },
     {
       id: "academics",
       label: "Academics",
-      total: academicDocs.length,
+      total: academicDocs.filter((f) => !f.optional).length,
       uploaded: Object.keys(getUploadsFor("academics")).length,
     },
     {
@@ -318,12 +325,26 @@ export default function Portal() {
             )}
           </button>
         </div>
+
         {saveError && <div className="save-error-toast">{saveError}</div>}
+
+        {/* FIX: show dynamic total in progress bar title */}
+        <div className="portal-progress-info">
+          <span className="progress-total-note">
+            {Object.values(uploads).reduce(
+              (acc, s) => acc + Object.keys(s).length,
+              0,
+            )}{" "}
+            / {dynamicTotal} required fields completed
+          </span>
+        </div>
+
         <ProgressBar
           sections={progressSections}
           currentSection={activeSection}
           onSectionClick={setActiveSection}
         />
+
         <div className="portal-tabs">
           {SECTIONS.map((sec, i) => {
             const Icon = sec.icon;
@@ -339,6 +360,7 @@ export default function Portal() {
             );
           })}
         </div>
+
         <div className="portal-content animate-fade-in" key={activeSection}>
           {activeSection === 0 && (
             <PersonalSection info={personalInfo} onChange={updatePersonal} />
@@ -349,6 +371,7 @@ export default function Portal() {
               subtitle="Upload personal identification documents"
               fields={DOCUMENT_SCHEMA.applicant.fields}
               studentName={student.name}
+              studentIdentifier={studentIdentifier}
               subFolder="GOVT ID"
               uploads={getUploadsFor("applicant")}
               onUploaded={(fieldId, result) =>
@@ -362,6 +385,7 @@ export default function Portal() {
               subtitle="Upload degree certificates, marksheets, etc."
               fields={DOCUMENT_SCHEMA.academics.fields}
               studentName={student.name}
+              studentIdentifier={studentIdentifier}
               subFolder="Academics"
               uploads={getUploadsFor("academics")}
               onUploaded={(fieldId, result) =>
@@ -372,6 +396,7 @@ export default function Portal() {
           {activeSection === 3 && (
             <LoanSection
               studentName={student.name}
+              studentIdentifier={studentIdentifier}
               coCount={coCount}
               setCoCount={setCoCount}
               uploads={uploads}
@@ -386,13 +411,37 @@ export default function Portal() {
           {activeSection === 5 && (
             <OtherDocumentsSection
               studentName={student.name}
+              studentIdentifier={studentIdentifier}
               uploads={getUploadsFor("otherDocs")}
               onUploaded={(fieldId, result) =>
                 handleUploaded("otherDocs", fieldId, result)
               }
+              // FIX: pass removal handler so deleted items clear from state
+              onRemoved={(fieldId) => {
+                const updated = { ...uploadsRef.current };
+                if (updated.otherDocs) {
+                  const section = { ...updated.otherDocs };
+                  delete section[fieldId];
+                  updated.otherDocs = section;
+                }
+                setUploads(updated);
+                const updatedStudent = {
+                  ...student,
+                  uploads: updated,
+                  personalInfo: personalRef.current,
+                  coApplicants: coCountRef.current,
+                };
+                setStudent(updatedStudent);
+                saveStudentMeta(
+                  student.name,
+                  updatedStudent,
+                  studentIdentifier,
+                );
+              }}
             />
           )}
         </div>
+
         <div className="portal-nav-btns">
           {activeSection > 0 && (
             <button
@@ -417,9 +466,7 @@ export default function Portal() {
   );
 }
 
-// ---------------------------------------------------------------------
-// Personal Section
-// ---------------------------------------------------------------------
+// ─── Personal Section ─────────────────────────────────────────────────────────
 function PersonalField({
   label,
   k,
@@ -561,14 +608,13 @@ function PersonalSection({ info, onChange }) {
   );
 }
 
-// ---------------------------------------------------------------------
-// Docs Section
-// ---------------------------------------------------------------------
+// ─── Docs Section ─────────────────────────────────────────────────────────────
 function DocsSection({
   title,
   subtitle,
   fields,
   studentName,
+  studentIdentifier,
   subFolder,
   uploads,
   onUploaded,
@@ -591,6 +637,7 @@ function DocsSection({
             key={field.id}
             field={field}
             studentName={studentName}
+            studentIdentifier={studentIdentifier}
             subFolder={subFolder}
             uploadedFiles={uploads}
             onUploaded={(fieldId, result) => onUploaded(fieldId, result)}
@@ -601,11 +648,10 @@ function DocsSection({
   );
 }
 
-// ---------------------------------------------------------------------
-// Loan Section
-// ---------------------------------------------------------------------
+// ─── Loan Section ─────────────────────────────────────────────────────────────
 function LoanSection({
   studentName,
+  studentIdentifier,
   coCount,
   setCoCount,
   uploads,
@@ -622,6 +668,7 @@ function LoanSection({
     "Co-Applicant 5",
   ];
   const coRelations = ["Father", "Mother", "Sibling", "Spouse", "Other"];
+
   return (
     <div className="section-panel">
       <div className="section-intro">
@@ -645,6 +692,7 @@ function LoanSection({
           ))}
         </select>
       </div>
+
       {Array.from({ length: coCount }, (_, i) => {
         const key = `co_${i}`;
         const infoKey = `co_info_${i}`;
@@ -652,7 +700,6 @@ function LoanSection({
         const empType = coInfo.empType || "salaried";
         const financialStatus = coInfo.financialStatus || "financial";
 
-        // Fixed ESLint assignment clean declaration loop
         let fields;
         if (financialStatus === "non-financial") {
           fields = LOCAL_CO_APPLICANT_SCHEMA.other.filter((f) =>
@@ -666,6 +713,7 @@ function LoanSection({
 
         const coUploads = uploads[key] || {};
         const isOpen = expandedCo === i;
+
         return (
           <div key={i} className="co-card">
             <button
@@ -691,6 +739,7 @@ function LoanSection({
                 {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               </div>
             </button>
+
             {isOpen && (
               <div className="co-body animate-fade-in">
                 <div className="grid-2">
@@ -712,7 +761,6 @@ function LoanSection({
                       </option>
                     </select>
                   </div>
-
                   <div className="input-group">
                     <label>Full Name</label>
                     <input
@@ -820,7 +868,6 @@ function LoanSection({
                       }
                     />
                   </div>
-
                   {financialStatus !== "non-financial" && (
                     <div className="input-group">
                       <label>Employment Type</label>
@@ -908,6 +955,7 @@ function LoanSection({
                           rename: `Co${i + 1}_${coInfo.name?.replace(/\s+/g, "_") || `Applicant${i + 1}`}_${statusSlug}_${field.rename}`,
                         }}
                         studentName={studentName}
+                        studentIdentifier={studentIdentifier}
                         subFolder={`Loan/Co_Applicant_${i + 1}`}
                         uploadedFiles={coUploads}
                         onUploaded={(fieldId, result) =>
@@ -926,9 +974,7 @@ function LoanSection({
   );
 }
 
-// ---------------------------------------------------------------------
-// References Section
-// ---------------------------------------------------------------------
+// ─── References Section ───────────────────────────────────────────────────────
 function ReferencesSection({ info, onChange }) {
   const REFERENCE_RELATIONS = [
     "Uncle",
@@ -951,7 +997,6 @@ function ReferencesSection({ info, onChange }) {
         const relationKey = `ref${n}_relation`;
         const customRelationKey = `ref${n}_custom_relation`;
         const currentRelationValue = info[relationKey] || "";
-
         const isCustomVisible = currentRelationValue === "Other";
 
         return (
@@ -984,7 +1029,6 @@ function ReferencesSection({ info, onChange }) {
                   }
                 />
               </div>
-
               <div className="input-group">
                 <label>Relation to Student</label>
                 <select
@@ -992,9 +1036,8 @@ function ReferencesSection({ info, onChange }) {
                   value={currentRelationValue}
                   onChange={(e) => {
                     onChange(relationKey, e.target.value);
-                    if (e.target.value !== "Other") {
+                    if (e.target.value !== "Other")
                       onChange(customRelationKey, "");
-                    }
                   }}
                 >
                   <option value="">Select Relation</option>
@@ -1005,13 +1048,12 @@ function ReferencesSection({ info, onChange }) {
                   ))}
                 </select>
               </div>
-
               {isCustomVisible && (
                 <div className="input-group" style={{ gridColumn: "1 / -1" }}>
                   <label>Specify Custom Relation</label>
                   <input
                     className="input-field animate-fade-in"
-                    placeholder="Please type your relationship to the applicant (e.g., Mother's Distant Cousin)"
+                    placeholder="e.g. Mother's Distant Cousin"
                     value={info[customRelationKey] || ""}
                     onChange={(e) =>
                       onChange(customRelationKey, e.target.value)
@@ -1019,7 +1061,6 @@ function ReferencesSection({ info, onChange }) {
                   />
                 </div>
               )}
-
               <div className="input-group" style={{ gridColumn: "1 / -1" }}>
                 <label>Address</label>
                 <textarea
@@ -1037,10 +1078,15 @@ function ReferencesSection({ info, onChange }) {
   );
 }
 
-// ---------------------------------------------------------------------
-// Other Documents Section
-// ---------------------------------------------------------------------
-function OtherDocumentsSection({ studentName, uploads, onUploaded }) {
+// ─── Other Documents Section ──────────────────────────────────────────────────
+// FIX: accepts `onRemoved` callback so deleted items are cleared from uploads state
+function OtherDocumentsSection({
+  studentName,
+  studentIdentifier,
+  uploads,
+  onUploaded,
+  onRemoved,
+}) {
   const [items, setItems] = useState(() => {
     const existingIds = Object.keys(uploads);
     if (existingIds.length === 0) return [];
@@ -1055,8 +1101,10 @@ function OtherDocumentsSection({ studentName, uploads, onUploaded }) {
     setItems((prev) => [...prev, { id: newId, fileName: "" }]);
   };
 
+  // FIX: also notify parent to clear the upload from state
   const removeItem = (id) => {
     setItems((prev) => prev.filter((item) => item.id !== id));
+    if (onRemoved) onRemoved(id);
   };
 
   const updateFileName = (id, newName) => {
@@ -1083,7 +1131,7 @@ function OtherDocumentsSection({ studentName, uploads, onUploaded }) {
     <div className="section-panel">
       <div className="section-intro">
         <h2>Other Documents</h2>
-        <p>Add any extra documents – each with a custom name.</p>
+        <p>Add any extra documents — each with a custom name.</p>
       </div>
       <div className="other-docs-list">
         {items.map((item) => (
@@ -1127,12 +1175,11 @@ function OtherDocumentsSection({ studentName, uploads, onUploaded }) {
             <FileUploadBox
               field={getFieldForItem(item)}
               studentName={studentName}
+              studentIdentifier={studentIdentifier}
               subFolder="Other_Documents"
               uploadedFiles={uploads}
               onUploaded={(fieldId, result) => {
-                if (result) {
-                  result.customName = item.fileName;
-                }
+                if (result) result.customName = item.fileName;
                 onUploaded(fieldId, result);
               }}
             />

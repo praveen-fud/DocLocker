@@ -13,6 +13,7 @@ import "./FileUploadBox.css";
 export default function FileUploadBox({
   field,
   studentName,
+  studentIdentifier, // FIX: added prop — email or phone for collision-safe folder key
   subFolder,
   onUploaded,
   uploadedFiles = {},
@@ -33,9 +34,14 @@ export default function FileUploadBox({
     setProgress(0);
 
     const ext = file.name.split(".").pop().toLowerCase();
+
+    // FIX: strip spaces from accept tokens before comparing
+    // (catches the ". jpg" typo from old schemas, now fixed in schemas.js)
     const allowed = field.accept
       .split(",")
-      .map((a) => a.trim().replace(".", ""));
+      .map((a) => a.trim().replace(/^\./, "").toLowerCase())
+      .filter(Boolean);
+
     if (!allowed.includes(ext)) {
       setError(`Invalid file type. Allowed: ${field.accept}`);
       setUploading(false);
@@ -48,18 +54,20 @@ export default function FileUploadBox({
     }
 
     const scriptConfigured = !!import.meta.env.VITE_APPS_SCRIPT_URL;
-    let result; // removed useless `= null` initialization
+    let result;
 
     try {
       if (scriptConfigured) {
         result = await uploadDocument({
           studentName,
+          studentIdentifier: studentIdentifier || "", // FIX: pass through for folder key
           subFolder,
           fileName: field.rename,
           file,
           onProgress: setProgress,
         });
       } else {
+        // Demo mode — no Apps Script configured
         for (let p = 10; p <= 100; p += 15) {
           await new Promise((r) => setTimeout(r, 120));
           setProgress(p);

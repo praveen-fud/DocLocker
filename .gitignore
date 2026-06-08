@@ -7,10 +7,20 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies and Builds
 node_modules
 dist
 dist-ssr
+
+# ── CRITICAL: CREDENTIALS & SECURITY ──────────────────────────────────
+# This explicitly blocks all environment files containing private API keys/secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 *.local
+# ──────────────────────────────────────────────────────────────────────
 
 # Editor directories and files
 .vscode/*
@@ -22,5 +32,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.env
-
