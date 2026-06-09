@@ -156,10 +156,22 @@ export const CO_APPLICANT_SCHEMA = {
       accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
     },
     {
-      id: "form16_itr",
-      label: "Form 16 / ITR Acknowledgement (last 2 yrs)",
-      rename: "Form16_ITR_2Years",
-      accept: ".pdf,.zip,.doc,.docx",
+      id: "form16_itr_y1",
+      label: "Form 16 / ITR - Year 1 (Latest)",
+      rename: "Form16_ITR_Year1",
+      accept: ".pdf,.doc,.docx",
+    },
+    {
+      id: "form16_itr_y2",
+      label: "Form 16 / ITR - Year 2",
+      rename: "Form16_ITR_Year2",
+      accept: ".pdf,.doc,.docx",
+    },
+    {
+      id: "form16_itr_y3",
+      label: "Form 16 / ITR - Year 3",
+      rename: "Form16_ITR_Year3",
+      accept: ".pdf,.doc,.docx",
     },
   ],
   selfEmployed: [
@@ -188,10 +200,22 @@ export const CO_APPLICANT_SCHEMA = {
       accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
     },
     {
-      id: "itr_2years",
-      label: "ITR (last 2 years)",
-      rename: "ITR_2Years",
-      accept: ".pdf,.zip,.doc,.docx,.jpg,.jpeg,.png",
+      id: "itr_y1",
+      label: "ITR Acknowledgement - Year 1 (Latest)",
+      rename: "ITR_Year1",
+      accept: ".pdf,.doc,.docx,.jpg,.jpeg,.png",
+    },
+    {
+      id: "itr_y2",
+      label: "ITR Acknowledgement - Year 2",
+      rename: "ITR_Year2",
+      accept: ".pdf,.doc,.docx,.jpg,.jpeg,.png",
+    },
+    {
+      id: "itr_y3",
+      label: "ITR Acknowledgement - Year 3",
+      rename: "ITR_Year3",
+      accept: ".pdf,.doc,.docx,.jpg,.jpeg,.png",
     },
     {
       id: "business_proof",

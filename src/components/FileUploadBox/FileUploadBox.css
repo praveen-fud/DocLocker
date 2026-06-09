@@ -1,105 +1,287 @@
+/* ═════════════════════════════════════════════════════════════════════════════
+   AbroadDocs — File Uploader Responsive Interface Stylesheet
+   ═════════════════════════════════════════════════════════════════════════════ */
+
 .upload-box {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 12px; padding: 14px;
-  transition: all 0.2s;
-}
-.upload-box.uploaded {
-  border-color: rgba(34,197,94,0.3);
-  background: rgba(34,197,94,0.04);
-}
-.upload-box.dragging {
-  border-color: var(--blue);
-  background: rgba(50,128,195,0.08);
-}
-.upload-box-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 10px;
-}
-.upload-label {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 13px; font-weight: 500; color: var(--gray-200);
-}
-.required-dot {
-  color: #ef4444; font-size: 15px; line-height: 1;
-}
-.optional-tag {
-  font-size: 10px; color: var(--gray-500);
-  background: rgba(255,255,255,0.06);
-  padding: 2px 7px; border-radius: 10px;
-}
-.upload-status-badge {
-  display: flex; align-items: center; gap: 4px;
-  font-size: 11px; color: #22c55e; font-weight: 600;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 14px;
+  transition: all 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.drop-zone {
-  border: 1.5px dashed rgba(255,255,255,0.12);
-  border-radius: 8px; padding: 16px 12px;
-  text-align: center; cursor: pointer;
-  transition: all 0.2s;
+.upload-box.uploaded {
+  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.04);
 }
+
+.upload-box.dragging {
+  border-color: var(--blue);
+  background: rgba(50, 128, 195, 0.08);
+}
+
+/* Header structural assembly uses wrapping to accommodate long names on small grids */
+.upload-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.upload-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray-200);
+  min-width: 0; /* Prevents flex children from overflowing parent nodes */
+}
+
+.required-dot {
+  color: #ef4444;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.optional-tag {
+  font-size: 10px;
+  color: var(--gray-500);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 7px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.upload-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #22c55e;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Enhanced drop zone providing comfortable finger-tapping space on mobile */
+.drop-zone {
+  border: 1.5px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 18px 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent; /* Removes blue flash on mobile tap */
+}
+
 .drop-zone:hover {
   border-color: var(--blue);
-  background: rgba(50,128,195,0.06);
+  background: rgba(50, 128, 195, 0.06);
 }
+
 .drop-content {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  color: var(--gray-400); font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--gray-400);
+  font-size: 13px;
+  word-break: break-word;
 }
-.drop-content svg { color: var(--gray-500); }
-.drop-content strong { color: var(--blue-light); }
+
+.drop-content svg {
+  color: var(--gray-500);
+  flex-shrink: 0;
+}
+
+.drop-content strong {
+  color: var(--blue-light);
+}
+
 .accepted-types {
-  font-size: 11px; color: var(--gray-500); letter-spacing: 0.5px;
+  font-size: 11px;
+  color: var(--gray-500);
+  letter-spacing: 0.5px;
+  margin-top: 2px;
 }
 
 .upload-progress {
-  display: flex; flex-direction: column; align-items: center; gap: 8px;
-  color: var(--blue-light); font-size: 13px;
-}
-.progress-bar {
-  width: 100%; height: 4px;
-  background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden;
-}
-.progress-fill {
-  height: 100%; background: var(--blue);
-  transition: width 0.3s ease; border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--blue-light);
+  font-size: 13px;
+  width: 100%;
 }
 
+.progress-bar {
+  width: 100%;
+  height: 5px; /* Slightly thicker for better mobile visibility */
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--blue);
+  transition: width 0.3s ease;
+  border-radius: 3px;
+}
+
+/* Uploaded Info Box layout automatically breaks structure when actions crowd on narrow screens */
 .uploaded-info {
-  display: flex; align-items: center; gap: 8px;
-  background: rgba(34,197,94,0.08);
-  border-radius: 8px; padding: 8px 12px;
-  font-size: 13px; color: #22c55e;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(34, 197, 94, 0.08);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #22c55e;
+  width: 100%;
+  box-sizing: border-box;
 }
+
 .renamed-name {
-  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-weight: 500; font-size: 12px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  font-size: 12px;
 }
-.uploaded-actions { display: flex; align-items: center; gap: 8px; }
+
+.uploaded-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .view-link {
-  display: flex; align-items: center; gap: 4px;
-  color: var(--blue-light); text-decoration: none; font-size: 12px;
-  padding: 3px 8px; border-radius: 6px;
-  background: rgba(50,128,195,0.15);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--blue-light);
+  text-decoration: none;
+  font-size: 12px;
+  padding: 4px 10px; /* Enhanced tap padding targets */
+  border-radius: 6px;
+  background: rgba(50, 128, 195, 0.15);
+  white-space: nowrap;
+  transition: background 0.2s;
 }
-.view-link:hover { background: rgba(50,128,195,0.25); }
+
+.view-link:hover {
+  background: rgba(50, 128, 195, 0.25);
+}
+
 .re-upload-btn {
-  background: none; border: 1px solid rgba(255,255,255,0.15);
-  color: var(--gray-300); font-size: 11px; padding: 3px 8px;
-  border-radius: 6px; cursor: pointer;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--gray-300);
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
 }
-.re-upload-btn:hover { border-color: var(--blue); color: var(--blue-light); }
+
+.re-upload-btn:hover {
+  border-color: var(--blue);
+  color: var(--blue-light);
+}
 
 .upload-error {
-  display: flex; align-items: center; gap: 6px;
-  color: #ef4444; font-size: 12px; margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #ef4444;
+  font-size: 12px;
+  margin-top: 6px;
+  word-break: break-word;
 }
 
 .rename-hint {
-  margin-top: 8px; font-size: 11px; color: var(--gray-600);
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--gray-600);
+  line-height: 1.4;
 }
-.rename-hint strong { color: var(--gray-400); }
 
-.spin { animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+.rename-hint strong {
+  color: var(--gray-400);
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   MOBILE RESPONSIVE MEDIA BREAKPOINT (Targets viewports <= 480px)
+   ───────────────────────────────────────────────────────────────────────────── */
+@media screen and (max-width: 480px) {
+  .upload-box {
+    padding: 12px;
+  }
+
+  .upload-box-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .upload-status-badge {
+    align-self: flex-start;
+    margin-top: 2px;
+  }
+
+  /* Changes file description text string to tap instructions for standard phones */
+  .drop-content span {
+    font-size: 12px;
+  }
+
+  /* Stack file details and operational link items vertically to eliminate truncation */
+  .uploaded-info {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .renamed-name {
+    white-space: normal; /* Wraps file name safely instead of clipping off screen */
+    word-break: break-all;
+  }
+
+  .uploaded-actions {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .view-link,
+  .re-upload-btn {
+    flex: 1; /* Stretches actions evenly across screen width for easy thumb reach */
+    text-align: center;
+    justify-content: center;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+}

@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import { getAllStudentsFromDrive, deleteStudent } from "../../utils/driveApi";
-import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA } from "../../context/schemas";
+import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields } from "../../context/schemas";
 import "./Admin.css";
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
@@ -37,7 +37,8 @@ function getTotalUploads(s) {
 
 function getOverallProgress(s) {
   const total = getTotalUploads(s);
-  return Math.min(100, Math.round((total / 22) * 100));
+  const required = getTotalRequiredFields(s.coApplicants || 1, s.personalInfo || {});
+  return Math.min(100, Math.round((total / required) * 100));
 }
 
 function getAvatarVariant(name) {
@@ -425,6 +426,9 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive }) {
         </div>
 
         <div className="student-meta">
+          {student.advisor && (
+            <span className="meta-pill">{student.advisor}</span>
+          )}
           {student.personalInfo?.loanAmount && (
             <span className="meta-pill">
               ₹{student.personalInfo.loanAmount}
@@ -567,7 +571,7 @@ function DeleteModal({ name, deleting, onConfirm, onCancel }) {
 /* ─── Main Component ───────────────────────────────────────────── */
 
 export default function Admin() {
-  const { isAdmin } = useStudent();
+  const { isAdmin, adminRole, adminAdvisorName } = useStudent();
   const navigate = useNavigate();
 
   const [students, setStudents] = useState([]);
@@ -612,7 +616,9 @@ export default function Admin() {
   const handleDelete = async (name) => {
     setDeleting(true);
     try {
-      await deleteStudent(name);
+      const s = students.find((st) => st.name === name);
+      const identifier = s?.email || s?.phone || "";
+      await deleteStudent(name, identifier);
       setStudents((prev) => prev.filter((s) => s.name !== name));
       setConfirmDelete(null);
       setExpandedIdx(null);
@@ -647,6 +653,9 @@ export default function Admin() {
 
   /* ── Filtered list ─────────────────────────────────────────── */
   const filtered = students.filter((s) => {
+    // Advisors see only their own students
+    if (adminRole === "advisor" && s.advisor !== adminAdvisorName) return false;
+
     const q = search.toLowerCase();
     const matchesSearch =
       !search ||
@@ -684,7 +693,11 @@ export default function Admin() {
               </div>
               Admin Dashboard
             </h1>
-            <p className="admin-sub">Manage all student document submissions</p>
+            <p className="admin-sub">
+              {adminRole === "advisor"
+                ? `Advisor: ${adminAdvisorName} — showing your students only`
+                : "Super Admin — all students"}
+            </p>
           </div>
 
           <div className="header-actions">
@@ -819,12 +832,16 @@ export default function Admin() {
               <h3>
                 {search || filter !== "all"
                   ? "No students match"
-                  : "No students yet"}
+                  : adminRole === "advisor"
+                    ? "No students assigned yet"
+                    : "No students yet"}
               </h3>
               <p>
                 {search || filter !== "all"
                   ? "Try adjusting your search or filter."
-                  : "Add a student to get started."}
+                  : adminRole === "advisor"
+                    ? `No students have selected ${adminAdvisorName} as their advisor yet.`
+                    : "Add a student to get started."}
               </p>
               {(search || filter !== "all") && (
                 <button

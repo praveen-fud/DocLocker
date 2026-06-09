@@ -1,14 +1,13 @@
 /* ==========================================================================
    1. Structural Floating Substrate Canvas
    ========================================================================== */
-
 .premium-navbar-blur {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 1000;
-  background: rgba(3, 7, 18, 0.45); /* Soft, dark translucent base */
+  background: rgba(3, 7, 18, 0.45);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -16,36 +15,36 @@
 }
 
 .navbar-container-core {
-  max-width: 1400px; /* Aligned exactly with the home split layout width max */
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 0 32px;
-  height: 68px; /* Slightly deeper visual baseline tracking */
+  padding: 0 24px;
+  height: 68px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  box-sizing: border-box;
 }
 
 /* ==========================================================================
    2. Integrated Premium Logo and Corporate Identity
    ========================================================================== */
-
 .navbar-brand-anchor {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   text-decoration: none;
   transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  min-width: 0;
 }
 
 .navbar-brand-anchor:hover {
   opacity: 0.9;
 }
 
-/* Micro-lens container design inherited from the home hero framework */
 .navbar-logo-lens-capsule {
   position: relative;
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   border-radius: 10px;
   background: #ffffff;
   padding: 2px;
@@ -81,47 +80,52 @@
 .navbar-brand-typography {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .navbar-brand-name {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: #ffffff;
   line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .navbar-brand-tagline {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   text-transform: uppercase;
   color: #0ea5e9;
   letter-spacing: 0.05em;
-  margin-top: 2px;
+  margin-top: 1px;
+  white-space: nowrap;
 }
 
 /* ==========================================================================
    3. Navigation Link Actions & Micro-Glint States
    ========================================================================== */
-
 .navbar-actions-deck {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .navbar-deck-link {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
+  gap: 6px;
+  padding: 8px 14px;
   border-radius: 8px;
   color: #9ca3af;
   text-decoration: none;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
 }
 
 .navbar-deck-link:hover {
@@ -134,7 +138,6 @@
   background: rgba(14, 165, 233, 0.06);
 }
 
-/* High-fidelity fluid anchor line transition */
 .navbar-link-active-indicator {
   position: absolute;
   bottom: 0;
@@ -153,7 +156,6 @@
   width: 60%;
 }
 
-/* Special styling wrapper targeting the Admin login variant hook */
 .navbar-deck-link.admin-secure-trigger {
   color: #9ca3af;
   border: 1px solid rgba(255, 255, 255, 0.04);
@@ -167,14 +169,13 @@
 }
 
 /* ==========================================================================
-   4. Monolithic Functional Destruction Triggers (Exit Call)
+   4. Exit Functional Destruction Trigger
    ========================================================================== */
-
 .navbar-exit-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
+  gap: 6px;
+  padding: 8px 14px;
   background: rgba(239, 68, 68, 0.06);
   border: 1px solid rgba(239, 68, 68, 0.15);
   border-radius: 8px;
@@ -191,17 +192,11 @@
   border-color: #ef4444;
   color: #ffffff;
   box-shadow: 0 4px 15px rgba(239, 68, 68, 0.25);
-  transform: translateY(-1px);
-}
-
-.navbar-exit-trigger:active {
-  transform: translateY(0);
 }
 
 /* ==========================================================================
-   5. Responsive Adapters
+   5. Responsive Adapters (Mobile Fixes)
    ========================================================================== */
-
 @media (max-width: 640px) {
   .navbar-container-core {
     padding: 0 16px;
@@ -211,7 +206,6 @@
   .navbar-logo-lens-capsule {
     width: 34px;
     height: 34px;
-    border-radius: 8px;
   }
 
   .navbar-brand-name {
@@ -219,16 +213,16 @@
   }
 
   .navbar-brand-tagline {
-    display: none; /* Strip minor metadata on tiny viewports to avoid block clashing */
+    display: none;
   }
 
   .navbar-deck-link span,
   .navbar-exit-trigger span {
-    display: none; /* Collapse string parameters into icon grids on compact displays */
+    display: none; /* Safely strips long text strings into pure icon buttons */
   }
 
   .navbar-deck-link,
   .navbar-exit-trigger {
-    padding: 8px 12px;
+    padding: 8px 10px;
   }
 }

@@ -4,8 +4,27 @@ import { Shield, Eye, EyeOff, LogIn } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import "./AdminLogin.css";
 
-// Simple admin password - in production use proper auth
-const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD || "admin@2024";
+const SUPER_ADMIN_PASSWORD =
+  import.meta.env.VITE_SUPER_ADMIN_PASSWORD ||
+  import.meta.env.VITE_ADMIN_PASSWORD ||
+  "admin@2024";
+
+const ADVISOR_PASSWORDS = {
+  Sainath: import.meta.env.VITE_ADVISOR_SAINATH_PASSWORD || "Sainath@123",
+  Shravan: import.meta.env.VITE_ADVISOR_SHRAVAN_PASSWORD || "Shravan@123",
+};
+
+function resolveLogin(password) {
+  if (password === SUPER_ADMIN_PASSWORD) {
+    return { role: "superadmin", advisorName: "" };
+  }
+  for (const [name, pwd] of Object.entries(ADVISOR_PASSWORDS)) {
+    if (password === pwd) {
+      return { role: "advisor", advisorName: name };
+    }
+  }
+  return null;
+}
 
 export default function AdminLogin() {
   const [password, setPassword] = useState("");
@@ -16,8 +35,9 @@ export default function AdminLogin() {
 
   const handleLogin = (e) => {
     e.preventDefault();
-    if (password === ADMIN_PASSWORD) {
-      loginAdmin();
+    const result = resolveLogin(password);
+    if (result) {
+      loginAdmin(result.role, result.advisorName);
       navigate("/admin");
     } else {
       setError("Incorrect password. Please try again.");
@@ -31,16 +51,20 @@ export default function AdminLogin() {
           <Shield size={32} />
         </div>
         <h1>Admin Access</h1>
-        <p>Enter admin password to access the student dashboard</p>
+        <p>
+          Enter your password to access the dashboard.
+          <br />
+          Advisors see only their own students.
+        </p>
 
         <form onSubmit={handleLogin} className="admin-login-form card">
           <div className="input-group">
-            <label>Admin Password</label>
+            <label>Password</label>
             <div className="password-wrap">
               <input
                 className="input-field"
                 type={show ? "text" : "password"}
-                placeholder="Enter admin password"
+                placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoFocus
@@ -72,8 +96,10 @@ export default function AdminLogin() {
         </form>
 
         <p className="admin-hint">
-          Default password is set in <code>.env</code> as{" "}
-          <code>VITE_ADMIN_PASSWORD</code>
+          Advisor passwords are set in <code>.env</code> as{" "}
+          <code>VITE_ADVISOR_SAINATH_PASSWORD</code> and{" "}
+          <code>VITE_ADVISOR_SHRAVAN_PASSWORD</code>.
+          Super admin uses <code>VITE_SUPER_ADMIN_PASSWORD</code>.
         </p>
       </div>
     </div>

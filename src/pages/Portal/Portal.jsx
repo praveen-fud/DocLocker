@@ -1,3 +1,4 @@
+// Portal.jsx
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -16,7 +17,8 @@ import {
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import { saveStudentMeta } from "../../utils/driveApi";
-import { DOCUMENT_SCHEMA, getTotalRequiredFields } from "../../context/schemas";
+import { generateAndUploadSummaryPDF } from "../../utils/summaryGenerator"; // Added import hook
+import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields } from "../../context/schemas";
 import FileUploadBox from "../../components/FileUploadBox/FileUploadBox";
 import ProgressBar from "../../components/ProgressBar/ProgressBar";
 import "./Portal.css";
@@ -29,129 +31,6 @@ const SECTIONS = [
   { id: "references", label: "References", icon: Users },
   { id: "otherDocs", label: "Other Documents", icon: FolderPlus },
 ];
-
-const LOCAL_CO_APPLICANT_SCHEMA = {
-  salaried: [
-    {
-      id: "aadhar",
-      label: "Aadhar Card",
-      rename: "Aadhar",
-      accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
-    },
-    {
-      id: "pan",
-      label: "PAN Card",
-      rename: "PAN",
-      accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
-    },
-    {
-      id: "photo",
-      label: "Passport Size Photo",
-      rename: "Photo",
-      accept: ".jpg,.jpeg,.png,.doc,.docx,.pdf",
-    },
-    {
-      id: "salary_slip_3m",
-      label: "Last 3 Month Salary Slip",
-      rename: "Salary_Slip_3Months",
-      accept: ".pdf,.zip,.jpg,.jpeg,.png,.doc,.docx",
-    },
-    {
-      id: "bank_stmt_6m",
-      label: "Last 6 Month Bank Statement (salary a/c)",
-      rename: "Bank_Statement_6Months",
-      accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
-    },
-    {
-      id: "form16_itr_y1",
-      label: "Form 16 / ITR - Year 1 (Latest)",
-      rename: "Form16_ITR_Year1",
-      accept: ".pdf,.doc,.docx",
-    },
-    {
-      id: "form16_itr_y2",
-      label: "Form 16 / ITR - Year 2",
-      rename: "Form16_ITR_Year2",
-      accept: ".pdf,.doc,.docx",
-    },
-    {
-      id: "form16_itr_y3",
-      label: "Form 16 / ITR - Year 3",
-      rename: "Form16_ITR_Year3",
-      accept: ".pdf,.doc,.docx",
-    },
-  ],
-  selfEmployed: [
-    {
-      id: "aadhar",
-      label: "Aadhar Card",
-      rename: "Aadhar",
-      accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
-    },
-    {
-      id: "pan",
-      label: "PAN Card",
-      rename: "PAN",
-      accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
-    },
-    {
-      id: "photo",
-      label: "Passport Size Photo",
-      rename: "Photo",
-      accept: ".jpg,.jpeg,.png,.doc,.docx,.pdf",
-    },
-    {
-      id: "bank_stmt_6m",
-      label: "Last 6 Month Bank Statement",
-      rename: "Bank_Statement_6Months",
-      accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
-    },
-    {
-      id: "itr_y1",
-      label: "ITR Acknowledgement - Year 1 (Latest)",
-      rename: "ITR_Year1",
-      accept: ".pdf,.doc,.docx,.jpg,.jpeg,.png",
-    },
-    {
-      id: "itr_y2",
-      label: "ITR Acknowledgement - Year 2",
-      rename: "ITR_Year2",
-      accept: ".pdf,.doc,.docx,.jpg,.jpeg,.png",
-    },
-    {
-      id: "itr_y3",
-      label: "ITR Acknowledgement - Year 3",
-      rename: "ITR_Year3",
-      accept: ".pdf,.doc,.docx,.jpg,.jpeg,.png",
-    },
-    {
-      id: "business_proof",
-      label: "Business Proof / GST Certificate",
-      rename: "Business_Proof_GST",
-      accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
-    },
-  ],
-  other: [
-    {
-      id: "aadhar",
-      label: "Aadhar Card",
-      rename: "Aadhar",
-      accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
-    },
-    {
-      id: "pan",
-      label: "PAN Card",
-      rename: "PAN",
-      accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
-    },
-    {
-      id: "photo",
-      label: "Passport Size Photo",
-      rename: "Photo",
-      accept: ".jpg,.jpeg,.png,.doc,.docx,.pdf",
-    },
-  ],
-};
 
 export default function Portal() {
   const { student, setStudent } = useStudent();
@@ -209,6 +88,25 @@ export default function Portal() {
     setPersonalInfo((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleCoCountChange = (newCount) => {
+    const prev = coCountRef.current;
+    setCoCount(newCount);
+    if (newCount < prev) {
+      // Strip orphaned co-applicant info and uploads for removed indices
+      setPersonalInfo((pi) => {
+        const cleaned = { ...pi };
+        for (let i = newCount; i < prev; i++) delete cleaned[`co_info_${i}`];
+        return cleaned;
+      });
+      setUploads((u) => {
+        const cleaned = { ...u };
+        for (let i = newCount; i < prev; i++) delete cleaned[`co_${i}`];
+        return cleaned;
+      });
+    }
+  };
+
+  // UPDATED: handleSave now triggers automated summary PDF uploads alongside data syncs
   const handleSave = () => {
     setSaving(true);
     setSaveError("");
@@ -219,7 +117,13 @@ export default function Portal() {
       coApplicants: coCountRef.current,
     };
     setStudent(updated);
+
+    // 1. Sync metadata profiles out to storage layers
     saveStudentMeta(student.name, updated, studentIdentifier);
+
+    // 2. Transmit compiled documentation parameters as automated snapshot sheets
+    generateAndUploadSummaryPDF(student.name, updated, studentIdentifier);
+
     setSaved(true);
     setSaving(false);
     setTimeout(() => setSaved(false), 2500);
@@ -240,7 +144,7 @@ export default function Portal() {
     {
       id: "personal",
       label: "Personal",
-      total: 44, // Adjusted for comprehensive tracking form inputs
+      total: 44,
       uploaded: Object.keys(personalInfo).filter(
         (k) =>
           !k.startsWith("ref") && !k.startsWith("co_info_") && personalInfo[k],
@@ -267,7 +171,7 @@ export default function Portal() {
         if (financialStatus === "non-financial") return 3;
         const empType = coInfo.empType || "salaried";
         return (
-          LOCAL_CO_APPLICANT_SCHEMA[empType] || LOCAL_CO_APPLICANT_SCHEMA.other
+          CO_APPLICANT_SCHEMA[empType] || CO_APPLICANT_SCHEMA.other
         ).length;
       }).reduce((a, b) => a + b, 0),
       uploaded: Array.from(
@@ -391,7 +295,7 @@ export default function Portal() {
               studentName={student.name}
               studentIdentifier={studentIdentifier}
               coCount={coCount}
-              setCoCount={setCoCount}
+              setCoCount={handleCoCountChange}
               uploads={uploads}
               onUploaded={handleUploaded}
               personalInfo={personalInfo}
@@ -481,7 +385,7 @@ function PersonalField({
   );
 }
 
-// ─── Personal Section (UPDATED: Segmented into Step Sub-navigation) ──────────────
+// ─── Personal Section ───────────────────────────────────────────────────────
 function PersonalSection({ info, onChange }) {
   const [subStep, setSubStep] = useState(1);
 
@@ -492,7 +396,6 @@ function PersonalSection({ info, onChange }) {
         <p>Complete your registration info profiles using the wizard below</p>
       </div>
 
-      {/* Internal Sub-wizard progress line bar */}
       <div
         className="sub-step-navigator"
         style={{ display: "flex", gap: 8, marginBottom: 24 }}
@@ -510,7 +413,6 @@ function PersonalSection({ info, onChange }) {
         ))}
       </div>
 
-      {/* PAGE 1: Base Identity, Scores, & Academic Details */}
       {subStep === 1 && (
         <div className="animate-fade-in">
           <h3 className="sub-heading">Identity & Academic Parameters</h3>
@@ -652,7 +554,6 @@ function PersonalSection({ info, onChange }) {
         </div>
       )}
 
-      {/* PAGE 2: Target Profiles, Visa Metrics, & Residence */}
       {subStep === 2 && (
         <div className="animate-fade-in">
           <h3 className="sub-heading">Destination & Application Context</h3>
@@ -746,7 +647,6 @@ function PersonalSection({ info, onChange }) {
         </div>
       )}
 
-      {/* PAGE 3: Parents Information, Credit Values, & Guarantors */}
       {subStep === 3 && (
         <div className="animate-fade-in">
           <h3 className="sub-heading">Paternal & Maternal Baselines</h3>
@@ -862,7 +762,6 @@ function PersonalSection({ info, onChange }) {
         </div>
       )}
 
-      {/* PAGE 4: Pre-applied Actions, Employment, & Agency Context */}
       {subStep === 4 && (
         <div className="animate-fade-in">
           <h3 className="sub-heading">Prior History & Assets</h3>
@@ -880,10 +779,34 @@ function PersonalSection({ info, onChange }) {
               </select>
             </div>
             {info.priorBankApplied === "Yes" && (
+              <div className="input-group">
+                <label>Which Bank Was Applied?</label>
+                <select
+                  className="input-field"
+                  value={info.priorBankName || ""}
+                  onChange={(e) => onChange("priorBankName", e.target.value)}
+                >
+                  <option value="">Select Bank</option>
+                  <option value="HDFC Bank">HDFC Bank</option>
+                  <option value="HDFC Credila Financial Services">HDFC Credila Financial Services</option>
+                  <option value="Avanse Financial Services">Avanse Financial Services</option>
+                  <option value="Auxilo Finserve">Auxilo Finserve</option>
+                  <option value="InCred Finance">InCred Finance</option>
+                  <option value="Tata Capital">Tata Capital</option>
+                  <option value="Poonawalla Fincorp">Poonawalla Fincorp</option>
+                  <option value="IDFC FIRST Bank">IDFC FIRST Bank</option>
+                  <option value="ICICI Bank">ICICI Bank</option>
+                  <option value="Axis Bank">Axis Bank</option>
+                  <option value="YES Bank">YES Bank</option>
+                  <option value="Others">Others</option>
+                </select>
+              </div>
+            )}
+            {info.priorBankApplied === "Yes" && info.priorBankName === "Others" && (
               <PersonalField
-                label="If applied, rejection reason"
-                k="priorBankRejectionReason"
-                placeholder="Describe reason"
+                label="Enter Bank Name"
+                k="priorBankNameCustom"
+                placeholder="Type bank name here"
                 info={info}
                 onChange={onChange}
               />
@@ -952,7 +875,6 @@ function PersonalSection({ info, onChange }) {
         </div>
       )}
 
-      {/* Simple navigation button clusters to toggle between wizard pages */}
       <div
         style={{
           display: "flex",
@@ -1075,13 +997,13 @@ function LoanSection({
 
         let fields;
         if (financialStatus === "non-financial") {
-          fields = LOCAL_CO_APPLICANT_SCHEMA.other.filter((f) =>
+          fields = CO_APPLICANT_SCHEMA.other.filter((f) =>
             ["aadhar", "pan", "photo"].includes(f.id),
           );
         } else {
           fields =
-            LOCAL_CO_APPLICANT_SCHEMA[empType] ||
-            LOCAL_CO_APPLICANT_SCHEMA.other;
+            CO_APPLICANT_SCHEMA[empType] ||
+            CO_APPLICANT_SCHEMA.other;
         }
 
         const coUploads = uploads[key] || {};

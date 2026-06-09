@@ -6,10 +6,6 @@ const StudentContext = createContext(null);
 // Admin session TTL: 8 hours in milliseconds
 const ADMIN_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
-/**
- * Check whether a stored admin session is still valid.
- * Returns true only if the session exists AND has not expired.
- */
 function isAdminSessionValid() {
   try {
     const raw = localStorage.getItem("abroad_admin_session");
@@ -21,8 +17,29 @@ function isAdminSessionValid() {
   }
 }
 
+function getStoredAdminRole() {
+  try {
+    const raw = localStorage.getItem("abroad_admin_session");
+    if (!raw) return "superadmin";
+    const { role } = JSON.parse(raw);
+    return role || "superadmin";
+  } catch {
+    return "superadmin";
+  }
+}
+
+function getStoredAdvisorName() {
+  try {
+    const raw = localStorage.getItem("abroad_admin_session");
+    if (!raw) return "";
+    const { advisorName } = JSON.parse(raw);
+    return advisorName || "";
+  } catch {
+    return "";
+  }
+}
+
 export function StudentProvider({ children }) {
-  // Lazy initialization – reads localStorage synchronously on first render
   const [student, setStudentState] = useState(() => {
     try {
       const saved = localStorage.getItem("abroad_student");
@@ -32,9 +49,13 @@ export function StudentProvider({ children }) {
     }
   });
 
-  // FIX: Admin session now uses a timestamped object with expiry
-  // instead of a plain "true" string, preventing indefinite sessions.
   const [isAdmin, setIsAdmin] = useState(() => isAdminSessionValid());
+  const [adminRole, setAdminRole] = useState(() =>
+    isAdminSessionValid() ? getStoredAdminRole() : "superadmin",
+  );
+  const [adminAdvisorName, setAdminAdvisorName] = useState(() =>
+    isAdminSessionValid() ? getStoredAdvisorName() : "",
+  );
 
   const setStudent = (data) => {
     setStudentState(data);
@@ -46,29 +67,32 @@ export function StudentProvider({ children }) {
     localStorage.removeItem("abroad_student");
   };
 
-  const loginAdmin = () => {
+  // role: "superadmin" | "advisor"
+  // advisorName: "Sainath" | "Shravan" | ""
+  const loginAdmin = (role = "superadmin", advisorName = "") => {
     setIsAdmin(true);
+    setAdminRole(role);
+    setAdminAdvisorName(advisorName);
     localStorage.setItem(
       "abroad_admin_session",
       JSON.stringify({
         active: true,
+        role,
+        advisorName,
         expiresAt: Date.now() + ADMIN_SESSION_TTL_MS,
       }),
     );
-    // Remove old format key if present from a previous version
     localStorage.removeItem("abroad_admin");
   };
 
   const logoutAdmin = () => {
     setIsAdmin(false);
+    setAdminRole("superadmin");
+    setAdminAdvisorName("");
     localStorage.removeItem("abroad_admin_session");
-    localStorage.removeItem("abroad_admin"); // clean up old key too
+    localStorage.removeItem("abroad_admin");
   };
 
-  /**
-   * Re-validates the admin session on each render cycle.
-   * If the TTL has elapsed since login, auto-logs out the admin.
-   */
   const checkAdminSession = () => {
     if (isAdmin && !isAdminSessionValid()) {
       logoutAdmin();
@@ -77,13 +101,17 @@ export function StudentProvider({ children }) {
     return isAdmin;
   };
 
+  const validSession = checkAdminSession();
+
   return (
     <StudentContext.Provider
       value={{
         student,
         setStudent,
         clearStudent,
-        isAdmin: checkAdminSession(),
+        isAdmin: validSession,
+        adminRole: validSession ? adminRole : "superadmin",
+        adminAdvisorName: validSession ? adminAdvisorName : "",
         loginAdmin,
         logoutAdmin,
       }}

@@ -22,7 +22,7 @@ import "./Home.css";
 
 export default function Home() {
   const [mode, setMode] = useState("welcome");
-  const [form, setForm] = useState({ name: "", email: "", phone: "" });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", advisor: "" });
   const [lookup, setLookup] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -39,6 +39,10 @@ export default function Home() {
     }
     if (!form.email.trim() && !form.phone.trim()) {
       setError("Please enter at least one of email or phone number.");
+      return;
+    }
+    if (!form.advisor) {
+      setError("Please select your Finance Advisor.");
       return;
     }
 
@@ -77,6 +81,7 @@ export default function Home() {
         name: form.name.trim(),
         email: form.email.trim(),
         phone: cleanedPhone,
+        advisor: form.advisor,
         createdAt: new Date().toISOString(),
         coApplicants: 1,
         uploads: {},
@@ -330,6 +335,24 @@ export default function Home() {
                         setForm({ ...form, phone: e.target.value })
                       }
                     />
+                    <div className="input-focus-border-line" />
+                  </div>
+
+                  <div className="interactive-input-block">
+                    <label>
+                      Finance Advisor <span className="required-accent">*</span>
+                    </label>
+                    <select
+                      className="premium-styled-input"
+                      value={form.advisor}
+                      onChange={(e) =>
+                        setForm({ ...form, advisor: e.target.value })
+                      }
+                    >
+                      <option value="">Select your advisor</option>
+                      <option value="Sainath">Sainath</option>
+                      <option value="Shravan">Shravan</option>
+                    </select>
                     <div className="input-focus-border-line" />
                   </div>
 
