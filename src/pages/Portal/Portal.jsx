@@ -23,6 +23,10 @@ import FileUploadBox from "../../components/FileUploadBox/FileUploadBox";
 import ProgressBar from "../../components/ProgressBar/ProgressBar";
 import "./Portal.css";
 
+// Year range for all qualification dropdowns
+const CUR_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: CUR_YEAR - 1974 }, (_, i) => CUR_YEAR - i);
+
 const SECTIONS = [
   { id: "personal", label: "Personal Info", icon: User },
   { id: "student", label: "Student Documents", icon: FileText },
@@ -39,6 +43,7 @@ export default function Portal() {
   const [uploads, setUploads] = useState(student?.uploads || {});
   const [personalInfo, setPersonalInfo] = useState(student?.personalInfo || {});
   const [coCount, setCoCount] = useState(student?.coApplicants || 1);
+  const [uploadedDocuments, setUploadedDocuments] = useState(student?.uploadedDocuments || []);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -48,16 +53,12 @@ export default function Portal() {
   const uploadsRef = useRef(uploads);
   const personalRef = useRef(personalInfo);
   const coCountRef = useRef(coCount);
+  const docsRef = useRef(uploadedDocuments);
 
-  useEffect(() => {
-    uploadsRef.current = uploads;
-  }, [uploads]);
-  useEffect(() => {
-    personalRef.current = personalInfo;
-  }, [personalInfo]);
-  useEffect(() => {
-    coCountRef.current = coCount;
-  }, [coCount]);
+  useEffect(() => { uploadsRef.current = uploads; }, [uploads]);
+  useEffect(() => { personalRef.current = personalInfo; }, [personalInfo]);
+  useEffect(() => { coCountRef.current = coCount; }, [coCount]);
+  useEffect(() => { docsRef.current = uploadedDocuments; }, [uploadedDocuments]);
 
   useEffect(() => {
     if (!student) navigate("/");
@@ -74,11 +75,24 @@ export default function Portal() {
       },
     };
     setUploads(newUploads);
+
+    // Update uploadedDocuments: replace existing entry for same file, or append
+    let newDocs = docsRef.current;
+    if (result.parsedData) {
+      const key = `${result.parsedData.subFolder}__${result.parsedData.sourceFile}`;
+      newDocs = [
+        ...docsRef.current.filter((d) => `${d.subFolder}__${d.sourceFile}` !== key),
+        result.parsedData,
+      ];
+      setUploadedDocuments(newDocs);
+    }
+
     const updated = {
       ...student,
       uploads: newUploads,
       personalInfo: personalRef.current,
       coApplicants: coCountRef.current,
+      uploadedDocuments: newDocs,
     };
     setStudent(updated);
     saveStudentMeta(student.name, updated, studentIdentifier);
@@ -106,7 +120,6 @@ export default function Portal() {
     }
   };
 
-  // UPDATED: handleSave now triggers automated summary PDF uploads alongside data syncs
   const handleSave = () => {
     setSaving(true);
     setSaveError("");
@@ -115,15 +128,11 @@ export default function Portal() {
       uploads: uploadsRef.current,
       personalInfo: personalRef.current,
       coApplicants: coCountRef.current,
+      uploadedDocuments: docsRef.current,
     };
     setStudent(updated);
-
-    // 1. Sync metadata profiles out to storage layers
     saveStudentMeta(student.name, updated, studentIdentifier);
-
-    // 2. Transmit compiled documentation parameters as automated snapshot sheets
-    generateAndUploadSummaryPDF(student.name, updated, studentIdentifier);
-
+    generateAndUploadSummaryPDF(student.name, updated, studentIdentifier, docsRef.current);
     setSaved(true);
     setSaving(false);
     setTimeout(() => setSaved(false), 2500);
@@ -363,6 +372,20 @@ export default function Portal() {
 }
 
 // ─── Personal Field Helper ──────────────────────────────────────────────────
+const CIBIL_HINT = (
+  <span className="field-hint">
+    Don't know your score?{" "}
+    <a
+      href="https://www.paisabazaar.com/cibil-credit-report/"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="field-hint-link"
+    >
+      Check it here
+    </a>
+  </span>
+);
+
 function PersonalField({
   label,
   k,
@@ -370,17 +393,56 @@ function PersonalField({
   placeholder = "",
   info,
   onChange,
+  hint,
+  numericOnly = false,
+  integerOnly = false,
+  maxVal,
 }) {
+  const handleChange = (e) => {
+    let val = e.target.value;
+    if (integerOnly) {
+      val = val.replace(/[^0-9]/g, "");
+    } else if (numericOnly) {
+      val = val.replace(/[^0-9.]/g, "");
+      const parts = val.split(".");
+      if (parts.length > 2) val = parts[0] + "." + parts.slice(1).join("");
+    }
+    if (maxVal !== undefined && val !== "" && !isNaN(parseFloat(val)) && parseFloat(val) > maxVal) {
+      val = String(maxVal);
+    }
+    onChange(k, val);
+  };
+
   return (
     <div className="input-group">
       <label>{label}</label>
       <input
         className="input-field"
         type={type}
+        inputMode={integerOnly ? "numeric" : numericOnly ? "decimal" : undefined}
         placeholder={placeholder}
         value={info[k] || ""}
-        onChange={(e) => onChange(k, e.target.value)}
+        onChange={handleChange}
       />
+      {hint && hint}
+    </div>
+  );
+}
+
+function YearSelect({ label, k, info, onChange, placeholder = "Select Year" }) {
+  return (
+    <div className="input-group">
+      {label && <label>{label}</label>}
+      <select
+        className="input-field"
+        value={info[k] || ""}
+        onChange={(e) => onChange(k, e.target.value)}
+      >
+        <option value="">{placeholder}</option>
+        {YEARS.map((y) => (
+          <option key={y} value={y}>{y}</option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -440,18 +502,22 @@ function PersonalSection({ info, onChange }) {
               onChange={onChange}
             />
             <PersonalField
-              label="Required Loan Amount"
+              label="Required Loan Amount (₹)"
               k="loanAmount"
-              placeholder="e.g. ₹50,00,000"
+              placeholder="e.g. 5000000"
               info={info}
               onChange={onChange}
+              integerOnly
             />
             <PersonalField
               label="Student CIBIL Score"
               k="studentCibil"
-              placeholder="e.g. 750"
+              placeholder="300 – 900"
               info={info}
               onChange={onChange}
+              integerOnly
+              maxVal={900}
+              hint={CIBIL_HINT}
             />
 
             <div className="input-group">
@@ -468,32 +534,77 @@ function PersonalSection({ info, onChange }) {
             </div>
 
             <PersonalField
-              label="Qualification & Passed Year"
-              k="qualPassedYear"
-              placeholder="e.g. B.Tech 2024"
+              label="Highest Qualification (e.g. B.Tech, MCA)"
+              k="qualName"
+              placeholder="e.g. B.Tech, MCA, MBA"
               info={info}
               onChange={onChange}
             />
-            <PersonalField
-              label="10th Percentage & Year"
-              k="pct10"
-              placeholder="e.g. 85.4% - 2018"
+            <YearSelect
+              label="Qualification Passed Out Year"
+              k="qualYear"
               info={info}
               onChange={onChange}
+              placeholder="Select Year"
             />
             <PersonalField
-              label="Inter/12th Percentage & Year"
-              k="pct12"
-              placeholder="e.g. 82.0% - 2020"
+              label="10th Percentage (%)"
+              k="pct10Score"
+              placeholder="e.g. 85.4"
               info={info}
               onChange={onChange}
+              numericOnly
+              maxVal={100}
+            />
+            <YearSelect
+              label="10th Passed Out Year"
+              k="pct10Year"
+              info={info}
+              onChange={onChange}
+              placeholder="Select Year"
             />
             <PersonalField
-              label="Graduation CGPA / % & Year"
-              k="pctGrad"
-              placeholder="e.g. 8.2 CGPA - 2024"
+              label="Inter / 12th Percentage (%)"
+              k="pct12Score"
+              placeholder="e.g. 82.0"
               info={info}
               onChange={onChange}
+              numericOnly
+              maxVal={100}
+            />
+            <YearSelect
+              label="12th Passed Out Year"
+              k="pct12Year"
+              info={info}
+              onChange={onChange}
+              placeholder="Select Year"
+            />
+            <div className="input-group">
+              <label>Graduation Score Type</label>
+              <select
+                className="input-field"
+                value={info.pctGradType || "percentage"}
+                onChange={(e) => onChange("pctGradType", e.target.value)}
+              >
+                <option value="percentage">Percentage (%)</option>
+                <option value="cgpa">CGPA (0 – 10)</option>
+              </select>
+            </div>
+            <PersonalField
+              label={info.pctGradType === "cgpa" ? "Graduation CGPA" : "Graduation Percentage (%)"}
+              k="pctGradScore"
+              placeholder={info.pctGradType === "cgpa" ? "e.g. 8.2" : "e.g. 74.5"}
+              info={info}
+              onChange={onChange}
+              numericOnly
+              maxVal={info.pctGradType === "cgpa" ? 10 : 100}
+            />
+            <YearSelect
+              label="Graduation Passed Out Year"
+              k="pctGradYear"
+              info={info}
+              onChange={onChange}
+              placeholder="Select Year"
             />
 
             <div className="input-group">
@@ -515,6 +626,8 @@ function PersonalSection({ info, onChange }) {
                 placeholder="e.g. 2"
                 info={info}
                 onChange={onChange}
+                integerOnly
+                maxVal={50}
               />
             )}
           </div>
@@ -523,32 +636,40 @@ function PersonalSection({ info, onChange }) {
           <h3 className="sub-heading">Standardized Test Metrics</h3>
           <div className="grid-2">
             <PersonalField
-              label="GRE Score"
+              label="GRE Score (260 – 340)"
               k="greScore"
               placeholder="e.g. 312"
               info={info}
               onChange={onChange}
+              integerOnly
+              maxVal={340}
             />
             <PersonalField
-              label="IELTS Score"
+              label="IELTS Score (0 – 9)"
               k="ieltsScore"
               placeholder="e.g. 7.0"
               info={info}
               onChange={onChange}
+              numericOnly
+              maxVal={9}
             />
             <PersonalField
-              label="Duolingo Score"
+              label="Duolingo Score (10 – 160)"
               k="duolingoScore"
               placeholder="e.g. 120"
               info={info}
               onChange={onChange}
+              integerOnly
+              maxVal={160}
             />
             <PersonalField
-              label="TOEFL Score"
+              label="TOEFL Score (0 – 120)"
               k="toeflScore"
               placeholder="e.g. 98"
               info={info}
               onChange={onChange}
+              integerOnly
+              maxVal={120}
             />
           </div>
         </div>
@@ -665,11 +786,14 @@ function PersonalSection({ info, onChange }) {
               onChange={onChange}
             />
             <PersonalField
-              label="Father CIBIL Score"
+              label="Father CIBIL Score (300 – 900)"
               k="fatherCibil"
               placeholder="e.g. 780"
               info={info}
               onChange={onChange}
+              integerOnly
+              maxVal={900}
+              hint={CIBIL_HINT}
             />
             <PersonalField
               label="Mother Name"
@@ -684,10 +808,14 @@ function PersonalSection({ info, onChange }) {
               onChange={onChange}
             />
             <PersonalField
-              label="Mother CIBIL Score"
+              label="Mother CIBIL Score (300 – 900)"
               k="motherCibil"
+              placeholder="e.g. 760"
               info={info}
               onChange={onChange}
+              integerOnly
+              maxVal={900}
+              hint={CIBIL_HINT}
             />
           </div>
 
@@ -714,10 +842,14 @@ function PersonalSection({ info, onChange }) {
               onChange={onChange}
             />
             <PersonalField
-              label="Financial Guarantee CIBIL Score"
+              label="Financial Guarantee CIBIL Score (300 – 900)"
               k="guarantorCibil"
+              placeholder="e.g. 800"
               info={info}
               onChange={onChange}
+              integerOnly
+              maxVal={900}
+              hint={CIBIL_HINT}
             />
             <PersonalField
               label="Financial Guarantee Sector (Job / Business)"
@@ -1094,14 +1226,13 @@ function LoanSection({
                     <label>Mobile Number</label>
                     <input
                       className="input-field"
-                      placeholder="+91 98765 43210"
+                      inputMode="numeric"
+                      placeholder="10-digit mobile number"
                       value={coInfo.mobile || ""}
-                      onChange={(e) =>
-                        onInfoChange(infoKey, {
-                          ...coInfo,
-                          mobile: e.target.value,
-                        })
-                      }
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9]/g, "").slice(0, 10);
+                        onInfoChange(infoKey, { ...coInfo, mobile: val });
+                      }}
                     />
                   </div>
                   <div className="input-group">
@@ -1137,30 +1268,26 @@ function LoanSection({
                     <label>Number of Dependants</label>
                     <input
                       className="input-field"
-                      type="number"
+                      inputMode="numeric"
                       placeholder="e.g. 3"
                       value={coInfo.dependants || ""}
-                      onChange={(e) =>
-                        onInfoChange(infoKey, {
-                          ...coInfo,
-                          dependants: e.target.value,
-                        })
-                      }
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9]/g, "");
+                        onInfoChange(infoKey, { ...coInfo, dependants: val });
+                      }}
                     />
                   </div>
                   <div className="input-group">
                     <label>Years at Current Address</label>
                     <input
                       className="input-field"
-                      type="number"
+                      inputMode="numeric"
                       placeholder="e.g. 10"
                       value={coInfo.yearsAddress || ""}
-                      onChange={(e) =>
-                        onInfoChange(infoKey, {
-                          ...coInfo,
-                          yearsAddress: e.target.value,
-                        })
-                      }
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9]/g, "");
+                        onInfoChange(infoKey, { ...coInfo, yearsAddress: val });
+                      }}
                     />
                   </div>
                   {financialStatus !== "non-financial" && (

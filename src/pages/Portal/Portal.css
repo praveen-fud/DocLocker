@@ -296,8 +296,37 @@
   }
   .portal-tab span {
     display: none;
-  } /* Stretches dashboard space cleanly by using icons on phone-screens */
+  }
   .upload-grid {
     grid-template-columns: 1fr;
+  }
+  .portal-nav-btns {
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+  .portal-nav-btns .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .ref-card {
+    padding: 12px;
+  }
+  .section-panel {
+    border-radius: 12px;
+  }
+  .co-card-header {
+    padding: 12px 14px;
+  }
+  .co-body {
+    padding: 0 12px 12px;
+  }
+}
+
+@media (max-width: 400px) {
+  .portal-tab {
+    padding: 6px 8px;
+  }
+  .portal-title {
+    font-size: 20px;
   }
 }

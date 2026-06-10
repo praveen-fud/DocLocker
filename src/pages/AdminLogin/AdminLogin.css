@@ -89,3 +89,28 @@
   font-size: 11px;
   font-family: var(--font-mono);
 }
+
+@media (max-width: 480px) {
+  .admin-login-page {
+    padding: 80px 16px 24px;
+    align-items: flex-start;
+  }
+  .admin-login-container {
+    max-width: 100%;
+  }
+  .admin-login-container h1 {
+    font-size: 20px;
+  }
+  .admin-login-icon {
+    width: 54px;
+    height: 54px;
+    border-radius: 16px;
+    margin-bottom: 16px;
+  }
+}
+
+@media (max-width: 360px) {
+  .admin-login-page {
+    padding: 72px 12px 20px;
+  }
+}

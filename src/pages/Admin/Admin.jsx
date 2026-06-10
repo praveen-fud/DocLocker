@@ -19,6 +19,21 @@ import {
   Shield,
   TrendingUp,
   Building2,
+  Settings,
+  KeyRound,
+  UserCheck,
+  Plus,
+  Eye,
+  EyeOff,
+  BarChart3,
+  CreditCard,
+  GraduationCap,
+  Banknote,
+  Home,
+  Briefcase,
+  Star,
+  AlertTriangle,
+  XCircle,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import { getAllStudentsFromDrive, deleteStudent } from "../../utils/driveApi";
@@ -64,16 +79,10 @@ function getAllUploadedFiles(uploads) {
   return files;
 }
 
-/**
- * Returns an array of { section, label } objects for every required
- * document not yet uploaded, driven directly from DOCUMENT_SCHEMA
- * and CO_APPLICANT_SCHEMA.
- */
 function getMissingDocs(s) {
   const uploads = s.uploads || {};
   const missing = [];
 
-  // Applicant (GOVT ID) required fields
   const applicantUploads = uploads.applicant || {};
   DOCUMENT_SCHEMA.applicant.fields
     .filter((f) => !f.optional)
@@ -83,7 +92,6 @@ function getMissingDocs(s) {
       }
     });
 
-  // Academics required fields
   const academicUploads = uploads.academics || {};
   DOCUMENT_SCHEMA.academics.fields
     .filter((f) => !f.optional)
@@ -93,7 +101,6 @@ function getMissingDocs(s) {
       }
     });
 
-  // Co-applicant required fields
   const coCount = s.coApplicants || 0;
   for (let i = 0; i < coCount; i++) {
     const coUploads = uploads[`co_${i}`] || {};
@@ -118,6 +125,136 @@ function getProgressClass(p) {
   return "prog-mid";
 }
 
+/* ─── Score Classification Helpers ────────────────────────────── */
+
+// Generic: returns "cibil-excellent" | "cibil-good" | "cibil-fair" | "cibil-poor" | "cibil-unknown"
+function getScoreClass(value, { excellent, good, fair, min = 0 }) {
+  const n = parseFloat(value);
+  if (!n || isNaN(n) || n < min) return "cibil-unknown";
+  if (n >= excellent) return "cibil-excellent";
+  if (n >= good)      return "cibil-good";
+  if (n >= fair)      return "cibil-fair";
+  return "cibil-poor";
+}
+
+function getScoreLabel(value, { excellent, good, fair, min = 0 }, labels = ["Low","Average","Good","Excellent"]) {
+  const n = parseFloat(value);
+  if (!n || isNaN(n) || n < min) return "N/A";
+  if (n >= excellent) return labels[3];
+  if (n >= good)      return labels[2];
+  if (n >= fair)      return labels[1];
+  return labels[0];
+}
+
+// Threshold presets
+const CIBIL_T    = { excellent: 750, good: 700, fair: 650, min: 300 };
+const PCT_T      = { excellent: 85,  good: 75,  fair: 60,  min: 0   };
+const CGPA_T     = { excellent: 8.5, good: 7.5, fair: 6.0, min: 0   };
+const GRE_T      = { excellent: 325, good: 310, fair: 290, min: 260  };
+const IELTS_T    = { excellent: 8.0, good: 7.0, fair: 6.0, min: 0   };
+const TOEFL_T    = { excellent: 110, good: 100, fair: 80,  min: 0   };
+const DUOLINGO_T = { excellent: 131, good: 110, fair: 90,  min: 10  };
+
+const ACAD_LABELS = ["Low", "Average", "Good", "Excellent"];
+const CIBIL_LABELS = ["Poor", "Fair", "Good", "Excellent"];
+
+/* ─── Loan Eligibility Engine ──────────────────────────────────── */
+
+function scoreAcademics(p) {
+  // Returns 0–3 representing overall academic strength
+  let points = 0, count = 0;
+  const rate = (val, thresholds) => {
+    const cls = getScoreClass(val, thresholds);
+    if (cls === "cibil-excellent") return 3;
+    if (cls === "cibil-good")      return 2;
+    if (cls === "cibil-fair")      return 1;
+    if (cls === "cibil-poor")      return 0;
+    return null;
+  };
+  [
+    rate(p.pct10Score,   PCT_T),
+    rate(p.pct12Score,   PCT_T),
+    rate(p.pctGradScore, p.pctGradType === "cgpa" ? CGPA_T : PCT_T),
+  ].forEach((v) => { if (v !== null) { points += v; count++; } });
+  return count > 0 ? points / count : null; // null = no data
+}
+
+function assessLoanEligibility(student) {
+  const p = student.personalInfo || {};
+  const progress = getOverallProgress(student);
+
+  // Collect CIBIL scores
+  const scores = [];
+  if (p.studentCibil)  scores.push({ label: "Student",   score: parseInt(p.studentCibil),  role: "student"    });
+  if (p.fatherCibil)   scores.push({ label: "Father",    score: parseInt(p.fatherCibil),   role: "co"         });
+  if (p.motherCibil)   scores.push({ label: "Mother",    score: parseInt(p.motherCibil),   role: "co"         });
+  if (p.guarantorCibil)scores.push({ label: "Guarantor", score: parseInt(p.guarantorCibil),role: "guarantor"  });
+
+  const coCount = student.coApplicants || 0;
+  for (let i = 0; i < coCount; i++) {
+    const co = p[`co_info_${i}`] || {};
+    if (co.cibil) scores.push({ label: co.name || `Co-App ${i + 1}`, score: parseInt(co.cibil), role: "co" });
+  }
+
+  const validScores = scores.filter((s) => s.score >= 300 && s.score <= 900);
+  const bestFinancial = validScores
+    .filter((s) => s.role !== "student")
+    .reduce((best, s) => (s.score > (best?.score || 0) ? s : best), null);
+
+  const bestScore = bestFinancial?.score || (validScores[0]?.score) || 0;
+  const acadScore = scoreAcademics(p); // 0–3 or null
+
+  // Verdicts
+  const docGood   = progress >= 70;
+  const scoreGood = bestScore >= 700;
+  const scoreFair = bestScore >= 650 && bestScore < 700;
+  const acadGood  = acadScore !== null && acadScore >= 2;    // Good or Excellent average
+  const acadFair  = acadScore !== null && acadScore >= 1;    // at least Average
+
+  let verdict, verdictClass, verdictReasons;
+
+  if (scoreGood && docGood && (acadScore === null || acadGood)) {
+    verdict = "Likely Eligible";
+    verdictClass = "verdict-eligible";
+    verdictReasons = [
+      "Strong CIBIL score",
+      docGood  ? "Documents ready"         : null,
+      acadGood ? "Good academic profile"   : null,
+    ].filter(Boolean);
+  } else if (
+    scoreFair ||
+    (scoreGood && !docGood) ||
+    (scoreGood && acadScore !== null && !acadGood) ||
+    (!scoreGood && docGood && bestScore >= 650)
+  ) {
+    verdict = "Needs Review";
+    verdictClass = "verdict-review";
+    verdictReasons = [
+      !scoreGood ? "CIBIL score below 700"        : "CIBIL acceptable",
+      !docGood   ? `Docs ${progress}% complete`   : "Documents ready",
+      acadScore !== null && !acadFair ? "Weak academic profile" :
+      acadScore !== null && !acadGood ? "Average academic profile" : null,
+    ].filter(Boolean);
+  } else if (bestScore > 0 && bestScore < 650) {
+    verdict = "High Risk";
+    verdictClass = "verdict-risky";
+    verdictReasons = [
+      `CIBIL ${bestScore} below minimum (650)`,
+      !docGood ? `Docs ${progress}% complete` : null,
+      acadScore !== null && !acadFair ? "Weak academic profile" : null,
+    ].filter(Boolean);
+  } else {
+    verdict = "Incomplete Data";
+    verdictClass = "verdict-incomplete";
+    verdictReasons = [
+      "CIBIL scores not entered",
+      !docGood ? `Documents ${progress}% complete` : null,
+    ].filter(Boolean);
+  }
+
+  return { scores: validScores, bestFinancial, acadScore, progress, verdict, verdictClass, verdictReasons };
+}
+
 /* ─── Sub-components ───────────────────────────────────────────── */
 
 function StatCard({ label, value, icon, color }) {
@@ -126,13 +263,7 @@ function StatCard({ label, value, icon, color }) {
       <div className="stat-top">
         <div className="stat-icon-wrap">{icon}</div>
         <span className="stat-trend">
-          {color === "blue"
-            ? "ALL"
-            : color === "green"
-              ? "✓"
-              : color === "yellow"
-                ? "~"
-                : "○"}
+          {color === "blue" ? "ALL" : color === "green" ? "✓" : color === "yellow" ? "~" : "○"}
         </span>
       </div>
       <div className="stat-value">{value}</div>
@@ -164,6 +295,404 @@ function Badge({ progress }) {
   );
 }
 
+/* ─── Report Modal ─────────────────────────────────────────────── */
+
+// Generic scored bar — reuses cibil-* color classes for consistency
+function ScoreBar({ label, rawValue, displayValue, thresholds, rangeMin, rangeMax, labels = ACAD_LABELS }) {
+  const n = parseFloat(rawValue);
+  if (!rawValue && rawValue !== 0) return null;
+  const cls = getScoreClass(n, thresholds);
+  const lbl = getScoreLabel(n, thresholds, labels);
+  const pct = (rangeMax > rangeMin)
+    ? Math.min(100, Math.max(0, Math.round(((n - rangeMin) / (rangeMax - rangeMin)) * 100)))
+    : 0;
+
+  return (
+    <div className="cibil-row">
+      <div className="cibil-row-label">{label}</div>
+      <div className="cibil-row-right">
+        <div className="cibil-track">
+          <div className={`cibil-fill ${cls}`} style={{ width: `${pct}%` }} />
+        </div>
+        <div className={`cibil-score-chip ${cls}`}>
+          {displayValue ?? n}
+          <span className="cibil-lbl-text">{lbl}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoPair({ label, value, mono }) {
+  return (
+    <div className="rpt-pair">
+      <div className="rpt-pair-label">{label}</div>
+      <div className={`rpt-pair-value${!value ? " rpt-empty" : ""}${mono ? " mono" : ""}`}>
+        {value || "—"}
+      </div>
+    </div>
+  );
+}
+
+function ReportModal({ student, onClose }) {
+  const p = student.personalInfo || {};
+  const { progress, verdict, verdictClass, verdictReasons } =
+    assessLoanEligibility(student);
+
+  const cibilEntries = [
+    { label: "Student", key: "studentCibil" },
+    { label: "Father", key: "fatherCibil" },
+    { label: "Mother", key: "motherCibil" },
+    { label: "Guarantor", key: "guarantorCibil" },
+  ].filter((e) => p[e.key]);
+
+  const coCount = student.coApplicants || 0;
+  const coApplicants = Array.from({ length: coCount }, (_, i) => ({
+    idx: i,
+    info: p[`co_info_${i}`] || {},
+    uploads: student.uploads?.[`co_${i}`] || {},
+  }));
+
+  const progressClass = getProgressClass(progress);
+
+  const verdictIconMap = {
+    "verdict-eligible": <CheckCircle size={20} />,
+    "verdict-review": <AlertTriangle size={20} />,
+    "verdict-risky": <XCircle size={20} />,
+    "verdict-incomplete": <AlertCircle size={20} />,
+  };
+
+  return (
+    <div className="modal-backdrop rpt-backdrop" onClick={onClose}>
+      <div className="rpt-modal animate-fade-in" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="rpt-header">
+          <div className="rpt-header-left">
+            <div className={`rpt-avatar avatar-${getAvatarVariant(student.name)}`}>
+              {(student.name || "?")[0].toUpperCase()}
+            </div>
+            <div>
+              <h2 className="rpt-name">{student.name}</h2>
+              <p className="rpt-contact">{student.email || student.phone || "No contact"}</p>
+              {student.advisor && <p className="rpt-advisor">Advisor: {student.advisor}</p>}
+            </div>
+          </div>
+          <button className="icon-btn rpt-close" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Verdict Banner */}
+        <div className={`rpt-verdict ${verdictClass}`}>
+          <div className="rpt-verdict-icon">{verdictIconMap[verdictClass]}</div>
+          <div className="rpt-verdict-body">
+            <div className="rpt-verdict-title">{verdict}</div>
+            <div className="rpt-verdict-reasons">
+              {verdictReasons.map((r, i) => (
+                <span key={i} className="rpt-reason-chip">{r}</span>
+              ))}
+            </div>
+          </div>
+          <div className="rpt-verdict-progress">
+            <div className={`rpt-prog-ring ${progressClass}`}>
+              <svg viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="15.9" fill="none" strokeWidth="2.5" className="ring-track" />
+                <circle
+                  cx="18" cy="18" r="15.9" fill="none" strokeWidth="2.5"
+                  strokeDasharray={`${progress} ${100 - progress}`}
+                  strokeDashoffset="25"
+                  className="ring-fill"
+                />
+              </svg>
+              <span>{progress}%</span>
+            </div>
+            <div className="rpt-prog-label">Docs</div>
+          </div>
+        </div>
+
+        {/* Scrollable Body */}
+        <div className="rpt-body">
+          {/* Summary Row */}
+          <div className="rpt-summary-grid">
+            <div className="rpt-summary-card">
+              <Banknote size={15} />
+              <div>
+                <div className="rpt-sc-label">Loan Amount</div>
+                <div className="rpt-sc-val">
+                  {p.loanAmount ? `₹${Number(p.loanAmount).toLocaleString("en-IN")}` : "—"}
+                </div>
+              </div>
+            </div>
+            <div className="rpt-summary-card">
+              <GraduationCap size={15} />
+              <div>
+                <div className="rpt-sc-label">Applied For</div>
+                <div className="rpt-sc-val">{p.loanTrack || "—"}</div>
+              </div>
+            </div>
+            <div className="rpt-summary-card">
+              <Home size={15} />
+              <div>
+                <div className="rpt-sc-label">Own House</div>
+                <div className="rpt-sc-val">{p.ownHouseStatus || "—"}</div>
+              </div>
+            </div>
+            <div className="rpt-summary-card">
+              <Briefcase size={15} />
+              <div>
+                <div className="rpt-sc-label">Prior Bank</div>
+                <div className="rpt-sc-val">
+                  {p.priorBankApplied === "Yes"
+                    ? p.priorBankName === "Others" ? p.priorBankNameCustom : p.priorBankName || "Yes"
+                    : p.priorBankApplied || "—"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* CIBIL Scores */}
+          {cibilEntries.length > 0 && (
+            <div className="rpt-section">
+              <div className="rpt-section-title">
+                <CreditCard size={13} /> CIBIL Score Analysis
+              </div>
+              <div className="cibil-scale-labels">
+                <span>300</span><span>500</span><span>650</span><span>700</span><span>750</span><span>900</span>
+              </div>
+              <div className="cibil-list">
+                {cibilEntries.map((e) => (
+                  <ScoreBar
+                    key={e.key}
+                    label={e.label}
+                    rawValue={p[e.key]}
+                    thresholds={CIBIL_T}
+                    rangeMin={300}
+                    rangeMax={900}
+                    labels={CIBIL_LABELS}
+                  />
+                ))}
+              </div>
+              <div className="cibil-legend">
+                <span className="cl-item cibil-poor">Poor &lt;650</span>
+                <span className="cl-item cibil-fair">Fair 650–699</span>
+                <span className="cl-item cibil-good">Good 700–749</span>
+                <span className="cl-item cibil-excellent">Excellent 750+</span>
+              </div>
+            </div>
+          )}
+
+          {/* Academic Profile */}
+          <div className="rpt-section">
+            <div className="rpt-section-title">
+              <GraduationCap size={13} /> Academic Performance
+            </div>
+
+            {/* Qualification meta */}
+            {(p.qualName || p.marital || p.hasBacklogs) && (
+              <div className="rpt-grid-2" style={{ marginBottom: 4 }}>
+                {p.qualName && <InfoPair label="Qualification" value={`${p.qualName}${p.qualYear ? ` (${p.qualYear})` : ""}`} />}
+                {p.marital   && <InfoPair label="Marital Status" value={p.marital} />}
+                {p.hasBacklogs === "Yes" && (
+                  <InfoPair label="Backlogs" value={`Yes — ${p.backlogCount || "?"} backlog(s)`} />
+                )}
+              </div>
+            )}
+
+            {/* Score bars */}
+            {(p.pct10Score || p.pct12Score || p.pctGradScore) && (
+              <>
+                <div className="cibil-scale-labels">
+                  <span>0%</span><span>60%</span><span>75%</span><span>85%</span><span>100%</span>
+                </div>
+                <div className="cibil-list">
+                  {p.pct10Score && (
+                    <ScoreBar
+                      label={`10th${p.pct10Year ? ` (${p.pct10Year})` : ""}`}
+                      rawValue={p.pct10Score}
+                      displayValue={`${p.pct10Score}%`}
+                      thresholds={PCT_T}
+                      rangeMin={0} rangeMax={100}
+                    />
+                  )}
+                  {p.pct12Score && (
+                    <ScoreBar
+                      label={`12th${p.pct12Year ? ` (${p.pct12Year})` : ""}`}
+                      rawValue={p.pct12Score}
+                      displayValue={`${p.pct12Score}%`}
+                      thresholds={PCT_T}
+                      rangeMin={0} rangeMax={100}
+                    />
+                  )}
+                  {p.pctGradScore && (
+                    <ScoreBar
+                      label={`Grad${p.pctGradYear ? ` (${p.pctGradYear})` : ""}`}
+                      rawValue={p.pctGradScore}
+                      displayValue={p.pctGradType === "cgpa" ? `${p.pctGradScore} CGPA` : `${p.pctGradScore}%`}
+                      thresholds={p.pctGradType === "cgpa" ? CGPA_T : PCT_T}
+                      rangeMin={0}
+                      rangeMax={p.pctGradType === "cgpa" ? 10 : 100}
+                    />
+                  )}
+                </div>
+                <div className="cibil-legend">
+                  <span className="cl-item cibil-poor">Low &lt;60%</span>
+                  <span className="cl-item cibil-fair">Average 60–74%</span>
+                  <span className="cl-item cibil-good">Good 75–84%</span>
+                  <span className="cl-item cibil-excellent">Excellent 85%+</span>
+                </div>
+              </>
+            )}
+
+            {/* Test scores */}
+            {(p.greScore || p.ieltsScore || p.toeflScore || p.duolingoScore) && (
+              <>
+                <div className="rpt-section-title" style={{ marginTop: 6, fontSize: 10 }}>
+                  <Star size={11} /> Standardized Test Scores
+                </div>
+                <div className="cibil-list">
+                  {p.greScore && (
+                    <ScoreBar label="GRE" rawValue={p.greScore} displayValue={p.greScore}
+                      thresholds={GRE_T} rangeMin={260} rangeMax={340} />
+                  )}
+                  {p.ieltsScore && (
+                    <ScoreBar label="IELTS" rawValue={p.ieltsScore} displayValue={p.ieltsScore}
+                      thresholds={IELTS_T} rangeMin={0} rangeMax={9} />
+                  )}
+                  {p.toeflScore && (
+                    <ScoreBar label="TOEFL" rawValue={p.toeflScore} displayValue={p.toeflScore}
+                      thresholds={TOEFL_T} rangeMin={0} rangeMax={120} />
+                  )}
+                  {p.duolingoScore && (
+                    <ScoreBar label="Duolingo" rawValue={p.duolingoScore} displayValue={p.duolingoScore}
+                      thresholds={DUOLINGO_T} rangeMin={10} rangeMax={160} />
+                  )}
+                </div>
+                <div className="cibil-legend">
+                  <span className="cl-item cibil-poor">Low</span>
+                  <span className="cl-item cibil-fair">Average</span>
+                  <span className="cl-item cibil-good">Good</span>
+                  <span className="cl-item cibil-excellent">Excellent</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* University & Visa */}
+          <div className="rpt-section">
+            <div className="rpt-section-title">
+              <Building2 size={13} /> University & Visa
+            </div>
+            <div className="rpt-grid-2">
+              <InfoPair label="Target University" value={p.targetUniversity} />
+              <InfoPair label="Course" value={p.courseNameUniversity} />
+              <InfoPair label="I20 Received" value={p.i20Received} />
+              <InfoPair label="Visa Booked" value={p.visaBooked === "Yes" ? `Yes${p.visaSlotDate ? ` — ${p.visaSlotDate}` : ""}` : p.visaBooked} />
+            </div>
+          </div>
+
+          {/* Family & Guarantor */}
+          <div className="rpt-section">
+            <div className="rpt-section-title">
+              <UsersIcon size={13} /> Family & Guarantor
+            </div>
+            <div className="rpt-grid-2">
+              <InfoPair label="Father" value={p.fatherName ? `${p.fatherName}${p.fatherContact ? ` · ${p.fatherContact}` : ""}` : null} />
+              <InfoPair label="Mother" value={p.motherName ? `${p.motherName}${p.motherContact ? ` · ${p.motherContact}` : ""}` : null} />
+              <InfoPair label="Guarantor" value={p.guarantorName ? `${p.guarantorName} (${p.guarantorRelation || "N/A"})` : null} />
+              <InfoPair label="Guarantor Sector" value={p.guarantorSector} />
+              <InfoPair label="Income Docs" value={p.guarantorDocsAvailable} />
+              <InfoPair label="Job Details" value={p.hasJobDetails === "Yes" ? p.jobSpecs || "Yes" : p.hasJobDetails} />
+            </div>
+          </div>
+
+          {/* Co-Applicants */}
+          {coApplicants.length > 0 && (
+            <div className="rpt-section">
+              <div className="rpt-section-title">
+                <UsersIcon size={13} /> Co-Applicants ({coCount})
+              </div>
+              <div className="rpt-co-list">
+                {coApplicants.map(({ idx, info, uploads: coUploads }) => {
+                  if (!info.name) return null;
+                  const uploadCount = Object.keys(coUploads).length;
+                  const empType = info.empType || "salaried";
+                  const fields = info.financialStatus === "non-financial"
+                    ? 3
+                    : (CO_APPLICANT_SCHEMA[empType] || CO_APPLICANT_SCHEMA.other).length;
+                  const coPct = fields ? Math.round((uploadCount / fields) * 100) : 0;
+                  return (
+                    <div key={idx} className="rpt-co-card">
+                      <div className="rpt-co-header">
+                        <div className="co-avatar"><UsersIcon size={13} /></div>
+                        <div className="rpt-co-info">
+                          <span className="rpt-co-name">{info.name}</span>
+                          <span className="rpt-co-meta">
+                            {info.relation || "N/A"} ·{" "}
+                            {info.financialStatus === "non-financial" ? "Non-Financial" : info.empType || "Salaried"}
+                          </span>
+                        </div>
+                        <div className={`rpt-co-pct ${getProgressClass(coPct)}`}>{coPct}%</div>
+                      </div>
+                      <div className="rpt-co-bar">
+                        <div className={`rpt-co-fill ${getProgressClass(coPct)}`} style={{ width: `${coPct}%` }} />
+                      </div>
+                      <div className="rpt-co-details">
+                        {info.mobile && <span>{info.mobile}</span>}
+                        {info.qualifications && <span>{info.qualifications}</span>}
+                        {info.dependants && <span>{info.dependants} dependants</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Document Completion */}
+          <div className="rpt-section">
+            <div className="rpt-section-title">
+              <FileText size={13} /> Document Completion
+            </div>
+            <div className="rpt-doc-sections">
+              {[
+                { key: "applicant", label: "GOVT ID / KYC", required: DOCUMENT_SCHEMA.applicant.fields.filter(f => !f.optional).length },
+                { key: "academics", label: "Academics", required: DOCUMENT_SCHEMA.academics.fields.filter(f => !f.optional).length },
+              ].map(({ key, label, required }) => {
+                const count = Object.keys(student.uploads?.[key] || {}).length;
+                const pct = required ? Math.min(100, Math.round((count / required) * 100)) : 0;
+                return (
+                  <div key={key} className="rpt-doc-row">
+                    <span className="rpt-doc-label">{label}</span>
+                    <div className="rpt-doc-track">
+                      <div className={`rpt-doc-fill ${getProgressClass(pct)}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="rpt-doc-count">{count}/{required}</span>
+                  </div>
+                );
+              })}
+              {coApplicants.map(({ idx, info, uploads: coUploads }) => {
+                const empType = info.financialStatus === "non-financial" ? "non-financial" : (info.empType || "salaried");
+                const fields = empType === "non-financial" ? 3 : (CO_APPLICANT_SCHEMA[empType] || CO_APPLICANT_SCHEMA.other).length;
+                const count = Object.keys(coUploads).length;
+                const pct = fields ? Math.min(100, Math.round((count / fields) * 100)) : 0;
+                return (
+                  <div key={idx} className="rpt-doc-row">
+                    <span className="rpt-doc-label">{info.name || `Co-App ${idx + 1}`}</span>
+                    <div className="rpt-doc-track">
+                      <div className={`rpt-doc-fill ${getProgressClass(pct)}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="rpt-doc-count">{count}/{fields}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Detail tabs content ─────────────────────────────────────── */
 
 function PersonalTab({ student }) {
@@ -173,10 +702,12 @@ function PersonalTab({ student }) {
     { label: "Email", value: student.email || p.email },
     { label: "Phone", value: student.phone || p.phone },
     { label: "Marital Status", value: p.marital },
-    { label: "Loan Amount", value: p.loanAmount ? `₹${p.loanAmount}` : null },
-    { label: "10th %", value: p.pct10 },
-    { label: "12th %", value: p.pct12 },
-    { label: "Grad % / CGPA", value: p.pctGrad },
+    { label: "Loan Amount", value: p.loanAmount ? `₹${Number(p.loanAmount).toLocaleString("en-IN")}` : null },
+    { label: "10th %", value: p.pct10Score ? `${p.pct10Score}%${p.pct10Year ? ` (${p.pct10Year})` : ""}` : p.pct10 },
+    { label: "12th %", value: p.pct12Score ? `${p.pct12Score}%${p.pct12Year ? ` (${p.pct12Year})` : ""}` : p.pct12 },
+    { label: "Grad % / CGPA", value: p.pctGradScore ? `${p.pctGradScore}${p.pctGradType === "cgpa" ? " CGPA" : "%"}` : p.pctGrad },
+    { label: "Student CIBIL", value: p.studentCibil },
+    { label: "Target University", value: p.targetUniversity },
     { label: "Current Address", value: p.currentAddress },
     { label: "Permanent Address", value: p.permanentAddress },
     { label: "Maternal Grandmother", value: p.maternalGrandma },
@@ -192,9 +723,7 @@ function PersonalTab({ student }) {
         {fields.map(({ label, value }) => (
           <div key={label} className="info-cell">
             <div className="info-label">{label}</div>
-            <div className={`info-value${!value ? " empty" : ""}`}>
-              {value || "—"}
-            </div>
+            <div className={`info-value${!value ? " empty" : ""}`}>{value || "—"}</div>
           </div>
         ))}
       </div>
@@ -210,18 +739,12 @@ function PersonalTab({ student }) {
               if (!info.name) return null;
               return (
                 <div key={idx} className="co-item">
-                  <div className="co-avatar">
-                    <UsersIcon size={15} />
-                  </div>
+                  <div className="co-avatar"><UsersIcon size={15} /></div>
                   <div className="co-info">
                     <div className="co-name">{info.name}</div>
-                    <div className="co-details">
-                      {info.relation || "Relation N/A"}
-                    </div>
+                    <div className="co-details">{info.relation || "Relation N/A"}</div>
                   </div>
-                  {info.empType && (
-                    <span className="co-type">{info.empType}</span>
-                  )}
+                  {info.empType && <span className="co-type">{info.empType}</span>}
                 </div>
               );
             })}
@@ -239,13 +762,7 @@ function DocumentsTab({ student }) {
     { key: "otherDocs", label: "Other Documents", required: null },
   ];
   const caSections = student.coApplicants
-    ? [
-        {
-          key: "co_uploads",
-          label: `Co‑Applicant Docs`,
-          required: student.coApplicants * 3,
-        },
-      ]
+    ? [{ key: "co_uploads", label: `Co‑Applicant Docs`, required: student.coApplicants * 3 }]
     : [];
 
   return (
@@ -260,17 +777,12 @@ function DocumentsTab({ student }) {
             key === "co_uploads"
               ? Object.keys(uploads).filter((k) => k.startsWith("co_")).length
               : Object.keys(uploads[key] || {}).length;
-          const pct = required
-            ? Math.min(100, Math.round((count / required) * 100))
-            : 0;
+          const pct = required ? Math.min(100, Math.round((count / required) * 100)) : 0;
           return (
             <div key={key} className="upload-section-card">
               <div className="usc-header">
                 <span className="usc-label">{label}</span>
-                <span className="usc-count">
-                  {count}
-                  {required ? ` / ${required}` : "+"}
-                </span>
+                <span className="usc-count">{count}{required ? ` / ${required}` : "+"}</span>
               </div>
               {required && (
                 <div className="usc-bar">
@@ -282,7 +794,6 @@ function DocumentsTab({ student }) {
         })}
       </div>
 
-      {/* Missing docs alert — grouped by section */}
       {(() => {
         const missing = getMissingDocs(student);
         if (!missing.length)
@@ -294,7 +805,6 @@ function DocumentsTab({ student }) {
             </div>
           );
 
-        // group by section
         const grouped = missing.reduce((acc, { section, label }) => {
           if (!acc[section]) acc[section] = [];
           acc[section].push(label);
@@ -305,16 +815,13 @@ function DocumentsTab({ student }) {
           <div className="missing-section" style={{ marginBottom: 16 }}>
             <div className="missing-title">
               <AlertCircle size={14} />
-              {missing.length} Missing Required Document
-              {missing.length !== 1 ? "s" : ""}
+              {missing.length} Missing Required Document{missing.length !== 1 ? "s" : ""}
             </div>
             {Object.entries(grouped).map(([section, labels]) => (
               <div key={section} className="missing-group">
                 <div className="missing-group-label">{section}</div>
                 <ul className="missing-list">
-                  {labels.map((label, i) => (
-                    <li key={i}>{label}</li>
-                  ))}
+                  {labels.map((label, i) => <li key={i}>{label}</li>)}
                 </ul>
               </div>
             ))}
@@ -331,9 +838,7 @@ function FilesTab({ student }) {
     return (
       <div className="detail-body">
         <div className="admin-empty" style={{ padding: "40px 20px" }}>
-          <div className="admin-empty-icon">
-            <FileText size={24} />
-          </div>
+          <div className="admin-empty-icon"><FileText size={24} /></div>
           <h3>No files uploaded yet</h3>
           <p>Documents will appear here once the student uploads them.</p>
         </div>
@@ -344,15 +849,12 @@ function FilesTab({ student }) {
   return (
     <div className="detail-body">
       <p className="section-heading">
-        <FileText size={13} /> {files.length} Uploaded File
-        {files.length !== 1 ? "s" : ""}
+        <FileText size={13} /> {files.length} Uploaded File{files.length !== 1 ? "s" : ""}
       </p>
       <div className="files-list">
         {files.map((file, idx) => (
           <div key={idx} className="file-item">
-            <div className="file-icon">
-              <FileText size={14} />
-            </div>
+            <div className="file-icon"><FileText size={14} /></div>
             <div className="file-meta">
               <div className="file-name">{file.name}</div>
               <div className="file-section-tag">{file.section}</div>
@@ -365,8 +867,7 @@ function FilesTab({ student }) {
                 className="file-link"
                 onClick={(e) => e.stopPropagation()}
               >
-                <ExternalLink size={12} />
-                View
+                <ExternalLink size={12} /> View
               </a>
             )}
           </div>
@@ -378,7 +879,7 @@ function FilesTab({ student }) {
 
 /* ─── Student Row ──────────────────────────────────────────────── */
 
-function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive }) {
+function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewReport }) {
   const [activeTab, setActiveTab] = useState("personal");
 
   const totalUploads = getTotalUploads(student);
@@ -388,51 +889,27 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive }) {
   const files = getAllUploadedFiles(student.uploads);
 
   const tabs = [
-    {
-      id: "personal",
-      label: "Personal",
-      icon: <User size={12} />,
-      count: null,
-    },
-    {
-      id: "documents",
-      label: "Documents",
-      icon: <FolderOpen size={12} />,
-      count: null,
-    },
-    {
-      id: "files",
-      label: "Files",
-      icon: <FileText size={12} />,
-      count: files.length,
-    },
+    { id: "personal", label: "Personal", icon: <User size={12} />, count: null },
+    { id: "documents", label: "Documents", icon: <FolderOpen size={12} />, count: null },
+    { id: "files", label: "Files", icon: <FileText size={12} />, count: files.length },
   ];
 
   return (
     <div className={`student-block${isOpen ? " open" : ""}`}>
-      {/* Row */}
       <div className="student-row" onClick={onToggle}>
         <div className={`student-avatar avatar-${avatarVariant}`}>
           {(student.name || "?")[0].toUpperCase()}
         </div>
 
         <div className="student-info">
-          <span className="student-name">
-            {student.name || "Unknown Student"}
-          </span>
-          <span className="student-contact">
-            {student.email || student.phone || "No contact info"}
-          </span>
+          <span className="student-name">{student.name || "Unknown Student"}</span>
+          <span className="student-contact">{student.email || student.phone || "No contact info"}</span>
         </div>
 
         <div className="student-meta">
-          {student.advisor && (
-            <span className="meta-pill">{student.advisor}</span>
-          )}
+          {student.advisor && <span className="meta-pill">{student.advisor}</span>}
           {student.personalInfo?.loanAmount && (
-            <span className="meta-pill">
-              ₹{student.personalInfo.loanAmount}
-            </span>
+            <span className="meta-pill">₹{Number(student.personalInfo.loanAmount).toLocaleString("en-IN")}</span>
           )}
           <span className="meta-pill">{totalUploads} files</span>
         </div>
@@ -448,10 +925,14 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive }) {
           <Badge progress={progress} />
         </div>
 
-        <div
-          className="student-actions-col"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div className="student-actions-col" onClick={(e) => e.stopPropagation()}>
+          <button
+            className="icon-btn report-btn"
+            title="View Eligibility Report"
+            onClick={onViewReport}
+          >
+            <BarChart3 size={14} />
+          </button>
           <button
             className="icon-btn drive-btn"
             title="Open Drive folder"
@@ -473,11 +954,9 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive }) {
         </button>
       </div>
 
-      {/* Expanded detail panel */}
       {isOpen && (
         <div className="student-detail">
           <div className="detail-inner">
-            {/* Tab bar */}
             <div className="detail-tabs">
               {tabs.map((tab) => (
                 <button
@@ -494,23 +973,19 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive }) {
               ))}
             </div>
 
-            {/* Tab body */}
             {activeTab === "personal" && <PersonalTab student={student} />}
             {activeTab === "documents" && <DocumentsTab student={student} />}
             {activeTab === "files" && <FilesTab student={student} />}
 
-            {/* Action bar */}
             <div className="detail-action-bar">
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={onOpenDrive}
-              >
-                <ExternalLink size={13} />
-                Open Drive Folder
+              <button className="btn btn-primary btn-sm" onClick={onViewReport}>
+                <BarChart3 size={13} /> View Eligibility Report
+              </button>
+              <button className="btn btn-secondary btn-sm" onClick={onOpenDrive}>
+                <ExternalLink size={13} /> Open Drive Folder
               </button>
               <button className="btn btn-danger btn-sm" onClick={onDelete}>
-                <Trash2 size={13} />
-                Delete Student
+                <Trash2 size={13} /> Delete Student
               </button>
             </div>
           </div>
@@ -525,41 +1000,22 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive }) {
 function DeleteModal({ name, deleting, onConfirm, onCancel }) {
   return (
     <div className="modal-backdrop" onClick={() => !deleting && onCancel()}>
-      <div
-        className="modal-box animate-fade-in"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-icon">
-          <Trash2 size={28} />
-        </div>
+      <div className="modal-box animate-fade-in" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-icon"><Trash2 size={28} /></div>
         <h3>Delete Student?</h3>
         <p>
           This will permanently remove <strong>{name}</strong> and all their
           associated documents from Google Drive. This action cannot be undone.
         </p>
         <div className="modal-actions">
-          <button
-            className="btn btn-secondary"
-            onClick={onCancel}
-            disabled={deleting}
-          >
+          <button className="btn btn-secondary" onClick={onCancel} disabled={deleting}>
             Cancel
           </button>
-          <button
-            className="btn btn-danger"
-            onClick={onConfirm}
-            disabled={deleting}
-          >
+          <button className="btn btn-danger" onClick={onConfirm} disabled={deleting}>
             {deleting ? (
-              <>
-                <RefreshCw size={13} className="spin" />
-                Deleting…
-              </>
+              <><RefreshCw size={13} className="spin" /> Deleting…</>
             ) : (
-              <>
-                <Trash2 size={13} />
-                Delete Permanently
-              </>
+              <><Trash2 size={13} /> Delete Permanently</>
             )}
           </button>
         </div>
@@ -568,27 +1024,281 @@ function DeleteModal({ name, deleting, onConfirm, onCancel }) {
   );
 }
 
+/* ─── Settings Panel ───────────────────────────────────────────── */
+
+const API_URL = import.meta.env.VITE_API_URL;
+
+function getToken() {
+  try { return JSON.parse(localStorage.getItem("abroad_admin_session") || "{}").token || ""; }
+  catch { return ""; }
+}
+
+async function callAPI(method, path, body) {
+  const token = getToken();
+  const opts = {
+    method,
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  };
+  if (body && method !== "GET") opts.body = JSON.stringify(body);
+  const res = await fetch(`${API_URL}${path}`, opts);
+  return res.json();
+}
+
+function SettingsPanel({ onClose, adminName, adminRole }) {
+  const [tab, setTab] = useState("password");
+
+  const [curPass, setCurPass] = useState("");
+  const [newPass, setNewPass] = useState("");
+  const [confirmPass, setConfirmPass] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [passMsg, setPassMsg] = useState(null);
+  const [passLoading, setPassLoading] = useState(false);
+
+  const [teamPass, setTeamPass] = useState("");
+  const [teamVerified, setTeamVerified] = useState(false);
+  const [teamVerifying, setTeamVerifying] = useState(false);
+  const [teamErr, setTeamErr] = useState("");
+  const [admins, setAdmins] = useState([]);
+  const [adminsLoading, setAdminsLoading] = useState(false);
+
+  const [newName, setNewName] = useState("");
+  const [newRole, setNewRole] = useState("advisor");
+  const [newAdminPass, setNewAdminPass] = useState("");
+  const [createMsg, setCreateMsg] = useState(null);
+  const [createLoading, setCreateLoading] = useState(false);
+
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const loadAdmins = async () => {
+    setAdminsLoading(true);
+    try {
+      const d = await callAPI("GET", "/api/admins");
+      if (d.success) setAdmins(d.admins || []);
+    } catch { /* silent */ }
+    finally { setAdminsLoading(false); }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (newPass.length < 6) { setPassMsg({ type: "err", text: "New password must be at least 6 characters." }); return; }
+    if (newPass !== confirmPass) { setPassMsg({ type: "err", text: "Passwords do not match." }); return; }
+    setPassLoading(true); setPassMsg(null);
+    try {
+      const r = await callAPI("PUT", "/api/admins/password", { currentPassword: curPass, newPassword: newPass });
+      if (r.success) {
+        setPassMsg({ type: "ok", text: "Password updated successfully." });
+        setCurPass(""); setNewPass(""); setConfirmPass("");
+      } else {
+        setPassMsg({ type: "err", text: r.error || "Failed to update password." });
+      }
+    } catch { setPassMsg({ type: "err", text: "Network error. Try again." }); }
+    finally { setPassLoading(false); }
+  };
+
+  const handleVerifyTeamPass = async (e) => {
+    e.preventDefault(); setTeamVerifying(true); setTeamErr("");
+    try {
+      const r = await callAPI("POST", "/api/auth/login", { name: adminName, password: teamPass });
+      if (r.success && r.role === "superadmin") { setTeamVerified(true); loadAdmins(); }
+      else { setTeamErr("Incorrect password."); }
+    } catch { setTeamErr("Network error. Try again."); }
+    finally { setTeamVerifying(false); }
+  };
+
+  const handleCreateAdmin = async (e) => {
+    e.preventDefault();
+    if (!newName.trim()) { setCreateMsg({ type: "err", text: "Name is required." }); return; }
+    if (newAdminPass.length < 6) { setCreateMsg({ type: "err", text: "Password must be at least 6 characters." }); return; }
+    setCreateLoading(true); setCreateMsg(null);
+    try {
+      const r = await callAPI("POST", "/api/admins", { name: newName.trim(), role: newRole, password: newAdminPass });
+      if (r.success) {
+        setCreateMsg({ type: "ok", text: `${newName.trim()} created successfully.` });
+        setNewName(""); setNewAdminPass(""); setNewRole("advisor");
+        loadAdmins();
+      } else {
+        setCreateMsg({ type: "err", text: r.error || "Failed to create admin." });
+      }
+    } catch { setCreateMsg({ type: "err", text: "Network error. Try again." }); }
+    finally { setCreateLoading(false); }
+  };
+
+  const handleDeleteAdmin = async (name) => {
+    setDeleteLoading(true);
+    try {
+      const r = await callAPI("DELETE", `/api/admins/${encodeURIComponent(name)}`);
+      if (r.success) { setDeleteTarget(null); loadAdmins(); }
+      else { alert(r.error || "Failed to delete."); }
+    } catch { alert("Network error. Try again."); }
+    finally { setDeleteLoading(false); }
+  };
+
+  return (
+    <>
+      <div className="settings-overlay" onClick={onClose} />
+      <div className="settings-panel animate-fade-in">
+        <div className="settings-header">
+          <div className="settings-title"><Settings size={16} /> Settings</div>
+          <button className="icon-btn" onClick={onClose}><X size={16} /></button>
+        </div>
+
+        <div className="settings-tabs">
+          <button className={`settings-tab${tab === "password" ? " active" : ""}`} onClick={() => setTab("password")}>
+            <KeyRound size={13} /> Change Password
+          </button>
+          {adminRole === "superadmin" && (
+            <button
+              className={`settings-tab${tab === "team" ? " active" : ""}`}
+              onClick={() => { setTab("team"); if (teamVerified) loadAdmins(); }}
+            >
+              <UserCheck size={13} /> Team Management
+            </button>
+          )}
+        </div>
+
+        <div className="settings-body">
+          {tab === "password" && (
+            <form onSubmit={handleChangePassword} className="settings-form">
+              <p className="settings-section-label">Update your login password</p>
+              <div className="input-group">
+                <label>Current Password</label>
+                <div className="password-wrap">
+                  <input className="input-field" type={showPass ? "text" : "password"} placeholder="Your current password"
+                    value={curPass} onChange={(e) => setCurPass(e.target.value)} />
+                  <button type="button" className="show-pass" onClick={() => setShowPass(!showPass)}>
+                    {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+              <div className="input-group">
+                <label>New Password</label>
+                <input className="input-field" type={showPass ? "text" : "password"} placeholder="Min. 6 characters"
+                  value={newPass} onChange={(e) => setNewPass(e.target.value)} />
+              </div>
+              <div className="input-group">
+                <label>Confirm New Password</label>
+                <input className="input-field" type={showPass ? "text" : "password"} placeholder="Repeat new password"
+                  value={confirmPass} onChange={(e) => setConfirmPass(e.target.value)} />
+              </div>
+              {passMsg && <p className={`settings-msg ${passMsg.type}`}>{passMsg.text}</p>}
+              <button type="submit" className="btn btn-primary btn-sm" disabled={passLoading}>
+                {passLoading ? <><RefreshCw size={13} className="spin" /> Saving…</> : <><KeyRound size={13} /> Update Password</>}
+              </button>
+            </form>
+          )}
+
+          {tab === "team" && (
+            <div>
+              {!teamVerified ? (
+                <form onSubmit={handleVerifyTeamPass} className="settings-form">
+                  <p className="settings-section-label">Enter your password to manage the team</p>
+                  <div className="input-group">
+                    <label>Your Password</label>
+                    <div className="password-wrap">
+                      <input className="input-field" type={showPass ? "text" : "password"} placeholder="Confirm your identity"
+                        value={teamPass} onChange={(e) => setTeamPass(e.target.value)} autoFocus />
+                      <button type="button" className="show-pass" onClick={() => setShowPass(!showPass)}>
+                        {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                  </div>
+                  {teamErr && <p className="settings-msg err">{teamErr}</p>}
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={teamVerifying}>
+                    {teamVerifying ? <><RefreshCw size={13} className="spin" /> Verifying…</> : <><Shield size={13} /> Verify & Continue</>}
+                  </button>
+                </form>
+              ) : (
+                <div>
+                  <p className="settings-section-label">Current Team</p>
+                  {adminsLoading ? (
+                    <div className="admin-loading" style={{ padding: "24px 0" }}>
+                      <div className="loading-dots"><span /><span /><span /></div>
+                    </div>
+                  ) : (
+                    <div className="team-list">
+                      {admins.map((a) => (
+                        <div key={a.name} className="team-row">
+                          <div className="team-avatar">{a.name[0].toUpperCase()}</div>
+                          <div className="team-info">
+                            <span className="team-name">{a.name}</span>
+                            <span className={`team-role-badge ${a.role}`}>
+                              {a.role === "superadmin" ? "Super Admin" : "Advisor"}
+                            </span>
+                          </div>
+                          {a.name !== adminName && (
+                            deleteTarget === a.name ? (
+                              <div className="team-delete-confirm">
+                                <span>Delete?</span>
+                                <button className="btn btn-danger btn-sm" onClick={() => handleDeleteAdmin(a.name)} disabled={deleteLoading}>
+                                  {deleteLoading ? <RefreshCw size={12} className="spin" /> : "Yes"}
+                                </button>
+                                <button className="btn btn-secondary btn-sm" onClick={() => setDeleteTarget(null)} disabled={deleteLoading}>No</button>
+                              </div>
+                            ) : (
+                              <button className="icon-btn del-btn" title={`Remove ${a.name}`} onClick={() => setDeleteTarget(a.name)}>
+                                <Trash2 size={13} />
+                              </button>
+                            )
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="settings-section-label" style={{ marginTop: 20 }}>Add New Member</p>
+                  <form onSubmit={handleCreateAdmin} className="settings-form">
+                    <div className="input-group">
+                      <label>Name</label>
+                      <input className="input-field" type="text" placeholder="e.g. Ravi" value={newName} onChange={(e) => setNewName(e.target.value)} />
+                    </div>
+                    <div className="input-group">
+                      <label>Role</label>
+                      <select className="input-field" value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+                        <option value="advisor">Advisor</option>
+                        <option value="superadmin">Super Admin</option>
+                      </select>
+                    </div>
+                    <div className="input-group">
+                      <label>Password</label>
+                      <input className="input-field" type="password" placeholder="Min. 6 characters" value={newAdminPass} onChange={(e) => setNewAdminPass(e.target.value)} />
+                    </div>
+                    {createMsg && <p className={`settings-msg ${createMsg.type}`}>{createMsg.text}</p>}
+                    <button type="submit" className="btn btn-primary btn-sm" disabled={createLoading}>
+                      {createLoading ? <><RefreshCw size={13} className="spin" /> Creating…</> : <><Plus size={13} /> Create Member</>}
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 /* ─── Main Component ───────────────────────────────────────────── */
 
 export default function Admin() {
-  const { isAdmin, adminRole, adminAdvisorName } = useStudent();
+  const { isAdmin, adminRole, adminAdvisorName, adminName } = useStudent();
   const navigate = useNavigate();
 
   const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("all"); // all | complete | progress | notStarted
+  const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [expandedIdx, setExpandedIdx] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [reportStudent, setReportStudent] = useState(null);
 
-  /* ── Auth guard ───────────────────────────────────────────── */
   useEffect(() => {
     if (!isAdmin) navigate("/admin-login");
   }, [isAdmin, navigate]);
 
-  /* ── Load data ────────────────────────────────────────────── */
   const loadStudents = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -604,15 +1314,11 @@ export default function Admin() {
   }, []);
 
   useEffect(() => {
-    if (isAdmin) {
-      const run = async () => {
-        await loadStudents();
-      };
-      run();
-    }
+    if (!isAdmin) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadStudents();
   }, [isAdmin, loadStudents]);
 
-  /* ── Delete ───────────────────────────────────────────────── */
   const handleDelete = async (name) => {
     setDeleting(true);
     try {
@@ -629,7 +1335,6 @@ export default function Admin() {
     }
   };
 
-  /* ── Drive folder ─────────────────────────────────────────── */
   const openDriveFolder = (s) => {
     const url =
       s.driveUrl ||
@@ -640,57 +1345,44 @@ export default function Admin() {
     if (url) window.open(url, "_blank");
   };
 
-  /* ── Stats ────────────────────────────────────────────────── */
   const stats = {
     total: students.length,
     complete: students.filter((s) => getOverallProgress(s) === 100).length,
-    inProgress: students.filter((s) => {
-      const p = getOverallProgress(s);
-      return p > 0 && p < 100;
-    }).length,
+    inProgress: students.filter((s) => { const p = getOverallProgress(s); return p > 0 && p < 100; }).length,
     notStarted: students.filter((s) => getOverallProgress(s) === 0).length,
   };
 
-  /* ── Filtered list ─────────────────────────────────────────── */
   const filtered = students.filter((s) => {
-    // Advisors see only their own students
     if (adminRole === "advisor" && s.advisor !== adminAdvisorName) return false;
-
     const q = search.toLowerCase();
     const matchesSearch =
       !search ||
       (s.name || "").toLowerCase().includes(q) ||
       (s.email || "").toLowerCase().includes(q) ||
       (s.phone || "").includes(q);
-
     const p = getOverallProgress(s);
     const matchesFilter =
       filter === "all" ||
       (filter === "complete" && p === 100) ||
       (filter === "progress" && p > 0 && p < 100) ||
       (filter === "notStarted" && p === 0);
-
     return matchesSearch && matchesFilter;
   });
 
-  /* ── Root Drive URL ────────────────────────────────────────── */
   const rootUrl = import.meta.env.VITE_GOOGLE_DRIVE_FOLDER_ID
     ? `https://drive.google.com/drive/folders/${import.meta.env.VITE_GOOGLE_DRIVE_FOLDER_ID}`
     : null;
 
   if (!isAdmin) return null;
 
-  /* ── Render ────────────────────────────────────────────────── */
   return (
     <div className="admin-page">
       <div className="admin-container">
-        {/* ── Header ─────────────────────────────────────────── */}
+        {/* Header */}
         <div className="admin-header animate-fade-in">
           <div className="admin-header-left">
             <h1 className="admin-title">
-              <div className="admin-title-icon">
-                <Shield size={18} />
-              </div>
+              <div className="admin-title-icon"><Shield size={18} /></div>
               Admin Dashboard
             </h1>
             <p className="admin-sub">
@@ -701,64 +1393,36 @@ export default function Admin() {
           </div>
 
           <div className="header-actions">
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={loadStudents}
-              disabled={loading}
-            >
+            <button className="btn btn-secondary btn-sm" onClick={loadStudents} disabled={loading}>
               <RefreshCw size={13} className={loading ? "spin" : ""} />
-              Refresh
+              <span className="btn-label">Refresh</span>
             </button>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => navigate("/")}
-            >
+            <button className="btn btn-secondary btn-sm" onClick={() => navigate("/")}>
               <UserPlus size={13} />
-              Add Student
+              <span className="btn-label">Add Student</span>
             </button>
             {rootUrl && (
-              <a
-                className="btn btn-primary btn-sm"
-                href={rootUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
+              <a className="btn btn-primary btn-sm" href={rootUrl} target="_blank" rel="noreferrer">
                 <FolderOpen size={13} />
-                Root Drive
+                <span className="btn-label">Root Drive</span>
               </a>
             )}
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowSettings(true)} title="Settings">
+              <Settings size={13} />
+              <span className="btn-label">Settings</span>
+            </button>
           </div>
         </div>
 
-        {/* ── Stats ──────────────────────────────────────────── */}
+        {/* Stats */}
         <div className="admin-stats animate-fade-in">
-          <StatCard
-            label="Total Students"
-            value={stats.total}
-            icon={<Building2 size={18} />}
-            color="blue"
-          />
-          <StatCard
-            label="Completed"
-            value={stats.complete}
-            icon={<CheckCircle size={18} />}
-            color="green"
-          />
-          <StatCard
-            label="In Progress"
-            value={stats.inProgress}
-            icon={<TrendingUp size={18} />}
-            color="yellow"
-          />
-          <StatCard
-            label="Not Started"
-            value={stats.notStarted}
-            icon={<Clock size={18} />}
-            color="red"
-          />
+          <StatCard label="Total Students" value={stats.total} icon={<Building2 size={18} />} color="blue" />
+          <StatCard label="Completed" value={stats.complete} icon={<CheckCircle size={18} />} color="green" />
+          <StatCard label="In Progress" value={stats.inProgress} icon={<TrendingUp size={18} />} color="yellow" />
+          <StatCard label="Not Started" value={stats.notStarted} icon={<Clock size={18} />} color="red" />
         </div>
 
-        {/* ── Toolbar ────────────────────────────────────────── */}
+        {/* Toolbar */}
         <div className="admin-toolbar">
           <div className="admin-search">
             <Search size={15} />
@@ -769,9 +1433,7 @@ export default function Admin() {
               onChange={(e) => setSearch(e.target.value)}
             />
             {search && (
-              <button className="search-clear" onClick={() => setSearch("")}>
-                <X size={14} />
-              </button>
+              <button className="search-clear" onClick={() => setSearch("")}><X size={14} /></button>
             )}
           </div>
 
@@ -793,20 +1455,17 @@ export default function Admin() {
           </div>
         </div>
 
-        {/* ── Error banner ───────────────────────────────────── */}
+        {/* Error banner */}
         {error && (
           <div className="admin-error animate-fade-in">
             <AlertCircle size={15} />
             {error}
-            <button className="close-err" onClick={() => setError("")}>
-              <X size={13} />
-            </button>
+            <button className="close-err" onClick={() => setError("")}><X size={13} /></button>
           </div>
         )}
 
-        {/* ── Table ──────────────────────────────────────────── */}
+        {/* Table */}
         <div className="admin-table-wrap animate-fade-in">
-          {/* Column headers */}
           <div className="table-head">
             <div className="th th-name">Student</div>
             <div className="th th-meta">Metadata</div>
@@ -817,18 +1476,12 @@ export default function Admin() {
 
           {loading ? (
             <div className="admin-loading">
-              <div className="loading-dots">
-                <span />
-                <span />
-                <span />
-              </div>
+              <div className="loading-dots"><span /><span /><span /></div>
               Loading students…
             </div>
           ) : filtered.length === 0 ? (
             <div className="admin-empty">
-              <div className="admin-empty-icon">
-                <Users size={28} />
-              </div>
+              <div className="admin-empty-icon"><Users size={28} /></div>
               <h3>
                 {search || filter !== "all"
                   ? "No students match"
@@ -847,10 +1500,7 @@ export default function Admin() {
                 <button
                   className="btn btn-secondary btn-sm"
                   style={{ marginTop: 8 }}
-                  onClick={() => {
-                    setSearch("");
-                    setFilter("all");
-                  }}
+                  onClick={() => { setSearch(""); setFilter("all"); }}
                 >
                   Clear filters
                 </button>
@@ -864,14 +1514,9 @@ export default function Admin() {
                   student={s}
                   isOpen={expandedIdx === i}
                   onToggle={() => setExpandedIdx(expandedIdx === i ? null : i)}
-                  onDelete={(e) => {
-                    if (e) e.stopPropagation();
-                    setConfirmDelete(s.name);
-                  }}
-                  onOpenDrive={(e) => {
-                    if (e) e.stopPropagation();
-                    openDriveFolder(s);
-                  }}
+                  onDelete={(e) => { if (e) e.stopPropagation(); setConfirmDelete(s.name); }}
+                  onOpenDrive={(e) => { if (e) e.stopPropagation(); openDriveFolder(s); }}
+                  onViewReport={(e) => { if (e) e.stopPropagation(); setReportStudent(s); }}
                 />
               ))}
             </div>
@@ -879,13 +1524,27 @@ export default function Admin() {
         </div>
       </div>
 
-      {/* ── Delete modal ─────────────────────────────────────── */}
+      {/* Report Modal */}
+      {reportStudent && (
+        <ReportModal student={reportStudent} onClose={() => setReportStudent(null)} />
+      )}
+
+      {/* Delete modal */}
       {confirmDelete && (
         <DeleteModal
           name={confirmDelete}
           deleting={deleting}
           onConfirm={() => handleDelete(confirmDelete)}
           onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+
+      {/* Settings panel */}
+      {showSettings && (
+        <SettingsPanel
+          onClose={() => setShowSettings(false)}
+          adminName={adminName}
+          adminRole={adminRole}
         />
       )}
     </div>

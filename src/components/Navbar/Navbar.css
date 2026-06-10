@@ -201,6 +201,7 @@
   .navbar-container-core {
     padding: 0 16px;
     height: 60px;
+    gap: 8px;
   }
 
   .navbar-logo-lens-capsule {
@@ -218,11 +219,31 @@
 
   .navbar-deck-link span,
   .navbar-exit-trigger span {
-    display: none; /* Safely strips long text strings into pure icon buttons */
+    display: none;
   }
 
   .navbar-deck-link,
   .navbar-exit-trigger {
     padding: 8px 10px;
+  }
+
+  .navbar-actions-deck {
+    gap: 4px;
+  }
+}
+
+@media (max-width: 360px) {
+  .navbar-container-core {
+    padding: 0 12px;
+  }
+
+  .navbar-brand-name {
+    font-size: 13px;
+    max-width: 110px;
+  }
+
+  .navbar-deck-link,
+  .navbar-exit-trigger {
+    padding: 7px 8px;
   }
 }

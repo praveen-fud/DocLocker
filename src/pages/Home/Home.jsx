@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   GraduationCap,
@@ -20,14 +20,26 @@ import {
 
 import "./Home.css";
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 export default function Home() {
   const [mode, setMode] = useState("welcome");
   const [form, setForm] = useState({ name: "", email: "", phone: "", advisor: "" });
   const [lookup, setLookup] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [advisors, setAdvisors] = useState(() => (API_URL ? null : [])); // null = loading, [] = none/error
   const { setStudent } = useStudent();
   const navigate = useNavigate();
+
+  // Fetch advisor list once on mount
+  useEffect(() => {
+    if (!API_URL) return;
+    fetch(`${API_URL}/api/advisors`)
+      .then((r) => r.json())
+      .then((d) => setAdvisors(d.success ? (d.advisors || []) : []))
+      .catch(() => setAdvisors([]));
+  }, []);
 
   // ── New registration with duplicate check ─────────────────────────────────
   const handleNewStudent = async (e) => {
@@ -348,10 +360,20 @@ export default function Home() {
                       onChange={(e) =>
                         setForm({ ...form, advisor: e.target.value })
                       }
+                      disabled={advisors === null}
                     >
-                      <option value="">Select your advisor</option>
-                      <option value="Sainath">Sainath</option>
-                      <option value="Shravan">Shravan</option>
+                      {advisors === null ? (
+                        <option value="">Loading advisors…</option>
+                      ) : advisors.length === 0 ? (
+                        <option value="">No advisors available</option>
+                      ) : (
+                        <>
+                          <option value="">Select your advisor</option>
+                          {advisors.map((name) => (
+                            <option key={name} value={name}>{name}</option>
+                          ))}
+                        </>
+                      )}
                     </select>
                     <div className="input-focus-border-line" />
                   </div>

@@ -37,6 +37,8 @@
   font-size: 20px;
   font-weight: 700;
   background: linear-gradient(135deg, var(--blue-light), var(--accent));
+  -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -116,4 +118,22 @@
   border-radius: 10px;
   padding: 1px 7px;
   font-size: 11px;
+}
+
+@media (max-width: 480px) {
+  .progress-container {
+    padding: 14px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+  }
+  .progress-percent {
+    font-size: 17px;
+  }
+  .progress-title {
+    font-size: 13px;
+  }
+  .section-pill {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
 }

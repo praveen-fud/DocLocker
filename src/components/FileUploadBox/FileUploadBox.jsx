@@ -53,21 +53,21 @@ export default function FileUploadBox({
       return;
     }
 
-    const scriptConfigured = !!import.meta.env.VITE_APPS_SCRIPT_URL;
+    const apiConfigured = !!import.meta.env.VITE_API_URL;
     let result;
 
     try {
-      if (scriptConfigured) {
+      if (apiConfigured) {
         result = await uploadDocument({
           studentName,
-          studentIdentifier: studentIdentifier || "", // FIX: pass through for folder key
+          studentIdentifier: studentIdentifier || "",
           subFolder,
           fileName: field.rename,
           file,
           onProgress: setProgress,
         });
       } else {
-        // Demo mode — no Apps Script configured
+        // Demo mode — no backend configured
         for (let p = 10; p <= 100; p += 15) {
           await new Promise((r) => setTimeout(r, 120));
           setProgress(p);

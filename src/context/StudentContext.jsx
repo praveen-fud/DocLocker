@@ -39,6 +39,28 @@ function getStoredAdvisorName() {
   }
 }
 
+function getStoredAdminName() {
+  try {
+    const raw = localStorage.getItem("abroad_admin_session");
+    if (!raw) return "";
+    const { adminName } = JSON.parse(raw);
+    return adminName || "";
+  } catch {
+    return "";
+  }
+}
+
+function getStoredAdminToken() {
+  try {
+    const raw = localStorage.getItem("abroad_admin_session");
+    if (!raw) return "";
+    const { token } = JSON.parse(raw);
+    return token || "";
+  } catch {
+    return "";
+  }
+}
+
 export function StudentProvider({ children }) {
   const [student, setStudentState] = useState(() => {
     try {
@@ -56,6 +78,12 @@ export function StudentProvider({ children }) {
   const [adminAdvisorName, setAdminAdvisorName] = useState(() =>
     isAdminSessionValid() ? getStoredAdvisorName() : "",
   );
+  const [adminName, setAdminName] = useState(() =>
+    isAdminSessionValid() ? getStoredAdminName() : "",
+  );
+  const [adminToken, setAdminToken] = useState(() =>
+    isAdminSessionValid() ? getStoredAdminToken() : "",
+  );
 
   const setStudent = (data) => {
     setStudentState(data);
@@ -68,17 +96,23 @@ export function StudentProvider({ children }) {
   };
 
   // role: "superadmin" | "advisor"
-  // advisorName: "Sainath" | "Shravan" | ""
-  const loginAdmin = (role = "superadmin", advisorName = "") => {
+  // advisorName: the advisor's name (same as adminName for advisors)
+  // name: the login name of this admin
+  // token: JWT from backend
+  const loginAdmin = (role = "superadmin", advisorName = "", name = "", token = "") => {
     setIsAdmin(true);
     setAdminRole(role);
     setAdminAdvisorName(advisorName);
+    setAdminName(name);
+    setAdminToken(token);
     localStorage.setItem(
       "abroad_admin_session",
       JSON.stringify({
         active: true,
         role,
         advisorName,
+        adminName: name,
+        token,
         expiresAt: Date.now() + ADMIN_SESSION_TTL_MS,
       }),
     );
@@ -89,6 +123,8 @@ export function StudentProvider({ children }) {
     setIsAdmin(false);
     setAdminRole("superadmin");
     setAdminAdvisorName("");
+    setAdminName("");
+    setAdminToken("");
     localStorage.removeItem("abroad_admin_session");
     localStorage.removeItem("abroad_admin");
   };
@@ -112,6 +148,8 @@ export function StudentProvider({ children }) {
         isAdmin: validSession,
         adminRole: validSession ? adminRole : "superadmin",
         adminAdvisorName: validSession ? adminAdvisorName : "",
+        adminName: validSession ? adminName : "",
+        adminToken: validSession ? adminToken : "",
         loginAdmin,
         logoutAdmin,
       }}

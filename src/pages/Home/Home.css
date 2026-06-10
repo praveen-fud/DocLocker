@@ -675,19 +675,76 @@ select.premium-styled-input option {
 
 @media (max-width: 480px) {
   .main-display-headline {
-    font-size: 34px;
+    font-size: 30px;
+  }
+
+  .gradient-text-block {
+    font-size: 26px;
+  }
+
+  .editorial-sub-headline {
+    font-size: 15px;
   }
 
   .hero-showcase-logo {
-    width: 80px;
-    height: 80px;
+    width: 72px;
+    height: 72px;
   }
 
   .logo-brand-title {
+    font-size: 20px;
+  }
+
+  .glass-workspace-card {
+    padding: 20px 16px;
+    min-height: unset;
+    border-radius: 18px;
+  }
+
+  .matrix-item {
+    padding: 14px;
+    gap: 14px;
+  }
+
+  .matrix-icon-wrapper {
+    width: 38px;
+    height: 38px;
+  }
+
+  .premium-interactive-card {
+    padding: 16px;
+    gap: 14px;
+  }
+
+  .card-icon-frame {
+    width: 38px;
+    height: 38px;
+  }
+
+  .workspace-header h2 {
+    font-size: 20px;
+  }
+
+  .action-submit-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 360px) {
+  .main-display-headline {
+    font-size: 26px;
+  }
+
+  .gradient-text-block {
     font-size: 22px;
   }
 
   .glass-workspace-card {
-    padding: 24px;
+    padding: 16px 12px;
+  }
+
+  .home-split-layout {
+    padding: 30px 16px 80px;
   }
 }

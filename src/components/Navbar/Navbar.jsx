@@ -30,7 +30,6 @@ export default function Navbar() {
           </div>
           <div className="navbar-brand-typography">
             <span className="navbar-brand-name">DocLocker</span>
-            <span className="navbar-brand-tagline">by FlyUrDream</span>
           </div>
         </Link>
 
