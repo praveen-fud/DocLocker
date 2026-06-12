@@ -37,22 +37,39 @@ html {
 
 body {
   font-family: "DM Sans", sans-serif;
-  background:
+  /* World landmarks background with deep navy overlay */
+  background-color: #060a24;
+  background-image:
     linear-gradient(
-      135deg,
-      rgba(5, 8, 30, 0.83) 0%,
-      rgba(8, 12, 42, 0.79) 100%
+      160deg,
+      rgba(4, 7, 28, 0.91) 0%,
+      rgba(6, 10, 36, 0.84) 40%,
+      rgba(4, 8, 32, 0.88) 100%
     ),
-    url("./assets/background.jpeg") center / cover no-repeat fixed;
-  background-color: #050820;
+    url("./assets/background.png");
+  background-size: cover;
+  background-position: center 60%;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
   color: var(--white);
   min-height: 100vh;
   overflow-x: hidden;
 }
 
+/* iOS / Android: fixed attachment is broken — switch to scroll so image is always visible */
 @media (max-width: 768px) {
   body {
     background-attachment: scroll;
+    background-position: center center;
+    /* Slightly stronger overlay on mobile for readability on small screens */
+    background-image:
+      linear-gradient(
+        160deg,
+        rgba(4, 7, 28, 0.93) 0%,
+        rgba(6, 10, 36, 0.88) 40%,
+        rgba(4, 8, 32, 0.92) 100%
+      ),
+      url("./assets/background.png");
   }
 }
 
