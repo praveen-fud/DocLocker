@@ -55,14 +55,17 @@ function getAllowedExts(field) {
 
 // ── Single-file upload box (original behaviour) ────────────────────────────────
 function SingleUploadBox({ field, studentName, studentIdentifier, subFolder, onUploaded, uploadedFiles }) {
-  const [dragging, setDragging]   = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress]   = useState(0);
-  const [error, setError]         = useState("");
+  const [dragging, setDragging]       = useState(false);
+  const [uploading, setUploading]     = useState(false);
+  const [progress, setProgress]       = useState(0);
+  const [error, setError]             = useState("");
   const [localResult, setLocalResult] = useState(null);
+  const [reUploading, setReUploading] = useState(false);
   const inputRef = useRef(null);
 
-  const isUploaded = localResult || uploadedFiles[field.id];
+  // reUploading overrides the prop so the drop-zone (with progress bar) is shown
+  // while the replacement file is being uploaded.
+  const isUploaded = !reUploading && (localResult || uploadedFiles[field.id]);
 
   const handleFile = async (file) => {
     if (!file) return;
@@ -74,11 +77,13 @@ function SingleUploadBox({ field, studentName, studentIdentifier, subFolder, onU
     if (!getAllowedExts(field).includes(ext)) {
       setError(`Invalid file type. Allowed: ${field.accept}`);
       setUploading(false);
+      setReUploading(false);
       return;
     }
     if (file.size > MAX_BYTES) {
       setError("File too large. Max 25 MB.");
       setUploading(false);
+      setReUploading(false);
       return;
     }
 
@@ -106,10 +111,12 @@ function SingleUploadBox({ field, studentName, studentIdentifier, subFolder, onU
     } catch (e) {
       setError(e.message || "Upload failed. Please try again.");
       setUploading(false);
+      setReUploading(false);
       return;
     }
 
     setUploading(false);
+    setReUploading(false);
     setLocalResult(result);
     onUploaded(field.id, result);
   };
@@ -142,7 +149,7 @@ function SingleUploadBox({ field, studentName, studentIdentifier, subFolder, onU
                 <Eye size={13} /> View in Drive
               </a>
             )}
-            <button className="re-upload-btn" onClick={() => { setLocalResult(null); setError(""); inputRef.current?.click(); }}>
+            <button className="re-upload-btn" onClick={() => { setLocalResult(null); setReUploading(true); setError(""); inputRef.current?.click(); }}>
               Re-upload
             </button>
           </div>
