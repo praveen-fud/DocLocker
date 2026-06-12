@@ -24,7 +24,12 @@ const API_URL = import.meta.env.VITE_API_URL;
 
 export default function Home() {
   const [mode, setMode] = useState("welcome");
-  const [form, setForm] = useState({ name: "", email: "", phone: "", advisor: "" });
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    advisor: "",
+  });
   const [lookup, setLookup] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -37,7 +42,7 @@ export default function Home() {
     if (!API_URL) return;
     fetch(`${API_URL}/api/advisors`)
       .then((r) => r.json())
-      .then((d) => setAdvisors(d.success ? (d.advisors || []) : []))
+      .then((d) => setAdvisors(d.success ? d.advisors || [] : []))
       .catch(() => setAdvisors([]));
   }, []);
 
@@ -251,7 +256,7 @@ export default function Home() {
                       <GraduationCap size={24} />
                     </div>
                     <div className="card-seo-content">
-                      <h3>New Portal Registration</h3>
+                      <h3>New Registration</h3>
                       <p>
                         Initialize a secure folder path and clear file structure
                         tags
@@ -370,7 +375,9 @@ export default function Home() {
                         <>
                           <option value="">Select your advisor</option>
                           {advisors.map((name) => (
-                            <option key={name} value={name}>{name}</option>
+                            <option key={name} value={name}>
+                              {name}
+                            </option>
                           ))}
                         </>
                       )}
