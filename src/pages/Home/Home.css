@@ -637,6 +637,7 @@ select.premium-styled-input option {
    10. Media Adaptation Layer (Responsive Controls)
    ========================================================================== */
 
+/* ── Tablet: single column, text on top (unchanged behaviour) ── */
 @media (max-width: 1100px) {
   .home-split-layout {
     grid-template-columns: 1fr;
@@ -673,71 +674,212 @@ select.premium-styled-input option {
   }
 }
 
-@media (max-width: 480px) {
+/* ── Mobile: card on top, compact hero below ─────────────────────────────── */
+@media (max-width: 768px) {
+  .home-split-layout {
+    gap: 20px;
+    padding: 20px 16px 72px;
+    max-width: 480px;
+  }
+
+  /* Login / registration card floats to top on mobile */
+  .interactive-panel-column {
+    order: -1;
+  }
+  .brand-hero-column {
+    order: 1;
+  }
+
+  /* Compact headline */
   .main-display-headline {
-    font-size: 30px;
+    font-size: 26px;
+    margin-bottom: 10px;
+    letter-spacing: -0.02em;
   }
 
   .gradient-text-block {
-    font-size: 26px;
+    font-size: 22px;
   }
 
   .editorial-sub-headline {
-    font-size: 15px;
+    font-size: 13.5px;
+    line-height: 1.6;
+    margin-bottom: 18px;
+    color: #6b7280;
   }
 
-  .hero-showcase-logo {
-    width: 72px;
-    height: 72px;
-  }
-
-  .logo-brand-title {
-    font-size: 20px;
-  }
-
+  /* Glass card: tighter, stronger presence */
   .glass-workspace-card {
-    padding: 20px 16px;
     min-height: unset;
-    border-radius: 18px;
+    padding: 24px 20px;
+    border-radius: 20px;
+    border-color: rgba(14, 165, 233, 0.12);
+    box-shadow:
+      0 0 0 1px rgba(14, 165, 233, 0.08),
+      0 24px 48px rgba(0, 0, 0, 0.5),
+      0 4px 16px rgba(14, 165, 233, 0.06);
+  }
+
+  /* Feature matrix → compact 3-column icon grid */
+  .asymmetric-feature-matrix {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
   }
 
   .matrix-item {
-    padding: 14px;
-    gap: 14px;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 12px 8px;
+    gap: 8px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .matrix-item:hover {
+    transform: translateY(-2px);
+  }
+
+  .matrix-header-row {
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  .matrix-micro-badge {
+    display: none;
+  }
+
+  .matrix-body p {
+    display: none;
+  }
+
+  .matrix-body h4 {
+    font-size: 11px;
+    font-weight: 600;
+    color: #d1d5db;
+    line-height: 1.3;
+    margin-top: 4px;
   }
 
   .matrix-icon-wrapper {
-    width: 38px;
-    height: 38px;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
   }
 
+  /* Action cards */
   .premium-interactive-card {
     padding: 16px;
     gap: 14px;
+    border-radius: 12px;
   }
 
   .card-icon-frame {
-    width: 38px;
-    height: 38px;
+    width: 40px;
+    height: 40px;
   }
 
+  .card-seo-content h3 {
+    font-size: 14px;
+  }
+
+  .card-seo-content p {
+    font-size: 11.5px;
+  }
+
+  /* Form */
   .workspace-header h2 {
     font-size: 20px;
+  }
+
+  .workspace-header p {
+    font-size: 13px;
+    margin-bottom: 18px;
   }
 
   .action-submit-button {
     width: 100%;
     justify-content: center;
+    padding: 12px 18px;
+  }
+
+  .spark-icon-container {
+    width: 38px;
+    height: 38px;
+    margin-bottom: 12px;
+  }
+
+  /* Logo strip */
+  .hero-showcase-logo {
+    width: 68px;
+    height: 68px;
+  }
+
+  .logo-brand-title {
+    font-size: 19px;
+  }
+
+  .logo-brand-subtitle {
+    font-size: 10px;
+  }
+
+  .brand-hero-logo-anchor {
+    margin-bottom: 20px;
+    padding-bottom: 10px;
   }
 }
 
-@media (max-width: 360px) {
+/* ── Small phones ─────────────────────────────────────────────────────────── */
+@media (max-width: 420px) {
+  .home-split-layout {
+    padding: 16px 14px 64px;
+    gap: 16px;
+  }
+
   .main-display-headline {
-    font-size: 26px;
+    font-size: 23px;
   }
 
   .gradient-text-block {
-    font-size: 22px;
+    font-size: 20px;
+  }
+
+  .glass-workspace-card {
+    padding: 20px 16px;
+    border-radius: 18px;
+  }
+
+  .matrix-item {
+    padding: 10px 6px;
+  }
+
+  .matrix-icon-wrapper {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+  }
+
+  .matrix-body h4 {
+    font-size: 10px;
+  }
+
+  .premium-interactive-card {
+    padding: 14px;
+    gap: 12px;
+  }
+}
+
+/* ── Very small phones ────────────────────────────────────────────────────── */
+@media (max-width: 360px) {
+  .main-display-headline {
+    font-size: 21px;
+  }
+
+  .gradient-text-block {
+    font-size: 18px;
   }
 
   .glass-workspace-card {
@@ -745,6 +887,10 @@ select.premium-styled-input option {
   }
 
   .home-split-layout {
-    padding: 30px 16px 80px;
+    padding: 14px 12px 60px;
+  }
+
+  .asymmetric-feature-matrix {
+    gap: 6px;
   }
 }
