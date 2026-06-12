@@ -8,11 +8,11 @@
 
 /* ── CSS Variables ─────────────────────────────────────────── */
 :root {
-  --bg-base: #080d1a;
-  --bg-surface: #0d1528;
-  --bg-raised: #111d35;
-  --bg-hover: #162040;
-  --bg-active: #1a2648;
+  --bg-base: rgba(8, 13, 26, 0.0);
+  --bg-surface: rgba(10, 18, 42, 0.62);
+  --bg-raised: rgba(15, 25, 52, 0.68);
+  --bg-hover: rgba(20, 30, 60, 0.72);
+  --bg-active: rgba(24, 34, 68, 0.75);
 
   --border-dim: rgba(255, 255, 255, 0.055);
   --border-subtle: rgba(255, 255, 255, 0.09);
@@ -65,7 +65,7 @@
 /* ── Page ──────────────────────────────────────────────────── */
 .admin-page {
   font-family: var(--font-body);
-  background: var(--bg-base);
+  background: transparent;
   color: var(--text-primary);
   min-height: 100vh;
   padding-top: 64px;
@@ -79,8 +79,8 @@
   pointer-events: none;
   z-index: 0;
   background-image:
-    linear-gradient(rgba(0, 209, 178, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 209, 178, 0.03) 1px, transparent 1px);
+    linear-gradient(rgba(0, 209, 178, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 209, 178, 0.02) 1px, transparent 1px);
   background-size: 40px 40px;
 }
 
@@ -235,6 +235,8 @@
   border-radius: var(--radius-lg);
   background: var(--bg-surface);
   border: 1px solid var(--border-dim);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   cursor: default;
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
@@ -391,6 +393,8 @@
   overflow: hidden;
   animation: fadeSlideUp 0.4s ease 0.15s both;
   box-shadow: var(--shadow-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 .table-head {

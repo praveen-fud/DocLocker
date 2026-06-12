@@ -44,10 +44,10 @@ import "./Admin.css";
 
 function getTotalUploads(s) {
   if (!s.uploads) return 0;
-  return Object.values(s.uploads).reduce(
-    (acc, section) => acc + Object.keys(section).length,
-    0,
-  );
+  return Object.values(s.uploads).reduce((acc, section) => {
+    if (!section || typeof section !== "object") return acc;
+    return acc + Object.values(section).filter(Boolean).length;
+  }, 0);
 }
 
 function getOverallProgress(s) {
@@ -66,7 +66,9 @@ function getAllUploadedFiles(uploads) {
   const files = [];
   if (!uploads) return files;
   Object.entries(uploads).forEach(([section, sectionFiles]) => {
+    if (!sectionFiles || typeof sectionFiles !== "object") return;
     Object.entries(sectionFiles).forEach(([fieldId, fileInfo]) => {
+      if (!fileInfo) return; // null = removed file slot
       files.push({
         section,
         fieldId,
