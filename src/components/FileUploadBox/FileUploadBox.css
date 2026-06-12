@@ -111,6 +111,13 @@
   margin-top: 2px;
 }
 
+.size-limit-note {
+  font-size: 11px;
+  color: #e07b3a;
+  font-weight: 500;
+  margin-top: 3px;
+}
+
 .upload-progress {
   display: flex;
   flex-direction: column;

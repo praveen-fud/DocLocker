@@ -47,8 +47,8 @@ export default function FileUploadBox({
       setUploading(false);
       return;
     }
-    if (file.size > 20 * 1024 * 1024) {
-      setError("File too large. Max 20 MB.");
+    if (file.size > 5 * 1024 * 1024) {
+      setError("File too large. Max 5 MB.");
       setUploading(false);
       return;
     }
@@ -182,6 +182,7 @@ export default function FileUploadBox({
               <span className="accepted-types">
                 {field.accept.replace(/\./g, "").toUpperCase()}
               </span>
+              <span className="size-limit-note">Max file size: 5 MB</span>
             </div>
           )}
         </div>
