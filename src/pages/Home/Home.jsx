@@ -33,18 +33,23 @@ export default function Home() {
   const [lookup, setLookup] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [advisors, setAdvisors] = useState(() => (API_URL ? null : [])); // null = loading, [] = none/error
+  const [advisors, setAdvisors] = useState(() => (API_URL ? null : [])); // null = loading, [] = error
+  const [advisorError, setAdvisorError] = useState(false);
   const { setStudent } = useStudent();
   const navigate = useNavigate();
 
-  // Fetch advisor list once on mount
-  useEffect(() => {
-    if (!API_URL) return;
-    fetch(`${API_URL}/api/advisors`)
+  const fetchAdvisors = () => {
+    if (!API_URL) { setAdvisors([]); return; }
+    setAdvisors(null);
+    setAdvisorError(false);
+    fetch(`${API_URL}/api/advisors`, { signal: AbortSignal.timeout(12000) })
       .then((r) => r.json())
       .then((d) => setAdvisors(d.success ? d.advisors || [] : []))
-      .catch(() => setAdvisors([]));
-  }, []);
+      .catch(() => { setAdvisors([]); setAdvisorError(true); });
+  };
+
+  // Fetch advisor list once on mount
+  useEffect(() => { fetchAdvisors(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── New registration with duplicate check ─────────────────────────────────
   const handleNewStudent = async (e) => {
@@ -382,6 +387,15 @@ export default function Home() {
                         </>
                       )}
                     </select>
+                    {advisorError && (
+                      <button
+                        type="button"
+                        onClick={fetchAdvisors}
+                        style={{ marginTop: 6, fontSize: 12, color: "var(--blue-light)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                      >
+                        Could not load advisors — tap to retry
+                      </button>
+                    )}
                     <div className="input-focus-border-line" />
                   </div>
 

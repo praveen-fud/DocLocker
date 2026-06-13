@@ -22,6 +22,7 @@ async function apiPost(path, body) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15000),
   });
   let data;
   try { data = await res.json(); } catch { throw new Error('Bad JSON response from API'); }
@@ -34,7 +35,7 @@ async function apiGet(path, params = {}) {
   if (!API_URL) throw new Error('VITE_API_URL not set in .env');
   const qs = new URLSearchParams(params).toString();
   const url = `${API_URL}${path}${qs ? '?' + qs : ''}`;
-  const res = await fetch(url, { headers: getAuthHeaders() });
+  const res = await fetch(url, { headers: getAuthHeaders(), signal: AbortSignal.timeout(15000) });
   let data;
   try { data = await res.json(); } catch { throw new Error('Bad JSON response from API'); }
   if (!data.success) throw new Error(data.error || 'API GET failed');
@@ -48,6 +49,7 @@ async function apiDelete(path, body = {}) {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15000),
   });
   let data;
   try { data = await res.json(); } catch { throw new Error('Bad JSON response from API'); }
@@ -104,6 +106,7 @@ export async function uploadDocument({ studentName, studentIdentifier, subFolder
     method: 'POST',
     headers: getAuthHeaders(),
     body: formData,
+    signal: AbortSignal.timeout(90000),
   });
 
   let data;
