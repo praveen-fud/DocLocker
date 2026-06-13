@@ -1,5 +1,13 @@
 {
   "rewrites": [
+    {
+      "source": "/health",
+      "destination": "https://doclockerbackend-production.up.railway.app/health"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://doclockerbackend-production.up.railway.app/api/:path*"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

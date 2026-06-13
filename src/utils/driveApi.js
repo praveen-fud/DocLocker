@@ -1,7 +1,9 @@
 // Express.js backend API client.
-// VITE_API_URL must be set in .env (e.g. http://localhost:3001 or https://your-backend.railway.app)
+// VITE_API_URL: in local dev, set to http://localhost:3001
+// In Vercel production: leave unset (or set to "") — requests go through Vercel's /api proxy
+// which rewrites to Railway server-side, so the mobile never needs to reach Railway directly.
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 // ── Auth header helper ────────────────────────────────────────────────────────
 function getAuthHeaders() {
@@ -17,7 +19,6 @@ function getAuthHeaders() {
 
 // ── Core POST ─────────────────────────────────────────────────────────────────
 async function apiPost(path, body) {
-  if (!API_URL) throw new Error('VITE_API_URL not set in .env');
   const res = await fetch(`${API_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -32,7 +33,6 @@ async function apiPost(path, body) {
 
 // ── Core GET ──────────────────────────────────────────────────────────────────
 async function apiGet(path, params = {}) {
-  if (!API_URL) throw new Error('VITE_API_URL not set in .env');
   const qs = new URLSearchParams(params).toString();
   const url = `${API_URL}${path}${qs ? '?' + qs : ''}`;
   const res = await fetch(url, { headers: getAuthHeaders(), signal: AbortSignal.timeout(15000) });
@@ -44,7 +44,6 @@ async function apiGet(path, params = {}) {
 
 // ── Core DELETE ───────────────────────────────────────────────────────────────
 async function apiDelete(path, body = {}) {
-  if (!API_URL) throw new Error('VITE_API_URL not set in .env');
   const res = await fetch(`${API_URL}${path}`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -86,7 +85,6 @@ export function clearStudentFromLocalStorage() {
 
 // ── Upload a file (multipart — no base64 overhead) ───────────────────────────
 export async function uploadDocument({ studentName, studentIdentifier, subFolder, fileName, file, onProgress }) {
-  if (!API_URL) throw new Error('VITE_API_URL not set in .env');
 
   const ext = file.name.split('.').pop().toLowerCase();
   const finalName = `${fileName}.${ext}`;
@@ -120,16 +118,13 @@ export async function uploadDocument({ studentName, studentIdentifier, subFolder
 
 // ── Save student metadata ─────────────────────────────────────────────────────
 export function saveStudentMeta(studentName, meta, studentIdentifier = '') {
-  if (API_URL) {
-    const folderKey = buildFolderKey(studentName, studentIdentifier);
-    apiPost('/api/meta', { studentName: folderKey, metaJson: JSON.stringify(meta) })
-      .catch((e) => console.warn('[DriveSync] saveMeta failed silently:', e.message));
-  }
+  const folderKey = buildFolderKey(studentName, studentIdentifier);
+  apiPost('/api/meta', { studentName: folderKey, metaJson: JSON.stringify(meta) })
+    .catch((e) => console.warn('[DriveSync] saveMeta failed silently:', e.message));
 }
 
 // ── List all students ─────────────────────────────────────────────────────────
 export async function getAllStudentsFromDrive() {
-  if (!API_URL) return [];
   try {
     const data = await apiGet('/api/students');
     return data.students || [];
@@ -141,7 +136,6 @@ export async function getAllStudentsFromDrive() {
 
 // ── Find student by email or phone ────────────────────────────────────────────
 export async function searchStudentByIdentifier(identifier) {
-  if (!API_URL) return null;
   const id = identifier.trim();
   try {
     const data = await apiGet('/api/students/find', { identifier: id });
@@ -160,7 +154,6 @@ export async function checkIdentifierExists(identifier) {
 // ── Delete student ────────────────────────────────────────────────────────────
 export async function deleteStudent(studentName, studentIdentifier = '') {
   clearStudentFromLocalStorage();
-  if (!API_URL) return;
   try {
     const folderKey = buildFolderKey(studentName, studentIdentifier);
     await apiDelete('/api/students', { studentName: folderKey });

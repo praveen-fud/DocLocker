@@ -20,7 +20,7 @@ import {
 
 import "./Home.css";
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 export default function Home() {
   const [mode, setMode] = useState("welcome");
@@ -33,23 +33,27 @@ export default function Home() {
   const [lookup, setLookup] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [advisors, setAdvisors] = useState(() => (API_URL ? null : [])); // null = loading, [] = error
+  const [advisors, setAdvisors] = useState(null); // null = loading, [] = error/empty
   const [advisorError, setAdvisorError] = useState(false);
   const { setStudent } = useStudent();
   const navigate = useNavigate();
 
-  const fetchAdvisors = () => {
-    if (!API_URL) { setAdvisors([]); return; }
-    setAdvisors(null);
-    setAdvisorError(false);
+  // Start the advisor fetch without resetting state (safe to call inside useEffect)
+  const loadAdvisors = () => {
     fetch(`${API_URL}/api/advisors`, { signal: AbortSignal.timeout(12000) })
       .then((r) => r.json())
       .then((d) => setAdvisors(d.success ? d.advisors || [] : []))
       .catch(() => { setAdvisors([]); setAdvisorError(true); });
   };
 
-  // Fetch advisor list once on mount
-  useEffect(() => { fetchAdvisors(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Reset + reload — called from the retry button (outside effect, so setState is fine)
+  const retryAdvisors = () => {
+    setAdvisors(null);
+    setAdvisorError(false);
+    loadAdvisors();
+  };
+
+  useEffect(() => { loadAdvisors(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── New registration with duplicate check ─────────────────────────────────
   const handleNewStudent = async (e) => {
@@ -390,7 +394,7 @@ export default function Home() {
                     {advisorError && (
                       <button
                         type="button"
-                        onClick={fetchAdvisors}
+                        onClick={retryAdvisors}
                         style={{ marginTop: 6, fontSize: 12, color: "var(--blue-light)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}
                       >
                         Could not load advisors — tap to retry
