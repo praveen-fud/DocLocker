@@ -1028,7 +1028,7 @@ function DeleteModal({ name, deleting, onConfirm, onCancel }) {
 
 /* ─── Settings Panel ───────────────────────────────────────────── */
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 function getToken() {
   try { return JSON.parse(localStorage.getItem("abroad_admin_session") || "{}").token || ""; }

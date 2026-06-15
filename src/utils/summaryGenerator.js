@@ -1,7 +1,7 @@
 // utils/summaryGenerator.js
 import { buildFolderKey } from "./driveApi";
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 let _pdfDebounceTimer = null;
 
@@ -11,7 +11,6 @@ export function generateAndUploadSummaryPDF(
   studentIdentifier = "",
   uploadedDocuments = [],
 ) {
-  if (!API_URL) return;
 
   // Debounce: cancel any pending call and wait 3s after the last save
   // before sending. Prevents duplicate PDFs from rapid/double saves.

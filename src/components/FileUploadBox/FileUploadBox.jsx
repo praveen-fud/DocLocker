@@ -88,26 +88,17 @@ function SingleUploadBox({ field, studentName, studentIdentifier, subFolder, onU
     }
 
     const compressed = await compressImage(file);
-    const apiConfigured = !!import.meta.env.VITE_API_URL;
     let result;
 
     try {
-      if (apiConfigured) {
-        result = await uploadDocument({
-          studentName,
-          studentIdentifier: studentIdentifier || "",
-          subFolder,
-          fileName: field.rename,
-          file: compressed,
-          onProgress: setProgress,
-        });
-      } else {
-        for (let p = 10; p <= 100; p += 15) {
-          await new Promise((r) => setTimeout(r, 80));
-          setProgress(p);
-        }
-        result = { id: `demo_${Date.now()}`, name: `${field.rename}.${ext}`, webViewLink: null, _demo: true };
-      }
+      result = await uploadDocument({
+        studentName,
+        studentIdentifier: studentIdentifier || "",
+        subFolder,
+        fileName: field.rename,
+        file: compressed,
+        onProgress: setProgress,
+      });
     } catch (e) {
       setError(e.message || "Upload failed. Please try again.");
       setUploading(false);
@@ -218,27 +209,18 @@ function MultiUploadBox({ field, studentName, studentIdentifier, subFolder, onUp
     setQueue((q) => q.map((item) => item.key === slotKey ? { ...item, status: "uploading", progress: 0 } : item));
     const compressed = await compressImage(file);
     const rename     = slotKey === field.id ? field.rename : `${field.rename}_${slotKey.split("_").pop()}`;
-    const apiConfigured = !!import.meta.env.VITE_API_URL;
     let result;
 
     try {
-      if (apiConfigured) {
-        result = await uploadDocument({
-          studentName,
-          studentIdentifier: studentIdentifier || "",
-          subFolder,
-          fileName: rename,
-          file: compressed,
-          onProgress: (p) =>
-            setQueue((q) => q.map((item) => item.key === slotKey ? { ...item, progress: p } : item)),
-        });
-      } else {
-        for (let p = 10; p <= 100; p += 20) {
-          await new Promise((r) => setTimeout(r, 80));
-          setQueue((q) => q.map((item) => item.key === slotKey ? { ...item, progress: p } : item));
-        }
-        result = { id: `demo_${Date.now()}`, name: `${rename}.${ext}`, webViewLink: null, _demo: true };
-      }
+      result = await uploadDocument({
+        studentName,
+        studentIdentifier: studentIdentifier || "",
+        subFolder,
+        fileName: rename,
+        file: compressed,
+        onProgress: (p) =>
+          setQueue((q) => q.map((item) => item.key === slotKey ? { ...item, progress: p } : item)),
+      });
     } catch (e) {
       setQueue((q) => q.map((item) => item.key === slotKey ? { ...item, status: "error", error: e.message || "Upload failed." } : item));
       return;

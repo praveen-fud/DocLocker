@@ -4,7 +4,7 @@ import { Shield, Eye, EyeOff, LogIn, Sparkles, RefreshCw } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import "./AdminLogin.css";
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 async function apiPost(path, body) {
   const res = await fetch(`${API_URL}${path}`, {
