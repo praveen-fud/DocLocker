@@ -74,8 +74,8 @@
   gap: 6px;
   padding: 8px 14px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(26, 110, 181, 0.14);
   color: var(--gray-400);
   font-size: 12.5px;
   font-weight: 500;
@@ -95,14 +95,15 @@
    3. Content Substrate Cards & Grids
    ========================================================================== */
 .section-panel {
-  background: rgba(8, 14, 40, 0.56);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(26, 110, 181, 0.12);
   border-radius: 16px;
   padding: 16px;
   width: 100%;
   box-sizing: border-box;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 4px 24px rgba(15, 37, 68, 0.07);
 }
 
 @media (min-width: 640px) {
@@ -169,8 +170,8 @@
    4. Co-Applicant Form Layout Blocks
    ========================================================================== */
 .co-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(26, 110, 181, 0.12);
   border-radius: 12px;
   margin-bottom: 12px;
   overflow: hidden;
@@ -185,14 +186,14 @@
   cursor: pointer;
   background: none;
   border: none;
-  color: white;
+  color: #0f2544;
   font-family: inherit;
   width: 100%;
   gap: 10px;
 }
 
 .co-card-header:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(26, 110, 181, 0.04);
 }
 
 .co-info {
@@ -217,7 +218,7 @@
 .co-name {
   font-size: 11px;
   font-weight: 600;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(26, 110, 181, 0.08);
   padding: 2px 6px;
   border-radius: 10px;
   white-space: nowrap;
@@ -242,8 +243,8 @@
    5. References & Auxiliary Note Bars
    ========================================================================== */
 .ref-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(26, 110, 181, 0.10);
   border-radius: 12px;
   padding: 16px;
   margin-bottom: 14px;

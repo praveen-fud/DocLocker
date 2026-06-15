@@ -1,28 +1,28 @@
 @import url("https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap");
 
 :root {
-  --navy: #10123c;
-  --blue: #3280c3;
-  --navy-light: #1a1d52;
-  --navy-dark: #0a0c28;
-  --blue-light: #4a9de0;
-  --blue-dark: #1f5a99;
+  --navy: #0f2544;
+  --blue: #1a6eb5;
+  --navy-light: #1a3a5c;
+  --navy-dark: #071528;
+  --blue-light: #3b97e3;
+  --blue-dark: #0d508c;
   --accent: #f0a500;
-  --success: #22c55e;
-  --error: #ef4444;
-  --warning: #f59e0b;
+  --success: #16a34a;
+  --error: #dc2626;
+  --warning: #d97706;
   --white: #ffffff;
   --gray-50: #f8fafc;
   --gray-100: #f1f5f9;
   --gray-200: #e2e8f0;
-  --gray-300: #cbd5e1;
-  --gray-400: #94a3b8;
-  --gray-500: #64748b;
-  --gray-600: #475569;
-  --gray-700: #334155;
-  --gray-800: #1e293b;
-  --glass: rgba(8, 16, 50, 0.52);
-  --glass-border: rgba(255, 255, 255, 0.14);
+  --gray-300: #94a3b8;
+  --gray-400: #64748b;
+  --gray-500: #475569;
+  --gray-600: #334155;
+  --gray-700: #1e293b;
+  --gray-800: #0f172a;
+  --glass: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(26, 110, 181, 0.14);
 }
 
 * {
@@ -33,82 +33,24 @@
 
 html {
   scroll-behavior: smooth;
+  min-height: 100%;
+  background-color: #eaedff;
+  background-image: url("./assets/background.png");
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 body {
   font-family: "DM Sans", sans-serif;
-
-  /*
-   * FOUR-LAYER BACKGROUND SYSTEM — Production Level
-   * ─────────────────────────────────────────────────
-   * Layer 1 (front): Stratosphere glow — soft blue light at the very
-   *   top, evoking the sky above a world map. Abroad-themed.
-   *
-   * Layer 2: Cinematic vignette — radial gradient that keeps edges dark
-   *   and frame-like while the center stays open. Exactly like how
-   *   premium travel/edu brands (Coursera, Apply Board etc.) do it.
-   *
-   * Layer 3: Directional atmosphere — a diagonal navy gradient that is
-   *   darkest where the navbar sits (top-left) and opens up in the
-   *   center so the world map + landmarks breathe through at ~35%.
-   *
-   * Layer 4 (back): The world landmarks illustration (background.png).
-   *   Eiffel Tower, Big Ben, Taj Mahal + dotted world map — the app's
-   *   visual identity. Positioned so landmarks sit at the bottom half.
-   *
-   * background-size / background-position are listed per layer so every
-   * layer scales independently. Gradients use 100% 100% (fill element).
-   * The image uses `cover` so it auto-fits ANY screen without cropping.
-   */
-  background-color: #030911;
-  background-image:
-    /* 1. Abroad-themed stratosphere — blue sky glow above the world */
-    radial-gradient(ellipse 110% 38% at 50% -8%,
-      rgba(29, 78, 216, 0.28) 0%,
-      rgba(14, 48, 160, 0.12) 50%,
-      transparent 100%
-    ),
-    /* 2. Cinematic vignette — content center stays open, edges are deep */
-    radial-gradient(ellipse 115% 72% at 50% 44%,
-      transparent 0%,
-      transparent 22%,
-      rgba(2, 5, 18, 0.48) 62%,
-      rgba(2, 4, 14, 0.80) 100%
-    ),
-    /* 3. Directional atmosphere — diagonal, opens at the image center */
-    linear-gradient(
-      158deg,
-      rgba(2,  5, 20, 0.92)  0%,
-      rgba(3,  9, 36, 0.72) 22%,
-      rgba(4, 12, 46, 0.56) 46%,
-      rgba(3, 10, 40, 0.68) 70%,
-      rgba(2,  6, 24, 0.88) 100%
-    ),
-    /* 4. World landmarks illustration — the app's visual soul */
-    url("./assets/background.png");
-
-  /* Each layer has its own size/position so they compose independently */
-  background-size:
-    100% 100%,   /* glow layer — fills element */
-    100% 100%,   /* vignette   — fills element */
-    100% 100%,   /* gradient   — fills element */
-    cover;       /* image      — auto-fits any screen */
-
-  background-position:
-    0 0,          /* glow: anchored top-left, gradient flows from top */
-    0 0,          /* vignette: same */
-    0 0,          /* gradient: same */
-    center 52%;   /* image: center + slightly below halfway shows landmarks */
-
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-  color: var(--white);
+  background: transparent;
+  color: #0f2544;
   min-height: 100vh;
   overflow-x: hidden;
 }
 
-/* ── Floating destination orbs — pure CSS art, abroad-education theme ─── */
-/* Subtle animated light pulses that suggest "glow of distant cities"      */
+/* ── Animated light shimmer — soft blue corner glows ─── */
 body::after {
   content: "";
   position: fixed;
@@ -116,17 +58,42 @@ body::after {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 55% 40% at  8% 18%, rgba(37, 99, 235, 0.08) 0%, transparent 100%),
-    radial-gradient(ellipse 40% 30% at 92% 22%, rgba(14, 165, 233, 0.07) 0%, transparent 100%),
-    radial-gradient(ellipse 50% 35% at 15% 82%, rgba(6, 182, 212, 0.06)  0%, transparent 100%),
-    radial-gradient(ellipse 45% 32% at 88% 78%, rgba(37, 99, 235, 0.07)  0%, transparent 100%);
-  animation: orbitGlow 18s ease-in-out infinite alternate;
+    radial-gradient(
+      ellipse 55% 45% at 5% 10%,
+      rgba(59, 130, 246, 0.09) 0%,
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 48% 38% at 95% 8%,
+      rgba(14, 165, 233, 0.08) 0%,
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 50% 40% at 88% 88%,
+      rgba(99, 102, 241, 0.07) 0%,
+      transparent 100%
+    ),
+    radial-gradient(
+      ellipse 45% 35% at 10% 88%,
+      rgba(59, 130, 246, 0.07) 0%,
+      transparent 100%
+    );
+  animation: lightShimmer 24s ease-in-out infinite alternate;
 }
 
-@keyframes orbitGlow {
-  0%   { opacity: 0.6; transform: scale(1);    }
-  50%  { opacity: 1.0; transform: scale(1.06); }
-  100% { opacity: 0.7; transform: scale(0.97); }
+@keyframes lightShimmer {
+  0% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 0.5;
+    transform: scale(0.97);
+  }
 }
 
 /* All page content must sit above the body::after orb layer */
@@ -136,51 +103,15 @@ body::after {
   min-height: 100vh;
 }
 
-/*
- * Mobile — iOS/Android: fixed attachment is broken on webkit.
- * Switch to scroll. Adjust image to center so the world map (top half
- * of the image) is always visible on portrait phones. Slightly stronger
- * overlay keeps white text perfectly readable on small screens.
- */
 @media (max-width: 768px) {
-  body {
+  html {
     background-attachment: scroll;
-    background-size:
-      100% 100%,
-      100% 100%,
-      100% 100%,
-      cover;
-    background-position:
-      0 0,
-      0 0,
-      0 0,
-      center 40%;  /* pull up slightly so world map dots show on portrait */
-    background-image:
-      radial-gradient(ellipse 130% 32% at 50% -6%,
-        rgba(29, 78, 216, 0.22) 0%,
-        rgba(14, 48, 160, 0.09) 50%,
-        transparent 100%
-      ),
-      radial-gradient(ellipse 150% 90% at 50% 46%,
-        transparent 0%,
-        transparent 16%,
-        rgba(2, 5, 18, 0.58) 60%,
-        rgba(2, 4, 14, 0.88) 100%
-      ),
-      linear-gradient(
-        172deg,
-        rgba(2,  5, 20, 0.95)  0%,
-        rgba(3,  9, 36, 0.78) 22%,
-        rgba(4, 12, 46, 0.64) 48%,
-        rgba(3, 10, 40, 0.76) 72%,
-        rgba(2,  6, 24, 0.93) 100%
-      ),
-      url("./assets/background.png");
+    background-position: center top;
+    background-size: cover;
   }
-
   body::after {
-    animation: none; /* disable animation on mobile to save battery */
-    opacity: 0.5;
+    animation: none;
+    opacity: 0.4;
   }
 }
 
@@ -197,10 +128,10 @@ h6 {
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--navy-dark);
+  background: #f1f5f9;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--blue-dark);
+  background: rgba(26, 110, 181, 0.3);
   border-radius: 3px;
 }
 
@@ -222,28 +153,29 @@ h6 {
 .btn-primary {
   background: linear-gradient(135deg, var(--blue), var(--blue-dark));
   color: white;
-  box-shadow: 0 4px 20px rgba(50, 128, 195, 0.35);
+  box-shadow: 0 4px 16px rgba(26, 110, 181, 0.3);
 }
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 28px rgba(50, 128, 195, 0.45);
+  box-shadow: 0 8px 24px rgba(26, 110, 181, 0.42);
 }
 .btn-secondary {
-  background: var(--glass);
-  color: white;
-  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--navy);
+  border: 1px solid rgba(26, 110, 181, 0.18);
   backdrop-filter: blur(12px);
 }
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(26, 110, 181, 0.3);
 }
 .btn-danger {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+  border: 1px solid rgba(220, 38, 38, 0.25);
 }
 .btn-danger:hover {
-  background: rgba(239, 68, 68, 0.25);
+  background: rgba(220, 38, 38, 0.18);
 }
 .btn-sm {
   padding: 8px 16px;
@@ -255,11 +187,12 @@ h6 {
 }
 
 .card {
-  background: var(--glass);
-  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(26, 110, 181, 0.12);
   border-radius: 16px;
   backdrop-filter: blur(20px);
   padding: 24px;
+  box-shadow: 0 4px 24px rgba(15, 37, 68, 0.08);
 }
 
 .input-group {
@@ -269,22 +202,22 @@ h6 {
   display: block;
   font-size: 13px;
   font-weight: 500;
-  color: var(--gray-300);
+  color: var(--gray-600);
   margin-bottom: 8px;
   letter-spacing: 0.3px;
 }
 .input-group label span.required {
-  color: #ef4444;
+  color: #dc2626;
   margin-left: 3px;
 }
 
 .input-field {
   width: 100%;
   padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #ffffff;
+  border: 1px solid rgba(26, 110, 181, 0.2);
   border-radius: 10px;
-  color: white;
+  color: #0f2544;
   font-family: "DM Sans", sans-serif;
   font-size: 14px;
   transition: all 0.2s ease;
@@ -292,15 +225,15 @@ h6 {
 }
 .input-field:focus {
   border-color: var(--blue);
-  background: rgba(50, 128, 195, 0.08);
-  box-shadow: 0 0 0 3px rgba(50, 128, 195, 0.15);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(26, 110, 181, 0.12);
 }
 .input-field::placeholder {
-  color: var(--gray-500);
+  color: var(--gray-400);
 }
 .input-field option {
-  background: var(--navy);
-  color: white;
+  background: #ffffff;
+  color: #0f2544;
 }
 
 .field-hint {
@@ -314,14 +247,14 @@ h6 {
   color: var(--blue);
   text-decoration: none;
   font-weight: 600;
-  border-bottom: 1px dashed rgba(50, 128, 195, 0.45);
+  border-bottom: 1px dashed rgba(26, 110, 181, 0.45);
   transition:
     color 0.15s,
     border-color 0.15s;
 }
 .field-hint-link:hover {
-  color: #5ba8e8;
-  border-bottom-color: #5ba8e8;
+  color: var(--blue-light);
+  border-bottom-color: var(--blue-light);
 }
 
 .badge {
@@ -334,24 +267,24 @@ h6 {
   font-weight: 600;
 }
 .badge-success {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
-  border: 1px solid rgba(34, 197, 94, 0.25);
+  background: rgba(22, 163, 74, 0.12);
+  color: #16a34a;
+  border: 1px solid rgba(22, 163, 74, 0.25);
 }
 .badge-warning {
-  background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
-  border: 1px solid rgba(245, 158, 11, 0.25);
+  background: rgba(217, 119, 6, 0.12);
+  color: #d97706;
+  border: 1px solid rgba(217, 119, 6, 0.25);
 }
 .badge-error {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+  border: 1px solid rgba(220, 38, 38, 0.22);
 }
 .badge-info {
-  background: rgba(50, 128, 195, 0.15);
-  color: var(--blue-light);
-  border: 1px solid rgba(50, 128, 195, 0.25);
+  background: rgba(26, 110, 181, 0.1);
+  color: var(--blue-dark);
+  border: 1px solid rgba(26, 110, 181, 0.22);
 }
 
 .divider {

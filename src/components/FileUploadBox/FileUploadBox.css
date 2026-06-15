@@ -3,8 +3,8 @@
    ═════════════════════════════════════════════════════════════════════════════ */
 
 .upload-box {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.90);
+  border: 1px solid rgba(26, 110, 181, 0.14);
   border-radius: 12px;
   padding: 14px;
   transition: all 0.2s ease;
@@ -19,10 +19,10 @@
 
 .upload-box.dragging {
   border-color: var(--blue);
-  background: rgba(50, 128, 195, 0.08);
+  background: rgba(26, 110, 181, 0.06);
 }
 
-/* Header structural assembly uses wrapping to accommodate long names on small grids */
+/* Header structural assembly */
 .upload-box-header {
   display: flex;
   align-items: center;
@@ -39,7 +39,7 @@
   font-size: 13px;
   font-weight: 500;
   color: var(--gray-200);
-  min-width: 0; /* Prevents flex children from overflowing parent nodes */
+  min-width: 0;
 }
 
 .required-dot {
@@ -51,7 +51,7 @@
 .optional-tag {
   font-size: 10px;
   color: var(--gray-500);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(26, 110, 181, 0.08);
   padding: 2px 7px;
   border-radius: 10px;
   white-space: nowrap;
@@ -67,9 +67,9 @@
   white-space: nowrap;
 }
 
-/* Enhanced drop zone providing comfortable finger-tapping space on mobile */
+/* Enhanced drop zone */
 .drop-zone {
-  border: 1.5px dashed rgba(255, 255, 255, 0.12);
+  border: 1.5px dashed rgba(26, 110, 181, 0.20);
   border-radius: 8px;
   padding: 18px 12px;
   text-align: center;
@@ -77,12 +77,12 @@
   transition: all 0.2s ease;
   width: 100%;
   box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent; /* Removes blue flash on mobile tap */
+  -webkit-tap-highlight-color: transparent;
 }
 
 .drop-zone:hover {
   border-color: var(--blue);
-  background: rgba(50, 128, 195, 0.06);
+  background: rgba(26, 110, 181, 0.04);
 }
 
 .drop-content {
@@ -90,7 +90,7 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  color: var(--gray-400);
+  color: #64748b;
   font-size: 13px;
   word-break: break-word;
 }
@@ -130,8 +130,8 @@
 
 .progress-bar {
   width: 100%;
-  height: 5px; /* Slightly thicker for better mobile visibility */
-  background: rgba(255, 255, 255, 0.08);
+  height: 5px;
+  background: rgba(26, 110, 181, 0.10);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -143,7 +143,7 @@
   border-radius: 3px;
 }
 
-/* Uploaded Info Box layout automatically breaks structure when actions crowd on narrow screens */
+/* Uploaded Info Box */
 .uploaded-info {
   display: flex;
   align-items: center;
@@ -181,21 +181,21 @@
   color: var(--blue-light);
   text-decoration: none;
   font-size: 12px;
-  padding: 4px 10px; /* Enhanced tap padding targets */
+  padding: 4px 10px;
   border-radius: 6px;
-  background: rgba(50, 128, 195, 0.15);
+  background: rgba(26, 110, 181, 0.10);
   white-space: nowrap;
   transition: background 0.2s;
 }
 
 .view-link:hover {
-  background: rgba(50, 128, 195, 0.25);
+  background: rgba(26, 110, 181, 0.18);
 }
 
 .re-upload-btn {
   background: none;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: var(--gray-300);
+  border: 1px solid rgba(26, 110, 181, 0.20);
+  color: #475569;
   font-size: 11px;
   padding: 4px 10px;
   border-radius: 6px;
@@ -240,10 +240,7 @@
   }
 }
 
-/* ─────────────────────────────────────────────────────────────────────────────
-   MOBILE RESPONSIVE MEDIA BREAKPOINT (Targets viewports <= 480px)
-   ───────────────────────────────────────────────────────────────────────────── */
-/* ── Multi-file queue styles ─────────────────────────────────────────────────── */
+/* ── Multi-file queue styles ── */
 .multi-queue {
   display: flex;
   flex-direction: column;
@@ -255,8 +252,8 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(26, 110, 181, 0.12);
   border-radius: 7px;
   padding: 6px 10px;
   font-size: 12px;
@@ -266,7 +263,7 @@
 
 .queue-item.queue-done   { border-color: rgba(34, 197, 94, 0.25); background: rgba(34, 197, 94, 0.05); }
 .queue-item.queue-error  { border-color: rgba(239, 68, 68, 0.3);  background: rgba(239, 68, 68, 0.05); }
-.queue-item.queue-uploading { border-color: rgba(50, 128, 195, 0.3); }
+.queue-item.queue-uploading { border-color: rgba(26, 110, 181, 0.30); }
 
 .queue-name {
   flex: 1;
@@ -284,7 +281,7 @@
   min-width: 80px;
 }
 
-.queue-bar  { flex: 1; height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
+.queue-bar  { flex: 1; height: 4px; background: rgba(26,110,181,0.12); border-radius: 2px; overflow: hidden; }
 .queue-fill { height: 100%; background: var(--blue); transition: width 0.25s ease; }
 
 .queue-done-icon { color: #22c55e; flex-shrink: 0; }
@@ -315,6 +312,17 @@
   flex-shrink: 0;
 }
 
+.show-pass:hover {
+  color: #0f2544;
+}
+
+.admin-hint code {
+  background: rgba(26, 110, 181, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
 @media screen and (max-width: 480px) {
   .upload-box {
     padding: 12px;
@@ -331,12 +339,10 @@
     margin-top: 2px;
   }
 
-  /* Changes file description text string to tap instructions for standard phones */
   .drop-content span {
     font-size: 12px;
   }
 
-  /* Stack file details and operational link items vertically to eliminate truncation */
   .uploaded-info {
     flex-direction: column;
     align-items: stretch;
@@ -345,7 +351,7 @@
   }
 
   .renamed-name {
-    white-space: normal; /* Wraps file name safely instead of clipping off screen */
+    white-space: normal;
     word-break: break-all;
   }
 
@@ -357,7 +363,7 @@
 
   .view-link,
   .re-upload-btn {
-    flex: 1; /* Stretches actions evenly across screen width for easy thumb reach */
+    flex: 1;
     text-align: center;
     justify-content: center;
     padding: 6px 8px;
