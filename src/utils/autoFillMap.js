@@ -10,6 +10,8 @@ const SOURCE_LABELS = {
   gre:        'GRE Scorecard',
   ielts:      'IELTS Report',
   toefl:      'TOEFL Report',
+  gmat:       'GMAT Scorecard',
+  pte:        'PTE Scorecard',
   duolingo:   'Duolingo Certificate',
   i20:        'I-20 / Admission Letter',
   visa_letter:'Visa Letter',
@@ -20,22 +22,32 @@ export function getDocSourceLabel(type) {
   return SOURCE_LABELS[type] || type;
 }
 
+// Splits an OCR'd full name into first/last — everything after the first
+// space is treated as the last name, matching how most ID documents print names.
+function splitName(fullName) {
+  const trimmed = (fullName || '').trim().replace(/\s+/g, ' ');
+  if (!trimmed) return { firstName: '', lastName: '' };
+  const idx = trimmed.indexOf(' ');
+  if (idx === -1) return { firstName: trimmed, lastName: '' };
+  return { firstName: trimmed.slice(0, idx), lastName: trimmed.slice(idx + 1) };
+}
+
 export function extractPersonalAutoFill(type, fields) {
   const result = {};
 
   switch (type) {
     case 'aadhaar':
-      if (fields['Name'])    result.fullName = fields['Name'];
+      if (fields['Name']) { const { firstName, lastName } = splitName(fields['Name']); if (firstName) result.firstName = firstName; if (lastName) result.lastName = lastName; }
       if (fields['Address']) { result.currentAddress = fields['Address']; result.permanentAddress = fields['Address']; }
       break;
 
     case 'pan':
-      if (fields['Name'])           result.fullName   = fields['Name'];
+      if (fields['Name']) { const { firstName, lastName } = splitName(fields['Name']); if (firstName) result.firstName = firstName; if (lastName) result.lastName = lastName; }
       if (fields["Father's Name"])  result.fatherName = fields["Father's Name"];
       break;
 
     case 'passport':
-      if (fields['Name']) result.fullName = fields['Name'];
+      if (fields['Name']) { const { firstName, lastName } = splitName(fields['Name']); if (firstName) result.firstName = firstName; if (lastName) result.lastName = lastName; }
       break;
 
     case '10th':
@@ -68,6 +80,7 @@ export function extractPersonalAutoFill(type, fields) {
       }
       if (fields['Year of Passing']) { result.pctGradYear = fields['Year of Passing']; result.qualYear = fields['Year of Passing']; }
       if (fields['Degree']) result.qualName = fields['Degree'].replace(/\s+in\s+.*$/i, '').trim().slice(0, 40);
+      if (fields['Board / University'] || fields['University']) result.qualInstitution = fields['Board / University'] || fields['University'];
       break;
     }
 
@@ -82,6 +95,14 @@ export function extractPersonalAutoFill(type, fields) {
 
     case 'toefl':
       if (fields['Score'] !== undefined) result.toeflScore = String(fields['Score']);
+      break;
+
+    case 'gmat':
+      if (fields['Score'] !== undefined) result.gmatScore = String(fields['Score']);
+      break;
+
+    case 'pte':
+      if (fields['Score'] !== undefined) result.pteScore = String(fields['Score']);
       break;
 
     case 'duolingo':
@@ -114,7 +135,11 @@ export function extractPersonalAutoFill(type, fields) {
 export function extractCoApplicantAutoFill(type, fields) {
   const result = {};
   if (type === 'aadhaar' || type === 'pan') {
-    if (fields['Name']) result.name = fields['Name'];
+    if (fields['Name']) {
+      const { firstName, lastName } = splitName(fields['Name']);
+      if (firstName) result.firstName = firstName;
+      if (lastName) result.lastName = lastName;
+    }
   }
   if (type === 'aadhaar' && fields['Address']) {
     result.currentAddress   = fields['Address'];

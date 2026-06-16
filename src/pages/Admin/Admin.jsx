@@ -108,8 +108,11 @@ function getMissingDocs(s) {
     const coUploads = uploads[`co_${i}`] || {};
     const empType = s.personalInfo?.[`co_info_${i}`]?.empType || "salaried";
     const coFields = CO_APPLICANT_SCHEMA[empType] || CO_APPLICANT_SCHEMA.other;
+    const coInfoForName = s.personalInfo?.[`co_info_${i}`] || {};
     const coName =
-      s.personalInfo?.[`co_info_${i}`]?.name || `Co-Applicant ${i + 1}`;
+      [coInfoForName.firstName, coInfoForName.lastName].filter(Boolean).join(" ") ||
+      coInfoForName.name ||
+      `Co-Applicant ${i + 1}`;
 
     coFields.forEach((f) => {
       if (!coUploads[f.id]) {
@@ -156,6 +159,8 @@ const GRE_T      = { excellent: 325, good: 310, fair: 290, min: 260  };
 const IELTS_T    = { excellent: 8.0, good: 7.0, fair: 6.0, min: 0   };
 const TOEFL_T    = { excellent: 110, good: 100, fair: 80,  min: 0   };
 const DUOLINGO_T = { excellent: 131, good: 110, fair: 90,  min: 10  };
+const GMAT_T     = { excellent: 700, good: 600, fair: 500, min: 200 };
+const PTE_T      = { excellent: 79,  good: 65,  fair: 50,  min: 10  };
 
 const ACAD_LABELS = ["Low", "Average", "Good", "Excellent"];
 const CIBIL_LABELS = ["Poor", "Fair", "Good", "Excellent"];
@@ -195,7 +200,8 @@ function assessLoanEligibility(student) {
   const coCount = student.coApplicants || 0;
   for (let i = 0; i < coCount; i++) {
     const co = p[`co_info_${i}`] || {};
-    if (co.cibil) scores.push({ label: co.name || `Co-App ${i + 1}`, score: parseInt(co.cibil), role: "co" });
+    const coLabel = [co.firstName, co.lastName].filter(Boolean).join(" ") || co.name || `Co-App ${i + 1}`;
+    if (co.cibil) scores.push({ label: coLabel, score: parseInt(co.cibil), role: "co" });
   }
 
   const validScores = scores.filter((s) => s.score >= 300 && s.score <= 900);
@@ -490,10 +496,11 @@ function ReportModal({ student, onClose }) {
             </div>
 
             {/* Qualification meta */}
-            {(p.qualName || p.marital || p.hasBacklogs) && (
+            {(p.qualName || p.marital || p.hasBacklogs || p.qualInstitution) && (
               <div className="rpt-grid-2" style={{ marginBottom: 4 }}>
                 {p.qualName && <InfoPair label="Qualification" value={`${p.qualName}${p.qualYear ? ` (${p.qualYear})` : ""}`} />}
-                {p.marital   && <InfoPair label="Marital Status" value={p.marital} />}
+                {p.qualInstitution && <InfoPair label="Institution" value={p.qualInstitution} />}
+                {p.marital   && <InfoPair label="Marital Status" value={p.marital === "Yes" ? "Married" : p.marital === "No" ? "Unmarried" : p.marital} />}
                 {p.hasBacklogs === "Yes" && (
                   <InfoPair label="Backlogs" value={`Yes — ${p.backlogCount || "?"} backlog(s)`} />
                 )}
@@ -546,7 +553,7 @@ function ReportModal({ student, onClose }) {
             )}
 
             {/* Test scores */}
-            {(p.greScore || p.ieltsScore || p.toeflScore || p.duolingoScore) && (
+            {(p.greScore || p.ieltsScore || p.toeflScore || p.duolingoScore || p.gmatScore || p.pteScore) && (
               <>
                 <div className="rpt-section-title" style={{ marginTop: 6, fontSize: 10 }}>
                   <Star size={11} /> Standardized Test Scores
@@ -563,6 +570,14 @@ function ReportModal({ student, onClose }) {
                   {p.toeflScore && (
                     <ScoreBar label="TOEFL" rawValue={p.toeflScore} displayValue={p.toeflScore}
                       thresholds={TOEFL_T} rangeMin={0} rangeMax={120} />
+                  )}
+                  {p.gmatScore && (
+                    <ScoreBar label="GMAT" rawValue={p.gmatScore} displayValue={p.gmatScore}
+                      thresholds={GMAT_T} rangeMin={200} rangeMax={800} />
+                  )}
+                  {p.pteScore && (
+                    <ScoreBar label="PTE" rawValue={p.pteScore} displayValue={p.pteScore}
+                      thresholds={PTE_T} rangeMin={10} rangeMax={90} />
                   )}
                   {p.duolingoScore && (
                     <ScoreBar label="Duolingo" rawValue={p.duolingoScore} displayValue={p.duolingoScore}
@@ -585,6 +600,7 @@ function ReportModal({ student, onClose }) {
               <Building2 size={13} /> University & Visa
             </div>
             <div className="rpt-grid-2">
+              <InfoPair label="Destination Country" value={p.destinationCountry} />
               <InfoPair label="Target University" value={p.targetUniversity} />
               <InfoPair label="Course" value={p.courseNameUniversity} />
               <InfoPair label="I20 Received" value={p.i20Received} />
@@ -615,7 +631,8 @@ function ReportModal({ student, onClose }) {
               </div>
               <div className="rpt-co-list">
                 {coApplicants.map(({ idx, info, uploads: coUploads }) => {
-                  if (!info.name) return null;
+                  const coDisplayName = [info.firstName, info.lastName].filter(Boolean).join(" ") || info.name || "";
+                  if (!coDisplayName) return null;
                   const uploadCount = Object.keys(coUploads).length;
                   const empType = info.empType || "salaried";
                   const fields = info.financialStatus === "non-financial"
@@ -627,7 +644,7 @@ function ReportModal({ student, onClose }) {
                       <div className="rpt-co-header">
                         <div className="co-avatar"><UsersIcon size={13} /></div>
                         <div className="rpt-co-info">
-                          <span className="rpt-co-name">{info.name}</span>
+                          <span className="rpt-co-name">{coDisplayName}</span>
                           <span className="rpt-co-meta">
                             {info.relation || "N/A"} ·{" "}
                             {info.financialStatus === "non-financial" ? "Non-Financial" : info.empType || "Salaried"}
@@ -640,6 +657,8 @@ function ReportModal({ student, onClose }) {
                       </div>
                       <div className="rpt-co-details">
                         {info.mobile && <span>{info.mobile}</span>}
+                        {info.occupation && <span>{info.occupation}</span>}
+                        {info.annualIncome && <span>₹{Number(info.annualIncome).toLocaleString("en-IN")}/yr</span>}
                         {info.qualifications && <span>{info.qualifications}</span>}
                         {info.dependants && <span>{info.dependants} dependants</span>}
                       </div>
@@ -673,13 +692,14 @@ function ReportModal({ student, onClose }) {
                 );
               })}
               {coApplicants.map(({ idx, info, uploads: coUploads }) => {
+                const coDisplayName = [info.firstName, info.lastName].filter(Boolean).join(" ") || info.name || "";
                 const empType = info.financialStatus === "non-financial" ? "non-financial" : (info.empType || "salaried");
                 const fields = empType === "non-financial" ? 3 : (CO_APPLICANT_SCHEMA[empType] || CO_APPLICANT_SCHEMA.other).length;
                 const count = Object.keys(coUploads).length;
                 const pct = fields ? Math.min(100, Math.round((count / fields) * 100)) : 0;
                 return (
                   <div key={idx} className="rpt-doc-row">
-                    <span className="rpt-doc-label">{info.name || `Co-App ${idx + 1}`}</span>
+                    <span className="rpt-doc-label">{coDisplayName || `Co-App ${idx + 1}`}</span>
                     <div className="rpt-doc-track">
                       <div className={`rpt-doc-fill ${getProgressClass(pct)}`} style={{ width: `${pct}%` }} />
                     </div>
@@ -699,16 +719,19 @@ function ReportModal({ student, onClose }) {
 
 function PersonalTab({ student }) {
   const p = student.personalInfo || {};
+  const fullName = [p.firstName, p.lastName].filter(Boolean).join(" ") || p.fullName || student.name;
   const fields = [
-    { label: "Full Name", value: p.fullName || student.name },
+    { label: "Full Name", value: fullName },
     { label: "Email", value: student.email || p.email },
     { label: "Phone", value: student.phone || p.phone },
-    { label: "Marital Status", value: p.marital },
+    { label: "Marital Status", value: p.marital === "Yes" ? "Married" : p.marital === "No" ? "Unmarried" : p.marital },
     { label: "Loan Amount", value: p.loanAmount ? `₹${Number(p.loanAmount).toLocaleString("en-IN")}` : null },
     { label: "10th %", value: p.pct10Score ? `${p.pct10Score}%${p.pct10Year ? ` (${p.pct10Year})` : ""}` : p.pct10 },
     { label: "12th %", value: p.pct12Score ? `${p.pct12Score}%${p.pct12Year ? ` (${p.pct12Year})` : ""}` : p.pct12 },
     { label: "Grad % / CGPA", value: p.pctGradScore ? `${p.pctGradScore}${p.pctGradType === "cgpa" ? " CGPA" : "%"}` : p.pctGrad },
+    { label: "Graduation Institution", value: p.qualInstitution },
     { label: "Student CIBIL", value: p.studentCibil },
+    { label: "Destination Country", value: p.destinationCountry },
     { label: "Target University", value: p.targetUniversity },
     { label: "Current Address", value: p.currentAddress },
     { label: "Permanent Address", value: p.permanentAddress },
@@ -738,12 +761,13 @@ function PersonalTab({ student }) {
           <div className="co-list">
             {Array.from({ length: student.coApplicants }).map((_, idx) => {
               const info = (student.personalInfo || {})[`co_info_${idx}`] || {};
-              if (!info.name) return null;
+              const coDisplayName = [info.firstName, info.lastName].filter(Boolean).join(" ") || info.name || "";
+              if (!coDisplayName) return null;
               return (
                 <div key={idx} className="co-item">
                   <div className="co-avatar"><UsersIcon size={15} /></div>
                   <div className="co-info">
-                    <div className="co-name">{info.name}</div>
+                    <div className="co-name">{coDisplayName}</div>
                     <div className="co-details">{info.relation || "Relation N/A"}</div>
                   </div>
                   {info.empType && <span className="co-type">{info.empType}</span>}

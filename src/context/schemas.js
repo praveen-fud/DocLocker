@@ -51,6 +51,19 @@ export const DOCUMENT_SCHEMA = {
         accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
         optional: true,
       },
+      {
+        id: "resume",
+        label: "Resume",
+        rename: "Resume",
+        accept: ".pdf,.doc,.docx",
+      },
+      {
+        id: "salary_slip_applicant",
+        label: "Last 1 Month Salary Slip (if you are working)",
+        rename: "Salary_Slip_Applicant",
+        accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
+        optional: true,
+      },
     ],
   },
   academics: {
@@ -63,6 +76,7 @@ export const DOCUMENT_SCHEMA = {
         rename: "10th_Marksheet",
         // FIX: was ".pdf,.jpg,.jpeg,.png,doc,.docx" (missing dot before doc)
         accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
+        optional: true,
       },
       {
         id: "marksheet_12",
@@ -169,6 +183,20 @@ export const DOCUMENT_SCHEMA = {
         accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
         optional: true,
       },
+      {
+        id: "gmat_scorecard",
+        label: "GMAT Score Report (optional — auto-fills GMAT score)",
+        rename: "GMAT_Scorecard",
+        accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
+        optional: true,
+      },
+      {
+        id: "pte_scorecard",
+        label: "PTE Score Report (optional — auto-fills PTE score)",
+        rename: "PTE_Scorecard",
+        accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
+        optional: true,
+      },
     ],
   },
 };
@@ -219,9 +247,10 @@ export const CO_APPLICANT_SCHEMA = {
     },
     {
       id: "form16_itr_y3",
-      label: "Form 16 / ITR - Year 3",
+      label: "Form 16 / ITR - Year 3 (optional)",
       rename: "Form16_ITR_Year3",
       accept: ".pdf,.doc,.docx",
+      optional: true,
     },
   ],
   selfEmployed: [
@@ -263,9 +292,10 @@ export const CO_APPLICANT_SCHEMA = {
     },
     {
       id: "itr_y3",
-      label: "ITR Acknowledgement - Year 3",
+      label: "ITR Acknowledgement - Year 3 (optional)",
       rename: "ITR_Year3",
       accept: ".pdf,.doc,.docx,.jpg,.jpeg,.png",
+      optional: true,
     },
     {
       id: "business_proof",
@@ -320,7 +350,7 @@ export function getTotalRequiredFields(coCount = 1, coApplicantsInfo = {}) {
     } else {
       const empType = info.empType || "salaried";
       const schema = CO_APPLICANT_SCHEMA[empType] || CO_APPLICANT_SCHEMA.other;
-      coRequired += schema.length;
+      coRequired += schema.filter((f) => !f.optional).length;
     }
   }
 

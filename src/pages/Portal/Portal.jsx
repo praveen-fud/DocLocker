@@ -139,12 +139,13 @@ export default function Portal() {
             result.parsedData.type,
             result.parsedData.fields || {},
           );
-          if (coAF.name || coAF.currentAddress) {
+          if (coAF.firstName || coAF.lastName || coAF.currentAddress) {
             const infoKey = `co_info_${coIdx}`;
             setPersonalInfo((prev) => {
               const existing = prev[infoKey] || {};
               const patch = { ...existing };
-              if (coAF.name && !existing.name)                       patch.name             = coAF.name;
+              if (coAF.firstName && !existing.firstName)             patch.firstName        = coAF.firstName;
+              if (coAF.lastName && !existing.lastName)               patch.lastName         = coAF.lastName;
               if (coAF.currentAddress && !existing.currentAddress)   patch.currentAddress   = coAF.currentAddress;
               if (coAF.permanentAddress && !existing.permanentAddress) patch.permanentAddress = coAF.permanentAddress;
               return { ...prev, [infoKey]: patch };
@@ -236,7 +237,7 @@ export default function Portal() {
         const coInfo = personalInfo[`co_info_${i}`] || {};
         if (coInfo.financialStatus === "non-financial") return 3;
         const empType = coInfo.empType || "salaried";
-        return (CO_APPLICANT_SCHEMA[empType] || CO_APPLICANT_SCHEMA.other).length;
+        return (CO_APPLICANT_SCHEMA[empType] || CO_APPLICANT_SCHEMA.other).filter((f) => !f.optional).length;
       }).reduce((a, b) => a + b, 0),
       uploaded: Array.from(
         { length: coCount },
@@ -542,23 +543,25 @@ function PersonalAndRefsSection({ info, onChange, autoFilledFields }) {
         <div className="animate-fade-in">
           <h3 className="sub-heading">Identity &amp; Academic Parameters</h3>
           <div className="grid-2">
-            <PersonalField label="Student Full Name" k="fullName" placeholder="As per passport" info={info} onChange={onChange} autoFilledFields={af} />
+            <PersonalField label="First Name" k="firstName" placeholder="As per passport" info={info} onChange={onChange} autoFilledFields={af} />
+            <PersonalField label="Last Name" k="lastName" placeholder="As per passport" info={info} onChange={onChange} autoFilledFields={af} />
             <PersonalField label="Mobile &amp; WhatsApp Number" k="phone" placeholder="+91 XXXXX XXXXX" info={info} onChange={onChange} />
             <PersonalField label="Email Identity Address" k="email" type="email" placeholder="name@example.com" info={info} onChange={onChange} />
             <PersonalField label="Required Loan Amount (₹)" k="loanAmount" placeholder="e.g. 5000000" info={info} onChange={onChange} integerOnly />
             <PersonalField label="Student CIBIL Score" k="studentCibil" placeholder="300 – 900" info={info} onChange={onChange} integerOnly maxVal={900} hint={CIBIL_HINT} autoFilledFields={af} />
 
             <div className={`input-group${af.marital ? " autofill-group" : ""}`}>
-              <label>Marital Status</label>
+              <label>Marital Status — Married?</label>
               <select className="input-field" value={info.marital || ""} onChange={(e) => onChange("marital", e.target.value)}>
                 <option value="">Select</option>
-                <option value="Single">Single</option>
-                <option value="Married">Married</option>
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
               </select>
             </div>
 
             <PersonalField label="Highest Qualification (e.g. B.Tech, MCA)" k="qualName" placeholder="e.g. B.Tech, MCA, MBA" info={info} onChange={onChange} autoFilledFields={af} />
             <YearSelect label="Qualification Passed Out Year" k="qualYear" info={info} onChange={onChange} autoFilledFields={af} />
+            <PersonalField label="Graduation Institution" k="qualInstitution" placeholder="e.g. Anna University" info={info} onChange={onChange} autoFilledFields={af} />
             <PersonalField label="10th Percentage (%)" k="pct10Score" placeholder="e.g. 85.4" info={info} onChange={onChange} numericOnly maxVal={100} autoFilledFields={af} />
             <YearSelect label="10th Passed Out Year" k="pct10Year" info={info} onChange={onChange} autoFilledFields={af} />
             <PersonalField label="Inter / 12th Percentage (%)" k="pct12Score" placeholder="e.g. 82.0" info={info} onChange={onChange} numericOnly maxVal={100} autoFilledFields={af} />
@@ -611,6 +614,8 @@ function PersonalAndRefsSection({ info, onChange, autoFilledFields }) {
             <PersonalField label="IELTS Score (0 – 9)" k="ieltsScore" placeholder="e.g. 7.0" info={info} onChange={onChange} numericOnly maxVal={9} autoFilledFields={af} />
             <PersonalField label="Duolingo Score (10 – 160)" k="duolingoScore" placeholder="e.g. 120" info={info} onChange={onChange} integerOnly maxVal={160} autoFilledFields={af} />
             <PersonalField label="TOEFL Score (0 – 120)" k="toeflScore" placeholder="e.g. 98" info={info} onChange={onChange} integerOnly maxVal={120} autoFilledFields={af} />
+            <PersonalField label="GMAT Score (200 – 800)" k="gmatScore" placeholder="e.g. 650" info={info} onChange={onChange} integerOnly maxVal={800} autoFilledFields={af} />
+            <PersonalField label="PTE Score (10 – 90)" k="pteScore" placeholder="e.g. 65" info={info} onChange={onChange} integerOnly maxVal={90} autoFilledFields={af} />
           </div>
         </div>
       )}
@@ -629,6 +634,7 @@ function PersonalAndRefsSection({ info, onChange, autoFilledFields }) {
               </select>
             </div>
 
+            <PersonalField label="Destination Country" k="destinationCountry" placeholder="e.g. USA" info={info} onChange={onChange} autoFilledFields={af} />
             <PersonalField label="Traveling Country &amp; University" k="targetUniversity" placeholder="e.g. USA - UT Dallas" info={info} onChange={onChange} autoFilledFields={af} />
             <PersonalField label="Course Name &amp; University" k="courseNameUniversity" placeholder="e.g. Computer Science - UTD" info={info} onChange={onChange} autoFilledFields={af} />
 
@@ -889,9 +895,25 @@ function ReferencesContent({ info, onChange }) {
                   />
                 </div>
               )}
-              <div className="input-group" style={{ gridColumn: "1 / -1" }}>
-                <label>Address</label>
-                <textarea className="input-field" rows={2} value={info[`ref${n}_address`] || ""} onChange={(e) => onChange(`ref${n}_address`, e.target.value)} />
+              <div className="input-group">
+                <label>House Number</label>
+                <input className="input-field" value={info[`ref${n}_house_number`] || ""} onChange={(e) => onChange(`ref${n}_house_number`, e.target.value)} />
+              </div>
+              <div className="input-group">
+                <label>Street Name</label>
+                <input className="input-field" value={info[`ref${n}_street_name`] || ""} onChange={(e) => onChange(`ref${n}_street_name`, e.target.value)} />
+              </div>
+              <div className="input-group">
+                <label>City</label>
+                <input className="input-field" value={info[`ref${n}_city`] || ""} onChange={(e) => onChange(`ref${n}_city`, e.target.value)} />
+              </div>
+              <div className="input-group">
+                <label>State</label>
+                <input className="input-field" value={info[`ref${n}_state`] || ""} onChange={(e) => onChange(`ref${n}_state`, e.target.value)} />
+              </div>
+              <div className="input-group">
+                <label>Pincode</label>
+                <input className="input-field" inputMode="numeric" value={info[`ref${n}_pincode`] || ""} onChange={(e) => onChange(`ref${n}_pincode`, e.target.value.replace(/[^0-9]/g, "").slice(0, 6))} />
               </div>
             </div>
           </div>
@@ -973,6 +995,7 @@ function LoanSection({ studentName, studentIdentifier, coCount, setCoCount, uplo
         }
 
         const coUploads = uploads[key] || {};
+        const coDisplayName = [coInfo.firstName, coInfo.lastName].filter(Boolean).join(" ") || coInfo.name || "";
 
         return (
           <div key={i} className="co-card">
@@ -986,7 +1009,7 @@ function LoanSection({ studentName, studentIdentifier, coCount, setCoCount, uplo
                 <span className="co-label">
                   ({financialStatus === "financial" ? "Financial" : "Non-Financial"})
                 </span>
-                {coInfo.name && <span className="co-name">{coInfo.name}</span>}
+                {coDisplayName && <span className="co-name">{coDisplayName}</span>}
               </div>
               <div className="co-header-right">
                 <span className="badge badge-info">{Object.keys(coUploads).length}/{fields.length} files</span>
@@ -1042,7 +1065,7 @@ function LoanSection({ studentName, studentIdentifier, coCount, setCoCount, uplo
                         key={field.id}
                         field={{
                           ...field,
-                          rename: `Co${i + 1}_${coInfo.name?.replace(/\s+/g, "_") || `Applicant${i + 1}`}_${statusSlug}_${field.rename}`,
+                          rename: `Co${i + 1}_${coDisplayName.replace(/\s+/g, "_") || `Applicant${i + 1}`}_${statusSlug}_${field.rename}`,
                         }}
                         studentName={studentName}
                         studentIdentifier={studentIdentifier}
@@ -1058,14 +1081,47 @@ function LoanSection({ studentName, studentIdentifier, coCount, setCoCount, uplo
                 <h4 className="sub-heading" style={{ marginBottom: 12 }}>Co-Applicant Details</h4>
                 <div className="grid-2">
                   <div className="input-group">
-                    <label>Full Name</label>
+                    <label>First Name</label>
                     <input
                       className="input-field"
-                      placeholder="Co-applicant name"
-                      value={coInfo.name || ""}
-                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, name: e.target.value })}
+                      placeholder="Co-applicant first name"
+                      value={coInfo.firstName || ""}
+                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, firstName: e.target.value })}
                     />
                   </div>
+                  <div className="input-group">
+                    <label>Last Name</label>
+                    <input
+                      className="input-field"
+                      placeholder="Co-applicant last name"
+                      value={coInfo.lastName || ""}
+                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, lastName: e.target.value })}
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label>Occupation</label>
+                    <input
+                      className="input-field"
+                      placeholder="e.g. Software Engineer"
+                      value={coInfo.occupation || ""}
+                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, occupation: e.target.value })}
+                    />
+                  </div>
+                  {financialStatus !== "non-financial" && (
+                    <div className="input-group">
+                      <label>Annual Income (₹)</label>
+                      <input
+                        className="input-field"
+                        inputMode="numeric"
+                        placeholder="e.g. 600000"
+                        value={coInfo.annualIncome || ""}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9]/g, "");
+                          onInfoChange(infoKey, { ...coInfo, annualIncome: val });
+                        }}
+                      />
+                    </div>
+                  )}
                   <div className="input-group">
                     <label>Relation to Student</label>
                     <select

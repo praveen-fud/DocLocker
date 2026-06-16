@@ -28,6 +28,12 @@ function _doGeneratePdf(studentName, studentData, studentIdentifier, uploadedDoc
 
     // ── helpers ────────────────────────────────────────────────────────────
     const v = (val) => val || '<span class="empty">—</span>';
+    const fullName = [p.firstName, p.lastName].filter(Boolean).join(" ") || p.fullName || studentName;
+    const coName = (c) => [c.firstName, c.lastName].filter(Boolean).join(" ") || c.name || "";
+    const refAddress = (n) => {
+      const parts = [p[`ref${n}_house_number`], p[`ref${n}_street_name`], p[`ref${n}_city`], p[`ref${n}_state`], p[`ref${n}_pincode`]].filter(Boolean);
+      return parts.length ? parts.join(", ") : p[`ref${n}_address`];
+    };
 
     const row = (label, value) => `
       <tr>
@@ -46,11 +52,11 @@ function _doGeneratePdf(studentName, studentData, studentIdentifier, uploadedDoc
       "Student Identity",
       "#1e40af",
       [
-        row("Full Name", p.fullName || studentName),
+        row("Full Name", fullName),
         row("Finance Advisor", studentData.advisor),
         row("Email", studentData.email || p.email),
         row("Phone", studentData.phone || p.phone),
-        row("Marital Status", p.marital),
+        row("Marital Status", p.marital === "Yes" ? "Married" : p.marital === "No" ? "Unmarried" : p.marital),
         row("Applied For", p.loanTrack),
         row(
           "Loan Amount",
@@ -92,6 +98,7 @@ function _doGeneratePdf(studentName, studentData, studentIdentifier, uploadedDoc
             ? `${p.pctGradScore} ${p.pctGradType === "cgpa" ? "CGPA" : "%"}${p.pctGradYear ? ` — ${p.pctGradYear}` : ""}`
             : p.pctGrad,
         ),
+        row("Graduation Institution", p.qualInstitution),
         row(
           "Backlogs",
           p.hasBacklogs === "Yes"
@@ -101,6 +108,8 @@ function _doGeneratePdf(studentName, studentData, studentIdentifier, uploadedDoc
         row("GRE Score", p.greScore),
         row("IELTS Score", p.ieltsScore),
         row("TOEFL Score", p.toeflScore),
+        row("GMAT Score", p.gmatScore),
+        row("PTE Score", p.pteScore),
         row("Duolingo Score", p.duolingoScore),
       ].join(""),
     );
@@ -109,6 +118,7 @@ function _doGeneratePdf(studentName, studentData, studentIdentifier, uploadedDoc
       "University & Visa",
       "#7c3aed",
       [
+        row("Destination Country", p.destinationCountry),
         row("Target University", p.targetUniversity),
         row("Course", p.courseNameUniversity),
         row("I20 Received", p.i20Received),
@@ -176,7 +186,7 @@ function _doGeneratePdf(studentName, studentData, studentIdentifier, uploadedDoc
             ? p.ref1_custom_relation
             : p.ref1_relation,
         ),
-        row("Ref 1 — Address", p.ref1_address),
+        row("Ref 1 — Address", refAddress(1)),
         row("Ref 2 — Name", p.ref2_name),
         row("Ref 2 — Mobile", p.ref2_mobile),
         row("Ref 2 — Occupation", p.ref2_occupation),
@@ -186,7 +196,7 @@ function _doGeneratePdf(studentName, studentData, studentIdentifier, uploadedDoc
             ? p.ref2_custom_relation
             : p.ref2_relation,
         ),
-        row("Ref 2 — Address", p.ref2_address),
+        row("Ref 2 — Address", refAddress(2)),
       ].join(""),
     );
 
@@ -194,8 +204,9 @@ function _doGeneratePdf(studentName, studentData, studentIdentifier, uploadedDoc
     let coSections = "";
     for (let i = 0; i < co; i++) {
       const c = p[`co_info_${i}`] || {};
-      const label = c.name
-        ? `Co-Applicant ${i + 1} — ${c.name}`
+      const cName = coName(c);
+      const label = cName
+        ? `Co-Applicant ${i + 1} — ${cName}`
         : `Co-Applicant ${i + 1}`;
       const status =
         c.financialStatus === "non-financial" ? "Non-Financial" : "Financial";
@@ -203,10 +214,12 @@ function _doGeneratePdf(studentName, studentData, studentIdentifier, uploadedDoc
         label,
         "#1d4ed8",
         [
-          row("Full Name", c.name),
+          row("Full Name", cName),
           row("Relation", c.relation),
           row("Mobile", c.mobile),
           row("Email", c.email),
+          row("Occupation", c.occupation),
+          row("Annual Income", c.annualIncome ? "₹" + Number(c.annualIncome).toLocaleString("en-IN") : ""),
           row("Financial Status", status),
           row("Employment Type", c.empType),
           row("Qualifications", c.qualifications),
@@ -323,7 +336,7 @@ function _doGeneratePdf(studentName, studentData, studentIdentifier, uploadedDoc
     <tr>
       <td class="cover-cell">
         <div class="clabel">Student Name</div>
-        <div class="cval">${p.fullName || studentName}</div>
+        <div class="cval">${fullName}</div>
       </td>
       <td class="cover-cell">
         <div class="clabel">Generated On</div>
