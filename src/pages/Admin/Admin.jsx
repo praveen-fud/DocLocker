@@ -1313,6 +1313,7 @@ export default function Admin() {
   const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [advisorFilter, setAdvisorFilter] = useState("all");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [expandedIdx, setExpandedIdx] = useState(null);
@@ -1378,8 +1379,13 @@ export default function Admin() {
     notStarted: students.filter((s) => getOverallProgress(s) === 0).length,
   };
 
+  const advisorList = Array.from(
+    new Set(students.map((s) => s.advisor).filter(Boolean)),
+  ).sort();
+
   const filtered = students.filter((s) => {
     if (adminRole === "advisor" && s.advisor !== adminAdvisorName) return false;
+    if (adminRole !== "advisor" && advisorFilter !== "all" && s.advisor !== advisorFilter) return false;
     const q = search.toLowerCase();
     const matchesSearch =
       !search ||
@@ -1479,6 +1485,19 @@ export default function Admin() {
               </button>
             ))}
           </div>
+
+          {adminRole !== "advisor" && advisorList.length > 0 && (
+            <select
+              className="advisor-filter-select"
+              value={advisorFilter}
+              onChange={(e) => setAdvisorFilter(e.target.value)}
+            >
+              <option value="all">All Advisors</option>
+              {advisorList.map((a) => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* Error banner */}
