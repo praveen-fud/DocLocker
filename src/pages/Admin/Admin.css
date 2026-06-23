@@ -259,13 +259,18 @@
 .stat-card {
   position: relative;
   overflow: hidden;
+  width: 100%;
   padding: 22px 20px;
   border-radius: var(--radius-lg);
   background: var(--bg-surface);
   border: 1px solid var(--border-dim);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  cursor: default;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
   transition:
     transform 0.2s ease,
     border-color 0.2s ease,
@@ -275,6 +280,17 @@
   transform: translateY(-3px);
   box-shadow: var(--shadow-card);
 }
+.stat-card:active {
+  transform: translateY(-1px);
+}
+
+.stat-card.stat-active {
+  border-width: 1.5px;
+}
+.stat-card.stat-active.stat-blue   { border-color: var(--blue);   box-shadow: 0 0 0 3px rgba(26, 110, 181, 0.12); }
+.stat-card.stat-active.stat-green  { border-color: var(--green);  box-shadow: 0 0 0 3px rgba(34, 211, 174, 0.12); }
+.stat-card.stat-active.stat-yellow { border-color: var(--amber);  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.12); }
+.stat-card.stat-active.stat-red    { border-color: var(--red);    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12); }
 
 .stat-card::after {
   content: "";

@@ -265,9 +265,13 @@ function assessLoanEligibility(student) {
 
 /* ─── Sub-components ───────────────────────────────────────────── */
 
-function StatCard({ label, value, icon, color }) {
+function StatCard({ label, value, icon, color, active, onClick }) {
   return (
-    <div className={`stat-card stat-${color}`}>
+    <button
+      type="button"
+      className={`stat-card stat-${color}${active ? " stat-active" : ""}`}
+      onClick={onClick}
+    >
       <div className="stat-top">
         <div className="stat-icon-wrap">{icon}</div>
         <span className="stat-trend">
@@ -276,7 +280,7 @@ function StatCard({ label, value, icon, color }) {
       </div>
       <div className="stat-value">{value}</div>
       <div className="stat-label">{label}</div>
-    </div>
+    </button>
   );
 }
 
@@ -1372,20 +1376,27 @@ export default function Admin() {
     if (url) window.open(url, "_blank");
   };
 
+  // Advisor scope applies everywhere on the dashboard — stats, list, everything.
+  // Advisors are locked to their own students; superadmins can narrow via advisorFilter.
+  const scopedStudents = students.filter((s) => {
+    if (adminRole === "advisor") return s.advisor === adminAdvisorName;
+    if (advisorFilter !== "all") return s.advisor === advisorFilter;
+    return true;
+  });
+
   const stats = {
-    total: students.length,
-    complete: students.filter((s) => getOverallProgress(s) === 100).length,
-    inProgress: students.filter((s) => { const p = getOverallProgress(s); return p > 0 && p < 100; }).length,
-    notStarted: students.filter((s) => getOverallProgress(s) === 0).length,
+    total: scopedStudents.length,
+    complete: scopedStudents.filter((s) => getOverallProgress(s) === 100).length,
+    inProgress: scopedStudents.filter((s) => { const p = getOverallProgress(s); return p > 0 && p < 100; }).length,
+    notStarted: scopedStudents.filter((s) => getOverallProgress(s) === 0).length,
   };
 
+  // Advisor dropdown options always list every advisor, regardless of current scope.
   const advisorList = Array.from(
     new Set(students.map((s) => s.advisor).filter(Boolean)),
   ).sort();
 
-  const filtered = students.filter((s) => {
-    if (adminRole === "advisor" && s.advisor !== adminAdvisorName) return false;
-    if (adminRole !== "advisor" && advisorFilter !== "all" && s.advisor !== advisorFilter) return false;
+  const filtered = scopedStudents.filter((s) => {
     const q = search.toLowerCase();
     const matchesSearch =
       !search ||
@@ -1448,10 +1459,10 @@ export default function Admin() {
 
         {/* Stats */}
         <div className="admin-stats animate-fade-in">
-          <StatCard label="Total Students" value={stats.total} icon={<Building2 size={18} />} color="blue" />
-          <StatCard label="Completed" value={stats.complete} icon={<CheckCircle size={18} />} color="green" />
-          <StatCard label="In Progress" value={stats.inProgress} icon={<TrendingUp size={18} />} color="yellow" />
-          <StatCard label="Not Started" value={stats.notStarted} icon={<Clock size={18} />} color="red" />
+          <StatCard label="Total Students" value={stats.total} icon={<Building2 size={18} />} color="blue" active={filter === "all"} onClick={() => setFilter("all")} />
+          <StatCard label="Completed" value={stats.complete} icon={<CheckCircle size={18} />} color="green" active={filter === "complete"} onClick={() => setFilter("complete")} />
+          <StatCard label="In Progress" value={stats.inProgress} icon={<TrendingUp size={18} />} color="yellow" active={filter === "progress"} onClick={() => setFilter("progress")} />
+          <StatCard label="Not Started" value={stats.notStarted} icon={<Clock size={18} />} color="red" active={filter === "notStarted"} onClick={() => setFilter("notStarted")} />
         </div>
 
         {/* Toolbar */}
