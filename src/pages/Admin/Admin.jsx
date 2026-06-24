@@ -178,9 +178,12 @@ function scoreAcademics(p) {
     if (cls === "cibil-poor")      return 0;
     return null;
   };
+  // "marks" totals vary by board (out of 500/600/etc) and aren't comparable on a
+  // fixed scale, so they're excluded from the strength score. "points" (0-10) maps
+  // onto the same scale as CGPA.
   [
-    rate(p.pct10Score,   PCT_T),
-    rate(p.pct12Score,   PCT_T),
+    p.pct10Type === "marks" ? null : rate(p.pct10Score, p.pct10Type === "points" ? CGPA_T : PCT_T),
+    p.pct12Type === "marks" ? null : rate(p.pct12Score, p.pct12Type === "points" ? CGPA_T : PCT_T),
     rate(p.pctGradScore, p.pctGradType === "cgpa" ? CGPA_T : PCT_T),
   ].forEach((v) => { if (v !== null) { points += v; count++; } });
   return count > 0 ? points / count : null; // null = no data
@@ -519,22 +522,30 @@ function ReportModal({ student, onClose }) {
                 </div>
                 <div className="cibil-list">
                   {p.pct10Score && (
-                    <ScoreBar
-                      label={`10th${p.pct10Year ? ` (${p.pct10Year})` : ""}`}
-                      rawValue={p.pct10Score}
-                      displayValue={`${p.pct10Score}%`}
-                      thresholds={PCT_T}
-                      rangeMin={0} rangeMax={100}
-                    />
+                    p.pct10Type === "marks" ? (
+                      <InfoPair label={`10th${p.pct10Year ? ` (${p.pct10Year})` : ""}`} value={`${p.pct10Score} Marks`} />
+                    ) : (
+                      <ScoreBar
+                        label={`10th${p.pct10Year ? ` (${p.pct10Year})` : ""}`}
+                        rawValue={p.pct10Score}
+                        displayValue={p.pct10Type === "points" ? `${p.pct10Score} Points` : `${p.pct10Score}%`}
+                        thresholds={p.pct10Type === "points" ? CGPA_T : PCT_T}
+                        rangeMin={0} rangeMax={p.pct10Type === "points" ? 10 : 100}
+                      />
+                    )
                   )}
                   {p.pct12Score && (
-                    <ScoreBar
-                      label={`12th${p.pct12Year ? ` (${p.pct12Year})` : ""}`}
-                      rawValue={p.pct12Score}
-                      displayValue={`${p.pct12Score}%`}
-                      thresholds={PCT_T}
-                      rangeMin={0} rangeMax={100}
-                    />
+                    p.pct12Type === "marks" ? (
+                      <InfoPair label={`12th${p.pct12Year ? ` (${p.pct12Year})` : ""}`} value={`${p.pct12Score} Marks`} />
+                    ) : (
+                      <ScoreBar
+                        label={`12th${p.pct12Year ? ` (${p.pct12Year})` : ""}`}
+                        rawValue={p.pct12Score}
+                        displayValue={p.pct12Type === "points" ? `${p.pct12Score} Points` : `${p.pct12Score}%`}
+                        thresholds={p.pct12Type === "points" ? CGPA_T : PCT_T}
+                        rangeMin={0} rangeMax={p.pct12Type === "points" ? 10 : 100}
+                      />
+                    )
                   )}
                   {p.pctGradScore && (
                     <ScoreBar
@@ -730,8 +741,8 @@ function PersonalTab({ student }) {
     { label: "Phone", value: student.phone || p.phone },
     { label: "Marital Status", value: p.marital === "Yes" ? "Married" : p.marital === "No" ? "Unmarried" : p.marital },
     { label: "Loan Amount", value: p.loanAmount ? `₹${Number(p.loanAmount).toLocaleString("en-IN")}` : null },
-    { label: "10th %", value: p.pct10Score ? `${p.pct10Score}%${p.pct10Year ? ` (${p.pct10Year})` : ""}` : p.pct10 },
-    { label: "12th %", value: p.pct12Score ? `${p.pct12Score}%${p.pct12Year ? ` (${p.pct12Year})` : ""}` : p.pct12 },
+    { label: "10th Score", value: p.pct10Score ? `${p.pct10Score}${p.pct10Type === "marks" ? " Marks" : p.pct10Type === "points" ? " Points" : "%"}${p.pct10Year ? ` (${p.pct10Year})` : ""}` : p.pct10 },
+    { label: "12th Score", value: p.pct12Score ? `${p.pct12Score}${p.pct12Type === "marks" ? " Marks" : p.pct12Type === "points" ? " Points" : "%"}${p.pct12Year ? ` (${p.pct12Year})` : ""}` : p.pct12 },
     { label: "Grad % / CGPA", value: p.pctGradScore ? `${p.pctGradScore}${p.pctGradType === "cgpa" ? " CGPA" : "%"}` : p.pctGrad },
     { label: "Graduation Institution", value: p.qualInstitution },
     { label: "Student CIBIL", value: p.studentCibil },

@@ -307,7 +307,9 @@
   padding: 1px 7px;
   margin-left: 6px;
   vertical-align: middle;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
+  max-width: 100%;
 }
 
 .autofill-summary {

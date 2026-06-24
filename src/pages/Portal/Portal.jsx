@@ -521,7 +521,7 @@ function PersonalAndRefsSection({ info, onChange, autoFilledFields }) {
         )}
       </div>
 
-      <div className="sub-step-navigator" style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+      <div className="sub-step-navigator" style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
         {STEP_LABELS.map((lbl, idx) => {
           const stepNum = idx + 1;
           return (
@@ -529,7 +529,7 @@ function PersonalAndRefsSection({ info, onChange, autoFilledFields }) {
               key={stepNum}
               type="button"
               className={`btn btn-sm ${subStep === stepNum ? "btn-primary" : "btn-secondary"}`}
-              style={{ flex: 1 }}
+              style={{ flex: "1 1 80px", minWidth: 0, whiteSpace: "normal" }}
               onClick={() => setSubStep(stepNum)}
             >
               {lbl}
@@ -562,9 +562,52 @@ function PersonalAndRefsSection({ info, onChange, autoFilledFields }) {
             <PersonalField label="Highest Qualification (e.g. B.Tech, MCA)" k="qualName" placeholder="e.g. B.Tech, MCA, MBA" info={info} onChange={onChange} autoFilledFields={af} />
             <YearSelect label="Qualification Passed Out Year" k="qualYear" info={info} onChange={onChange} autoFilledFields={af} />
             <PersonalField label="Graduation Institution" k="qualInstitution" placeholder="e.g. Anna University" info={info} onChange={onChange} autoFilledFields={af} />
-            <PersonalField label="10th Percentage (%)" k="pct10Score" placeholder="e.g. 85.4" info={info} onChange={onChange} numericOnly maxVal={100} autoFilledFields={af} />
+            <div className="input-group">
+              <label>10th Score Type</label>
+              <select
+                className="input-field"
+                value={info.pct10Type || "percentage"}
+                onChange={(e) => onChange("pct10Type", e.target.value)}
+              >
+                <option value="percentage">Percentage (%)</option>
+                <option value="marks">Marks</option>
+                <option value="points">Points (0 – 10)</option>
+              </select>
+            </div>
+            <PersonalField
+              label={info.pct10Type === "marks" ? "10th Marks" : info.pct10Type === "points" ? "10th Points (0 – 10)" : "10th Percentage (%)"}
+              k="pct10Score"
+              placeholder={info.pct10Type === "marks" ? "e.g. 450" : info.pct10Type === "points" ? "e.g. 8.5" : "e.g. 85.4"}
+              info={info}
+              onChange={onChange}
+              numericOnly
+              maxVal={info.pct10Type === "marks" ? undefined : info.pct10Type === "points" ? 10 : 100}
+              autoFilledFields={af}
+            />
             <YearSelect label="10th Passed Out Year" k="pct10Year" info={info} onChange={onChange} autoFilledFields={af} />
-            <PersonalField label="Inter / 12th Percentage (%)" k="pct12Score" placeholder="e.g. 82.0" info={info} onChange={onChange} numericOnly maxVal={100} autoFilledFields={af} />
+
+            <div className="input-group">
+              <label>12th Score Type</label>
+              <select
+                className="input-field"
+                value={info.pct12Type || "percentage"}
+                onChange={(e) => onChange("pct12Type", e.target.value)}
+              >
+                <option value="percentage">Percentage (%)</option>
+                <option value="marks">Marks</option>
+                <option value="points">Points (0 – 10)</option>
+              </select>
+            </div>
+            <PersonalField
+              label={info.pct12Type === "marks" ? "12th / Inter Marks" : info.pct12Type === "points" ? "12th / Inter Points (0 – 10)" : "Inter / 12th Percentage (%)"}
+              k="pct12Score"
+              placeholder={info.pct12Type === "marks" ? "e.g. 480" : info.pct12Type === "points" ? "e.g. 8.0" : "e.g. 82.0"}
+              info={info}
+              onChange={onChange}
+              numericOnly
+              maxVal={info.pct12Type === "marks" ? undefined : info.pct12Type === "points" ? 10 : 100}
+              autoFilledFields={af}
+            />
             <YearSelect label="12th Passed Out Year" k="pct12Year" info={info} onChange={onChange} autoFilledFields={af} />
 
             <div className={`input-group${af.pctGradType ? " autofill-group" : ""}`}>

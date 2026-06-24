@@ -29,6 +29,7 @@ function _doGeneratePdf(studentName, studentData, studentIdentifier, uploadedDoc
     // ── helpers ────────────────────────────────────────────────────────────
     const v = (val) => val || '<span class="empty">—</span>';
     const fullName = [p.firstName, p.lastName].filter(Boolean).join(" ") || p.fullName || studentName;
+    const scoreUnit = (type) => (type === "marks" ? " Marks" : type === "points" ? " Points" : "%");
     const coName = (c) => [c.firstName, c.lastName].filter(Boolean).join(" ") || c.name || "";
     const refAddress = (n) => {
       const parts = [p[`ref${n}_house_number`], p[`ref${n}_street_name`], p[`ref${n}_city`], p[`ref${n}_state`], p[`ref${n}_pincode`]].filter(Boolean);
@@ -81,15 +82,15 @@ function _doGeneratePdf(studentName, studentData, studentIdentifier, uploadedDoc
             : p.qualPassedYear,
         ),
         row(
-          "10th %",
+          "10th Score",
           p.pct10Score
-            ? `${p.pct10Score}%${p.pct10Year ? ` — ${p.pct10Year}` : ""}`
+            ? `${p.pct10Score}${scoreUnit(p.pct10Type)}${p.pct10Year ? ` — ${p.pct10Year}` : ""}`
             : p.pct10,
         ),
         row(
-          "12th %",
+          "12th Score",
           p.pct12Score
-            ? `${p.pct12Score}%${p.pct12Year ? ` — ${p.pct12Year}` : ""}`
+            ? `${p.pct12Score}${scoreUnit(p.pct12Type)}${p.pct12Year ? ` — ${p.pct12Year}` : ""}`
             : p.pct12,
         ),
         row(
