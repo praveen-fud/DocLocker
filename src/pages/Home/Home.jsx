@@ -17,6 +17,7 @@ import {
   isValidPhone,
   isValidEmail,
 } from "../../utils/driveApi";
+import PdfUnlockBanner from "../../components/PdfUnlockBanner/PdfUnlockBanner";
 
 import "./Home.css";
 
@@ -181,11 +182,13 @@ export default function Home() {
   };
 
   return (
-    <div className="home-page dashboard-viewport">
-      <div className="ambient-glow-network">
-        <div className="glow-cluster core-teal-glow" />
-        <div className="glow-cluster core-blue-glow" />
-      </div>
+    <>
+      <PdfUnlockBanner />
+      <div className="home-page dashboard-viewport">
+        <div className="ambient-glow-network">
+          <div className="glow-cluster core-teal-glow" />
+          <div className="glow-cluster core-blue-glow" />
+        </div>
 
       <div className="home-split-layout">
         {/* Left Column */}
@@ -480,5 +483,6 @@ export default function Home() {
         </div>
       </div>
     </div>
+    </>
   );
 }

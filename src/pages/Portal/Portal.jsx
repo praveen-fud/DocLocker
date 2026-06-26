@@ -22,6 +22,7 @@ import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields } from "..
 import { extractPersonalAutoFill, extractCoApplicantAutoFill, getDocSourceLabel } from "../../utils/autoFillMap";
 import FileUploadBox from "../../components/FileUploadBox/FileUploadBox";
 import ProgressBar from "../../components/ProgressBar/ProgressBar";
+import PdfUnlockBanner from "../../components/PdfUnlockBanner/PdfUnlockBanner";
 import "./Portal.css";
 
 const CUR_YEAR = new Date().getFullYear();
@@ -261,9 +262,11 @@ export default function Portal() {
   ];
 
   return (
-    <div className="portal-page page-bg">
-      <div className="portal-container">
-        <div className="portal-header animate-fade-in">
+    <>
+      <PdfUnlockBanner />
+      <div className="portal-page page-bg">
+        <div className="portal-container">
+          <div className="portal-header animate-fade-in">
           <div>
             <h1 className="portal-title">Hello, {student.name.split(" ")[0]} 👋</h1>
             <p className="portal-sub">
@@ -407,7 +410,8 @@ export default function Portal() {
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 

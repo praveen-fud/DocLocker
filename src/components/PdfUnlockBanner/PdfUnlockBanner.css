@@ -1,0 +1,96 @@
+.pdf-unlock-banner {
+  display: block;
+  width: 100%;
+  margin-top: 68px; /* clears the fixed Navbar */
+  background: linear-gradient(90deg, #1a6eb5 0%, #3b97e3 50%, #1a6eb5 100%);
+  color: #ffffff;
+  text-decoration: none;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 2px 10px rgba(15, 37, 68, 0.12);
+  cursor: pointer;
+  transition: filter 0.2s ease;
+}
+
+@media (max-width: 640px) {
+  .pdf-unlock-banner {
+    margin-top: 60px; /* matches Navbar's shorter mobile height */
+  }
+}
+.pdf-unlock-banner:hover {
+  filter: brightness(1.08);
+}
+
+/* Fade the edges so the marquee text doesn't look like it's cut off mid-word */
+.pdf-unlock-banner::before,
+.pdf-unlock-banner::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 36px;
+  z-index: 2;
+  pointer-events: none;
+}
+.pdf-unlock-banner::before {
+  left: 0;
+  background: linear-gradient(90deg, #1a6eb5, transparent);
+}
+.pdf-unlock-banner::after {
+  right: 0;
+  background: linear-gradient(270deg, #1a6eb5, transparent);
+}
+
+.pdf-unlock-track {
+  width: 100%;
+  overflow: hidden;
+  padding: 9px 0;
+}
+
+.pdf-unlock-marquee {
+  display: flex;
+  width: max-content;
+  animation: pdfUnlockScroll 22s linear infinite;
+}
+
+.pdf-unlock-msg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  padding-right: 64px;
+  flex-shrink: 0;
+}
+.pdf-unlock-msg svg {
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+@keyframes pdfUnlockScroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* Respect reduced-motion preference — show static text instead of an
+   endless scroll for users who've asked the OS to minimize animation. */
+@media (prefers-reduced-motion: reduce) {
+  .pdf-unlock-marquee {
+    animation: none;
+  }
+  .pdf-unlock-track {
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .pdf-unlock-msg {
+    font-size: 12px;
+    padding-right: 40px;
+  }
+  .pdf-unlock-track {
+    padding: 8px 0;
+  }
+}
