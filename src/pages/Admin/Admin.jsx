@@ -34,6 +34,8 @@ import {
   Star,
   AlertTriangle,
   XCircle,
+  Send,
+  Mail,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import { getAllStudentsFromDrive, deleteStudent } from "../../utils/driveApi";
@@ -920,7 +922,7 @@ function FilesTab({ student }) {
 
 /* ─── Student Row ──────────────────────────────────────────────── */
 
-function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewReport }) {
+function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewReport, onSendToBank }) {
   const [activeTab, setActiveTab] = useState("personal");
 
   const totalUploads = getTotalUploads(student);
@@ -982,6 +984,13 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewRe
             <FolderOpen size={14} />
           </button>
           <button
+            className="icon-btn bank-btn"
+            title="Send to Bank"
+            onClick={onSendToBank}
+          >
+            <Send size={14} />
+          </button>
+          <button
             className="icon-btn del-btn"
             title="Delete student"
             onClick={onDelete}
@@ -1025,6 +1034,9 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewRe
               <button className="btn btn-secondary btn-sm" onClick={onOpenDrive}>
                 <ExternalLink size={13} /> Open Drive Folder
               </button>
+              <button className="btn btn-secondary btn-sm" onClick={onSendToBank}>
+                <Send size={13} /> Send to Bank
+              </button>
               <button className="btn btn-danger btn-sm" onClick={onDelete}>
                 <Trash2 size={13} /> Delete Student
               </button>
@@ -1065,6 +1077,145 @@ function DeleteModal({ name, deleting, onConfirm, onCancel }) {
   );
 }
 
+/* ─── Send to Bank Modal ───────────────────────────────────────── */
+
+function SendToBankModal({ student, onClose }) {
+  const [banks, setBanks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState([]);
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await callAPI("GET", "/api/banks");
+        if (!cancelled && r.success) setBanks(r.banks || []);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const p = student.personalInfo || {};
+  const excludedBank = p.priorBankApplied === "Yes"
+    ? (p.priorBankName === "Others" ? p.priorBankNameCustom : p.priorBankName)
+    : "";
+
+  const availableBanks = banks.filter(
+    (b) => !excludedBank || b.name.toLowerCase() !== excludedBank.toLowerCase(),
+  );
+
+  const toggleBank = (name) => {
+    setSelected((prev) => prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]);
+  };
+
+  const handleSend = async () => {
+    // Open the tab synchronously, inside the click handler, so browsers still
+    // treat it as a user-initiated popup once the async call below resolves
+    // and redirects it — opening it *after* an await gets blocked in most browsers.
+    const gmailWin = window.open("about:blank", "_blank");
+
+    setSending(true);
+    setResult(null);
+    try {
+      const chosen = availableBanks.filter((b) => selected.includes(b.name));
+      const identifier = student.email || student.phone || "";
+      const r = await callAPI("POST", "/api/send-to-bank", { studentName: student.name, studentIdentifier: identifier, banks: chosen });
+
+      if (r.success) {
+        const [first, ...rest] = chosen;
+        const params = new URLSearchParams({
+          view: "cm",
+          fs: "1",
+          to: first.email,
+          su: r.subject,
+          body: r.body,
+        });
+        if (rest.length > 0) params.set("bcc", rest.map((b) => b.email).join(","));
+        const gmailUrl = `https://mail.google.com/mail/?${params.toString()}`;
+        if (gmailWin) gmailWin.location.href = gmailUrl;
+        else window.open(gmailUrl, "_blank");
+      } else if (gmailWin) {
+        gmailWin.close();
+      }
+      setResult(r);
+    } catch (e) {
+      if (gmailWin) gmailWin.close();
+      setResult({ success: false, error: e.message || "Network error. Try again." });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={() => !sending && onClose()}>
+      <div className="modal-box bank-modal-box animate-fade-in" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-icon"><Send size={28} /></div>
+        <h3 className="bank-modal-title">Send to Bank</h3>
+        <p className="bank-modal-desc">
+          Opens Gmail with <strong>{student.name}</strong>'s document links and summary report
+          pre-filled — review and click Send in Gmail to deliver it.
+        </p>
+
+        {excludedBank && (
+          <p className="settings-msg warn">
+            <strong>{excludedBank}</strong> is excluded — the student already applied there.
+          </p>
+        )}
+
+        {loading ? (
+          <div className="admin-loading bank-modal-loading">
+            <div className="loading-dots"><span /><span /><span /></div>
+          </div>
+        ) : availableBanks.length === 0 ? (
+          <p className="bank-modal-empty">
+            No banks set up yet. Add banks from Settings → Banks.
+          </p>
+        ) : (
+          <div className="team-list bank-checklist">
+            {availableBanks.map((b) => (
+              <label key={b.name} className="team-row bank-check-row">
+                <input
+                  type="checkbox"
+                  className="bank-checkbox"
+                  checked={selected.includes(b.name)}
+                  onChange={() => toggleBank(b.name)}
+                />
+                <div className="team-info">
+                  <span className="team-name">{b.name}</span>
+                  <span className="team-role-badge bank-email">{b.email}</span>
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
+
+        {result && (
+          <div className={`settings-msg ${result.success ? "ok" : "err"}`}>
+            {result.success
+              ? "Gmail compose window opened in a new tab — review the documents and click Send there."
+              : result.error || "Failed to prepare documents."}
+          </div>
+        )}
+
+        <div className="modal-actions">
+          <button className="btn btn-secondary" onClick={onClose} disabled={sending}>
+            {result?.success ? "Close" : "Cancel"}
+          </button>
+          {!result?.success && (
+            <button className="btn btn-primary" onClick={handleSend} disabled={sending || selected.length === 0}>
+              {sending ? <><RefreshCw size={13} className="spin" /> Preparing…</> : <><Mail size={13} /> Open in Gmail</>}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Settings Panel ───────────────────────────────────────────── */
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
@@ -1073,6 +1224,14 @@ function getToken() {
   try { return JSON.parse(localStorage.getItem("abroad_admin_session") || "{}").token || ""; }
   catch { return ""; }
 }
+
+// Mirrors the bank list in Portal.jsx's "previously applied bank" dropdown,
+// so admin-managed banks match the names students can select from.
+const KNOWN_BANKS = [
+  "HDFC Bank", "HDFC Credila Financial Services", "Avanse Financial Services",
+  "Auxilo Finserve", "InCred Finance", "Tata Capital", "Poonawalla Fincorp",
+  "IDFC FIRST Bank", "ICICI Bank", "Axis Bank", "YES Bank", "Others",
+];
 
 async function callAPI(method, path, body) {
   const token = getToken();
@@ -1111,6 +1270,54 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  const [banks, setBanks] = useState([]);
+  const [banksLoading, setBanksLoading] = useState(false);
+  const [newBankName, setNewBankName] = useState("");
+  const [newBankNameCustom, setNewBankNameCustom] = useState("");
+  const [newBankEmail, setNewBankEmail] = useState("");
+  const [createBankMsg, setCreateBankMsg] = useState(null);
+  const [createBankLoading, setCreateBankLoading] = useState(false);
+  const [deleteBankTarget, setDeleteBankTarget] = useState(null);
+  const [deleteBankLoading, setDeleteBankLoading] = useState(false);
+
+  const loadBanks = async () => {
+    setBanksLoading(true);
+    try {
+      const d = await callAPI("GET", "/api/banks");
+      if (d.success) setBanks(d.banks || []);
+    } catch { /* silent */ }
+    finally { setBanksLoading(false); }
+  };
+
+  const handleCreateBank = async (e) => {
+    e.preventDefault();
+    const finalName = newBankName === "Others" ? newBankNameCustom.trim() : newBankName;
+    if (!finalName) { setCreateBankMsg({ type: "err", text: "Bank name is required." }); return; }
+    if (!newBankEmail.trim()) { setCreateBankMsg({ type: "err", text: "Email is required." }); return; }
+    setCreateBankLoading(true); setCreateBankMsg(null);
+    try {
+      const r = await callAPI("POST", "/api/banks", { name: finalName, email: newBankEmail.trim() });
+      if (r.success) {
+        setCreateBankMsg({ type: "ok", text: `${finalName} added successfully.` });
+        setNewBankName(""); setNewBankNameCustom(""); setNewBankEmail("");
+        loadBanks();
+      } else {
+        setCreateBankMsg({ type: "err", text: r.error || "Failed to add bank." });
+      }
+    } catch { setCreateBankMsg({ type: "err", text: "Network error. Try again." }); }
+    finally { setCreateBankLoading(false); }
+  };
+
+  const handleDeleteBank = async (name) => {
+    setDeleteBankLoading(true);
+    try {
+      const r = await callAPI("DELETE", `/api/banks/${encodeURIComponent(name)}`);
+      if (r.success) { setDeleteBankTarget(null); loadBanks(); }
+      else { alert(r.error || "Failed to delete."); }
+    } catch { alert("Network error. Try again."); }
+    finally { setDeleteBankLoading(false); }
+  };
+
   const loadAdmins = async () => {
     setAdminsLoading(true);
     try {
@@ -1141,7 +1348,7 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
     e.preventDefault(); setTeamVerifying(true); setTeamErr("");
     try {
       const r = await callAPI("POST", "/api/auth/login", { name: adminName, password: teamPass });
-      if (r.success && r.role === "superadmin") { setTeamVerified(true); loadAdmins(); }
+      if (r.success && r.role === "superadmin") { setTeamVerified(true); loadAdmins(); loadBanks(); }
       else { setTeamErr("Incorrect password."); }
     } catch { setTeamErr("Network error. Try again."); }
     finally { setTeamVerifying(false); }
@@ -1186,14 +1393,25 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
 
         <div className="settings-tabs">
           <button className={`settings-tab${tab === "password" ? " active" : ""}`} onClick={() => setTab("password")}>
-            <KeyRound size={13} /> Change Password
+            <KeyRound size={16} />
+            <span>Password</span>
           </button>
           {adminRole === "superadmin" && (
             <button
               className={`settings-tab${tab === "team" ? " active" : ""}`}
               onClick={() => { setTab("team"); if (teamVerified) loadAdmins(); }}
             >
-              <UserCheck size={13} /> Team Management
+              <UserCheck size={16} />
+              <span>Team</span>
+            </button>
+          )}
+          {adminRole === "superadmin" && (
+            <button
+              className={`settings-tab${tab === "banks" ? " active" : ""}`}
+              onClick={() => { setTab("banks"); if (teamVerified) loadBanks(); }}
+            >
+              <Building2 size={16} />
+              <span>Banks</span>
             </button>
           )}
         </div>
@@ -1313,6 +1531,93 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
               )}
             </div>
           )}
+
+          {tab === "banks" && (
+            <div>
+              {!teamVerified ? (
+                <form onSubmit={handleVerifyTeamPass} className="settings-form">
+                  <p className="settings-section-label">Enter your password to manage banks</p>
+                  <div className="input-group">
+                    <label>Your Password</label>
+                    <div className="password-wrap">
+                      <input className="input-field" type={showPass ? "text" : "password"} placeholder="Confirm your identity"
+                        value={teamPass} onChange={(e) => setTeamPass(e.target.value)} autoFocus />
+                      <button type="button" className="show-pass" onClick={() => setShowPass(!showPass)}>
+                        {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                  </div>
+                  {teamErr && <p className="settings-msg err">{teamErr}</p>}
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={teamVerifying}>
+                    {teamVerifying ? <><RefreshCw size={13} className="spin" /> Verifying…</> : <><Shield size={13} /> Verify & Continue</>}
+                  </button>
+                </form>
+              ) : (
+                <div>
+                  <p className="settings-section-label">Banks Set Up to Receive Applications</p>
+                  {banksLoading ? (
+                    <div className="admin-loading" style={{ padding: "24px 0" }}>
+                      <div className="loading-dots"><span /><span /><span /></div>
+                    </div>
+                  ) : banks.length === 0 ? (
+                    <p style={{ fontSize: 13, color: "var(--text-muted)" }}>No banks added yet.</p>
+                  ) : (
+                    <div className="team-list">
+                      {banks.map((b) => (
+                        <div key={b.name} className="team-row">
+                          <div className="team-avatar">{b.name[0].toUpperCase()}</div>
+                          <div className="team-info">
+                            <span className="team-name">{b.name}</span>
+                            <span className="team-role-badge bank-email">{b.email}</span>
+                          </div>
+                          {deleteBankTarget === b.name ? (
+                            <div className="team-delete-confirm">
+                              <span>Delete?</span>
+                              <button className="btn btn-danger btn-sm" onClick={() => handleDeleteBank(b.name)} disabled={deleteBankLoading}>
+                                {deleteBankLoading ? <RefreshCw size={12} className="spin" /> : "Yes"}
+                              </button>
+                              <button className="btn btn-secondary btn-sm" onClick={() => setDeleteBankTarget(null)} disabled={deleteBankLoading}>No</button>
+                            </div>
+                          ) : (
+                            <button className="icon-btn del-btn" title={`Remove ${b.name}`} onClick={() => setDeleteBankTarget(b.name)}>
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="settings-section-label" style={{ marginTop: 20 }}>Add Bank</p>
+                  <form onSubmit={handleCreateBank} className="settings-form">
+                    <div className="input-group">
+                      <label>Bank Name</label>
+                      <select className="input-field" value={newBankName} onChange={(e) => setNewBankName(e.target.value)}>
+                        <option value="">Select Bank</option>
+                        {KNOWN_BANKS.map((b) => (
+                          <option key={b} value={b}>{b}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {newBankName === "Others" && (
+                      <div className="input-group">
+                        <label>Custom Bank Name</label>
+                        <input className="input-field" type="text" placeholder="Enter bank name" value={newBankNameCustom} onChange={(e) => setNewBankNameCustom(e.target.value)} />
+                      </div>
+                    )}
+                    <div className="input-group">
+                      <label>Bank Email</label>
+                      <input className="input-field" type="email" placeholder="loans@bank.com" value={newBankEmail} onChange={(e) => setNewBankEmail(e.target.value)} />
+                    </div>
+                    {createBankMsg && <p className={`settings-msg ${createBankMsg.type}`}>{createBankMsg.text}</p>}
+                    <button type="submit" className="btn btn-primary btn-sm" disabled={createBankLoading}>
+                      {createBankLoading ? <><RefreshCw size={13} className="spin" /> Adding…</> : <><Plus size={13} /> Add Bank</>}
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </>
@@ -1336,6 +1641,7 @@ export default function Admin() {
   const [deleting, setDeleting] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [reportStudent, setReportStudent] = useState(null);
+  const [bankStudent, setBankStudent] = useState(null);
 
   useEffect(() => {
     if (!isAdmin) navigate("/admin-login");
@@ -1584,6 +1890,7 @@ export default function Admin() {
                   onDelete={(e) => { if (e) e.stopPropagation(); setConfirmDelete(s.name); }}
                   onOpenDrive={(e) => { if (e) e.stopPropagation(); openDriveFolder(s); }}
                   onViewReport={(e) => { if (e) e.stopPropagation(); setReportStudent(s); }}
+                  onSendToBank={(e) => { if (e) e.stopPropagation(); setBankStudent(s); }}
                 />
               ))}
             </div>
@@ -1594,6 +1901,11 @@ export default function Admin() {
       {/* Report Modal */}
       {reportStudent && (
         <ReportModal student={reportStudent} onClose={() => setReportStudent(null)} />
+      )}
+
+      {/* Send to Bank Modal */}
+      {bankStudent && (
+        <SendToBankModal student={bankStudent} onClose={() => setBankStudent(null)} />
       )}
 
       {/* Delete modal */}

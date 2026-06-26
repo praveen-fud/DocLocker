@@ -618,7 +618,7 @@
   width: 110px;
 }
 .th-actions {
-  width: 96px;
+  width: 160px;
   text-align: right;
 }
 
@@ -871,7 +871,8 @@
 .student-actions-col {
   display: flex;
   gap: 5px;
-  width: 96px;
+  width: 160px;
+  flex-shrink: 0;
   justify-content: flex-end;
 }
 
@@ -901,6 +902,11 @@
   background: var(--blue-dim);
   color: var(--blue);
   border-color: rgba(26, 110, 181, 0.3);
+}
+.bank-btn:hover {
+  background: var(--green-dim);
+  color: var(--green);
+  border-color: rgba(22, 163, 74, 0.3);
 }
 .del-btn:hover {
   background: var(--red-dim);
@@ -1309,6 +1315,55 @@
   text-align: center;
   box-shadow: var(--shadow-lift);
   animation: fadeSlideUp 0.25s ease both;
+}
+
+/* ── Send to Bank modal — text-left content, scrolls instead of
+   overflowing the viewport on short/mobile screens ── */
+.bank-modal-box {
+  max-width: 460px;
+  max-height: 85vh;
+  overflow-y: auto;
+  text-align: left;
+}
+.bank-modal-title {
+  text-align: center;
+}
+.bank-modal-desc {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.bank-modal-loading {
+  padding: 20px 0;
+}
+.bank-modal-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 12px 0;
+}
+.bank-checklist {
+  margin-bottom: 16px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.bank-check-row {
+  cursor: pointer;
+}
+.bank-checkbox {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+
+@media (max-width: 480px) {
+  .bank-modal-box {
+    max-height: 90vh;
+    padding: 28px 20px;
+  }
 }
 
 .modal-icon {
@@ -2000,30 +2055,42 @@
   border-bottom: 1px solid var(--border-dim);
   background: rgba(26, 110, 181, 0.015);
   flex-shrink: 0;
+  padding: 6px;
+  gap: 4px;
 }
 .settings-tab {
+  flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 7px;
-  padding: 13px 20px;
-  font-size: 13px;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 6px;
+  border-radius: var(--radius-md);
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--text-muted);
   cursor: pointer;
-  border: none;
+  border: 1px solid transparent;
   background: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
   transition: all 0.15s;
   font-family: var(--font-body);
+}
+.settings-tab span {
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .settings-tab:hover {
   color: var(--text-secondary);
+  background: var(--bg-hover);
 }
 .settings-tab.active {
   color: var(--teal);
-  border-bottom-color: var(--teal);
+  background: var(--teal-dim);
+  border-color: var(--border-accent);
 }
 
 .settings-body {
@@ -2062,6 +2129,12 @@
   background: var(--red-dim);
   border: 1px solid rgba(220, 38, 38, 0.25);
   color: var(--red);
+}
+.settings-msg.warn {
+  background: var(--amber-dim);
+  border: 1px solid rgba(217, 119, 6, 0.25);
+  color: var(--amber);
+  text-align: left;
 }
 
 /* Input group */
@@ -2174,6 +2247,20 @@
   border: 1px solid var(--border-accent);
 }
 .team-role-badge.advisor {
+  background: var(--blue-dim);
+  color: var(--blue);
+  border: 1px solid rgba(26, 110, 181, 0.25);
+}
+/* Bank email — unlike role badges this is free-text and can be long, so it
+   needs normal casing and truncation instead of the fixed-width uppercase pill. */
+.team-role-badge.bank-email {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   background: var(--blue-dim);
   color: var(--blue);
   border: 1px solid rgba(26, 110, 181, 0.25);
@@ -2355,6 +2442,7 @@
 
   /* Bigger touch targets on mobile */
   .student-row {
+    flex-wrap: wrap;
     gap: 10px;
     padding: 14px 12px;
     min-height: 64px;
@@ -2367,9 +2455,16 @@
     font-size: 12px;
     min-height: 44px;
   }
+  /* Forces the action buttons onto their own full-width row instead of
+     squeezing into whatever space is left next to the name/chevron. */
   .student-actions-col {
+    flex-basis: 100%;
     width: auto;
-    gap: 6px;
+    gap: 8px;
+    justify-content: flex-start;
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-dim);
   }
   .upload-section-grid {
     grid-template-columns: 1fr;
