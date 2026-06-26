@@ -35,7 +35,6 @@ import {
   AlertTriangle,
   XCircle,
   Send,
-  Mail,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import { getAllStudentsFromDrive, deleteStudent } from "../../utils/driveApi";
@@ -985,7 +984,7 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewRe
           </button>
           <button
             className="icon-btn bank-btn"
-            title="Send to Bank"
+            title="Grant Bank Access"
             onClick={onSendToBank}
           >
             <Send size={14} />
@@ -1035,7 +1034,7 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewRe
                 <ExternalLink size={13} /> Open Drive Folder
               </button>
               <button className="btn btn-secondary btn-sm" onClick={onSendToBank}>
-                <Send size={13} /> Send to Bank
+                <Send size={13} /> Grant Bank Access
               </button>
               <button className="btn btn-danger btn-sm" onClick={onDelete}>
                 <Trash2 size={13} /> Delete Student
@@ -1054,7 +1053,7 @@ function DeleteModal({ name, deleting, onConfirm, onCancel }) {
   return (
     <div className="modal-backdrop" onClick={() => !deleting && onCancel()}>
       <div className="modal-box animate-fade-in" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-icon"><Trash2 size={28} /></div>
+        <div className="modal-icon danger"><Trash2 size={28} /></div>
         <h3>Delete Student?</h3>
         <p>
           This will permanently remove <strong>{name}</strong> and all their
@@ -1077,21 +1076,21 @@ function DeleteModal({ name, deleting, onConfirm, onCancel }) {
   );
 }
 
-/* ─── Send to Bank Modal ───────────────────────────────────────── */
+/* ─── Grant Bank Access Modal ─────────────────────────────────── */
 
-function SendToBankModal({ student, onClose }) {
-  const [banks, setBanks] = useState([]);
+function GrantBankAccessModal({ student, onClose, onAccessChanged }) {
+  const [bankers, setBankers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState([]);
-  const [sending, setSending] = useState(false);
-  const [result, setResult] = useState(null);
+  const [shared, setShared] = useState(new Set(student.sharedBankers || []));
+  const [togglingName, setTogglingName] = useState(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const r = await callAPI("GET", "/api/banks");
-        if (!cancelled && r.success) setBanks(r.banks || []);
+        const r = await callAPI("GET", "/api/admins/bankers");
+        if (!cancelled && r.success) setBankers(r.bankers || []);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -1104,65 +1103,41 @@ function SendToBankModal({ student, onClose }) {
     ? (p.priorBankName === "Others" ? p.priorBankNameCustom : p.priorBankName)
     : "";
 
-  const availableBanks = banks.filter(
-    (b) => !excludedBank || b.name.toLowerCase() !== excludedBank.toLowerCase(),
-  );
-
-  const toggleBank = (name) => {
-    setSelected((prev) => prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]);
-  };
-
-  const handleSend = async () => {
-    // Open the tab synchronously, inside the click handler, so browsers still
-    // treat it as a user-initiated popup once the async call below resolves
-    // and redirects it — opening it *after* an await gets blocked in most browsers.
-    const gmailWin = window.open("about:blank", "_blank");
-
-    setSending(true);
-    setResult(null);
+  const toggleAccess = async (bankerName) => {
+    const grant = !shared.has(bankerName);
+    setTogglingName(bankerName);
+    setError("");
     try {
-      const chosen = availableBanks.filter((b) => selected.includes(b.name));
       const identifier = student.email || student.phone || "";
-      const r = await callAPI("POST", "/api/send-to-bank", { studentName: student.name, studentIdentifier: identifier, banks: chosen });
-
+      const r = await callAPI("PUT", "/api/students/banker-access", {
+        studentName: student.name, studentIdentifier: identifier, bankerName, grant,
+      });
       if (r.success) {
-        const [first, ...rest] = chosen;
-        const params = new URLSearchParams({
-          view: "cm",
-          fs: "1",
-          to: first.email,
-          su: r.subject,
-          body: r.body,
-        });
-        if (rest.length > 0) params.set("bcc", rest.map((b) => b.email).join(","));
-        const gmailUrl = `https://mail.google.com/mail/?${params.toString()}`;
-        if (gmailWin) gmailWin.location.href = gmailUrl;
-        else window.open(gmailUrl, "_blank");
-      } else if (gmailWin) {
-        gmailWin.close();
+        setShared(new Set(r.sharedBankers));
+        onAccessChanged?.(student.name, r.sharedBankers);
+      } else {
+        setError(r.error || "Failed to update access.");
       }
-      setResult(r);
     } catch (e) {
-      if (gmailWin) gmailWin.close();
-      setResult({ success: false, error: e.message || "Network error. Try again." });
+      setError(e.message || "Network error. Try again.");
     } finally {
-      setSending(false);
+      setTogglingName(null);
     }
   };
 
   return (
-    <div className="modal-backdrop" onClick={() => !sending && onClose()}>
+    <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-box bank-modal-box animate-fade-in" onClick={(e) => e.stopPropagation()}>
         <div className="modal-icon"><Send size={28} /></div>
-        <h3 className="bank-modal-title">Send to Bank</h3>
+        <h3 className="bank-modal-title">Grant Bank Access</h3>
         <p className="bank-modal-desc">
-          Opens Gmail with <strong>{student.name}</strong>'s document links and summary report
-          pre-filled — review and click Send in Gmail to deliver it.
+          Choose which banker accounts can log in and view <strong>{student.name}</strong>'s
+          documents. Access can be revoked at any time.
         </p>
 
         {excludedBank && (
           <p className="settings-msg warn">
-            <strong>{excludedBank}</strong> is excluded — the student already applied there.
+            <strong>{excludedBank}</strong> may already have this application — double check before granting.
           </p>
         )}
 
@@ -1170,46 +1145,36 @@ function SendToBankModal({ student, onClose }) {
           <div className="admin-loading bank-modal-loading">
             <div className="loading-dots"><span /><span /><span /></div>
           </div>
-        ) : availableBanks.length === 0 ? (
+        ) : bankers.length === 0 ? (
           <p className="bank-modal-empty">
-            No banks set up yet. Add banks from Settings → Banks.
+            No banker accounts yet. Create one from Settings → Team.
           </p>
         ) : (
           <div className="team-list bank-checklist">
-            {availableBanks.map((b) => (
+            {bankers.map((b) => (
               <label key={b.name} className="team-row bank-check-row">
                 <input
                   type="checkbox"
                   className="bank-checkbox"
-                  checked={selected.includes(b.name)}
-                  onChange={() => toggleBank(b.name)}
+                  checked={shared.has(b.name)}
+                  disabled={togglingName === b.name}
+                  onChange={() => toggleAccess(b.name)}
                 />
                 <div className="team-info">
                   <span className="team-name">{b.name}</span>
-                  <span className="team-role-badge bank-email">{b.email}</span>
+                  <span className="team-role-badge banker">
+                    {togglingName === b.name ? "Updating…" : shared.has(b.name) ? "Access granted" : "No access"}
+                  </span>
                 </div>
               </label>
             ))}
           </div>
         )}
 
-        {result && (
-          <div className={`settings-msg ${result.success ? "ok" : "err"}`}>
-            {result.success
-              ? "Gmail compose window opened in a new tab — review the documents and click Send there."
-              : result.error || "Failed to prepare documents."}
-          </div>
-        )}
+        {error && <div className="settings-msg err">{error}</div>}
 
         <div className="modal-actions">
-          <button className="btn btn-secondary" onClick={onClose} disabled={sending}>
-            {result?.success ? "Close" : "Cancel"}
-          </button>
-          {!result?.success && (
-            <button className="btn btn-primary" onClick={handleSend} disabled={sending || selected.length === 0}>
-              {sending ? <><RefreshCw size={13} className="spin" /> Preparing…</> : <><Mail size={13} /> Open in Gmail</>}
-            </button>
-          )}
+          <button className="btn btn-primary" onClick={onClose}>Done</button>
         </div>
       </div>
     </div>
@@ -1224,14 +1189,6 @@ function getToken() {
   try { return JSON.parse(localStorage.getItem("abroad_admin_session") || "{}").token || ""; }
   catch { return ""; }
 }
-
-// Mirrors the bank list in Portal.jsx's "previously applied bank" dropdown,
-// so admin-managed banks match the names students can select from.
-const KNOWN_BANKS = [
-  "HDFC Bank", "HDFC Credila Financial Services", "Avanse Financial Services",
-  "Auxilo Finserve", "InCred Finance", "Tata Capital", "Poonawalla Fincorp",
-  "IDFC FIRST Bank", "ICICI Bank", "Axis Bank", "YES Bank", "Others",
-];
 
 async function callAPI(method, path, body) {
   const token = getToken();
@@ -1270,53 +1227,19 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const [banks, setBanks] = useState([]);
-  const [banksLoading, setBanksLoading] = useState(false);
-  const [newBankName, setNewBankName] = useState("");
-  const [newBankNameCustom, setNewBankNameCustom] = useState("");
-  const [newBankEmail, setNewBankEmail] = useState("");
-  const [createBankMsg, setCreateBankMsg] = useState(null);
-  const [createBankLoading, setCreateBankLoading] = useState(false);
-  const [deleteBankTarget, setDeleteBankTarget] = useState(null);
-  const [deleteBankLoading, setDeleteBankLoading] = useState(false);
+  const [bankers, setBankers] = useState([]);
+  const [bankersLoading, setBankersLoading] = useState(false);
+  const [newBankerName, setNewBankerName] = useState("");
+  const [newBankerPass, setNewBankerPass] = useState("");
+  const [createBankerMsg, setCreateBankerMsg] = useState(null);
+  const [createBankerLoading, setCreateBankerLoading] = useState(false);
+  const [deleteBankerTarget, setDeleteBankerTarget] = useState(null);
+  const [deleteBankerLoading, setDeleteBankerLoading] = useState(false);
 
-  const loadBanks = async () => {
-    setBanksLoading(true);
-    try {
-      const d = await callAPI("GET", "/api/banks");
-      if (d.success) setBanks(d.banks || []);
-    } catch { /* silent */ }
-    finally { setBanksLoading(false); }
-  };
-
-  const handleCreateBank = async (e) => {
-    e.preventDefault();
-    const finalName = newBankName === "Others" ? newBankNameCustom.trim() : newBankName;
-    if (!finalName) { setCreateBankMsg({ type: "err", text: "Bank name is required." }); return; }
-    if (!newBankEmail.trim()) { setCreateBankMsg({ type: "err", text: "Email is required." }); return; }
-    setCreateBankLoading(true); setCreateBankMsg(null);
-    try {
-      const r = await callAPI("POST", "/api/banks", { name: finalName, email: newBankEmail.trim() });
-      if (r.success) {
-        setCreateBankMsg({ type: "ok", text: `${finalName} added successfully.` });
-        setNewBankName(""); setNewBankNameCustom(""); setNewBankEmail("");
-        loadBanks();
-      } else {
-        setCreateBankMsg({ type: "err", text: r.error || "Failed to add bank." });
-      }
-    } catch { setCreateBankMsg({ type: "err", text: "Network error. Try again." }); }
-    finally { setCreateBankLoading(false); }
-  };
-
-  const handleDeleteBank = async (name) => {
-    setDeleteBankLoading(true);
-    try {
-      const r = await callAPI("DELETE", `/api/banks/${encodeURIComponent(name)}`);
-      if (r.success) { setDeleteBankTarget(null); loadBanks(); }
-      else { alert(r.error || "Failed to delete."); }
-    } catch { alert("Network error. Try again."); }
-    finally { setDeleteBankLoading(false); }
-  };
+  const [resetPwTarget, setResetPwTarget] = useState(null);
+  const [resetPwValue, setResetPwValue] = useState("");
+  const [resetPwLoading, setResetPwLoading] = useState(false);
+  const [resetPwMsg, setResetPwMsg] = useState(null);
 
   const loadAdmins = async () => {
     setAdminsLoading(true);
@@ -1325,6 +1248,60 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
       if (d.success) setAdmins(d.admins || []);
     } catch { /* silent */ }
     finally { setAdminsLoading(false); }
+  };
+
+  const loadBankers = async () => {
+    setBankersLoading(true);
+    try {
+      const d = await callAPI("GET", "/api/admins/bankers");
+      if (d.success) setBankers(d.bankers || []);
+    } catch { /* silent */ }
+    finally { setBankersLoading(false); }
+  };
+
+  const handleCreateBanker = async (e) => {
+    e.preventDefault();
+    if (!newBankerName.trim()) { setCreateBankerMsg({ type: "err", text: "Name is required." }); return; }
+    if (newBankerPass.length < 6) { setCreateBankerMsg({ type: "err", text: "Password must be at least 6 characters." }); return; }
+    setCreateBankerLoading(true); setCreateBankerMsg(null);
+    try {
+      const r = await callAPI("POST", "/api/admins", { name: newBankerName.trim(), role: "banker", password: newBankerPass });
+      if (r.success) {
+        setCreateBankerMsg({ type: "ok", text: `${newBankerName.trim()} created successfully.` });
+        setNewBankerName(""); setNewBankerPass("");
+        loadBankers();
+      } else {
+        setCreateBankerMsg({ type: "err", text: r.error || "Failed to create banker." });
+      }
+    } catch { setCreateBankerMsg({ type: "err", text: "Network error. Try again." }); }
+    finally { setCreateBankerLoading(false); }
+  };
+
+  const handleDeleteBanker = async (name) => {
+    setDeleteBankerLoading(true);
+    try {
+      const r = await callAPI("DELETE", `/api/admins/${encodeURIComponent(name)}`);
+      if (r.success) { setDeleteBankerTarget(null); loadBankers(); }
+      else { alert(r.error || "Failed to delete."); }
+    } catch { alert("Network error. Try again."); }
+    finally { setDeleteBankerLoading(false); }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (resetPwValue.length < 6) { setResetPwMsg({ type: "err", text: "Password must be at least 6 characters." }); return; }
+    setResetPwLoading(true); setResetPwMsg(null);
+    try {
+      const r = await callAPI("PUT", `/api/admins/${encodeURIComponent(resetPwTarget)}/reset-password`, { newPassword: resetPwValue });
+      if (r.success) {
+        setResetPwMsg({ type: "ok", text: `Password reset for ${resetPwTarget}.` });
+        setResetPwValue("");
+        setTimeout(() => { setResetPwTarget(null); setResetPwMsg(null); }, 1500);
+      } else {
+        setResetPwMsg({ type: "err", text: r.error || "Failed to reset password." });
+      }
+    } catch { setResetPwMsg({ type: "err", text: "Network error. Try again." }); }
+    finally { setResetPwLoading(false); }
   };
 
   const handleChangePassword = async (e) => {
@@ -1348,8 +1325,13 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
     e.preventDefault(); setTeamVerifying(true); setTeamErr("");
     try {
       const r = await callAPI("POST", "/api/auth/login", { name: adminName, password: teamPass });
-      if (r.success && r.role === "superadmin") { setTeamVerified(true); loadAdmins(); loadBanks(); }
-      else { setTeamErr("Incorrect password."); }
+      if (r.success && (r.role === "superadmin" || r.role === "advisor")) {
+        setTeamVerified(true);
+        if (r.role === "superadmin") loadAdmins();
+        loadBankers();
+      } else {
+        setTeamErr("Incorrect password.");
+      }
     } catch { setTeamErr("Network error. Try again."); }
     finally { setTeamVerifying(false); }
   };
@@ -1405,13 +1387,13 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
               <span>Team</span>
             </button>
           )}
-          {adminRole === "superadmin" && (
+          {(adminRole === "superadmin" || adminRole === "advisor") && (
             <button
-              className={`settings-tab${tab === "banks" ? " active" : ""}`}
-              onClick={() => { setTab("banks"); if (teamVerified) loadBanks(); }}
+              className={`settings-tab${tab === "bankers" ? " active" : ""}`}
+              onClick={() => { setTab("bankers"); if (teamVerified) loadBankers(); }}
             >
               <Building2 size={16} />
-              <span>Banks</span>
+              <span>Bankers</span>
             </button>
           )}
         </div>
@@ -1482,7 +1464,7 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
                           <div className="team-info">
                             <span className="team-name">{a.name}</span>
                             <span className={`team-role-badge ${a.role}`}>
-                              {a.role === "superadmin" ? "Super Admin" : "Advisor"}
+                              {a.role === "superadmin" ? "Super Admin" : a.role === "banker" ? "Banker" : "Advisor"}
                             </span>
                           </div>
                           {a.name !== adminName && (
@@ -1495,9 +1477,14 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
                                 <button className="btn btn-secondary btn-sm" onClick={() => setDeleteTarget(null)} disabled={deleteLoading}>No</button>
                               </div>
                             ) : (
-                              <button className="icon-btn del-btn" title={`Remove ${a.name}`} onClick={() => setDeleteTarget(a.name)}>
-                                <Trash2 size={13} />
-                              </button>
+                              <>
+                                <button className="icon-btn" title={`Reset ${a.name}'s password`} onClick={() => { setResetPwTarget(a.name); setResetPwValue(""); setResetPwMsg(null); }}>
+                                  <KeyRound size={13} />
+                                </button>
+                                <button className="icon-btn del-btn" title={`Remove ${a.name}`} onClick={() => setDeleteTarget(a.name)}>
+                                  <Trash2 size={13} />
+                                </button>
+                              </>
                             )
                           )}
                         </div>
@@ -1515,6 +1502,7 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
                       <label>Role</label>
                       <select className="input-field" value={newRole} onChange={(e) => setNewRole(e.target.value)}>
                         <option value="advisor">Advisor</option>
+                        <option value="banker">Banker</option>
                         <option value="superadmin">Super Admin</option>
                       </select>
                     </div>
@@ -1532,11 +1520,11 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
             </div>
           )}
 
-          {tab === "banks" && (
+          {tab === "bankers" && (
             <div>
               {!teamVerified ? (
                 <form onSubmit={handleVerifyTeamPass} className="settings-form">
-                  <p className="settings-section-label">Enter your password to manage banks</p>
+                  <p className="settings-section-label">Enter your password to manage bankers</p>
                   <div className="input-group">
                     <label>Your Password</label>
                     <div className="password-wrap">
@@ -1554,72 +1542,92 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
                 </form>
               ) : (
                 <div>
-                  <p className="settings-section-label">Banks Set Up to Receive Applications</p>
-                  {banksLoading ? (
+                  <p className="settings-section-label">Banker Accounts</p>
+                  {bankersLoading ? (
                     <div className="admin-loading" style={{ padding: "24px 0" }}>
                       <div className="loading-dots"><span /><span /><span /></div>
                     </div>
-                  ) : banks.length === 0 ? (
-                    <p style={{ fontSize: 13, color: "var(--text-muted)" }}>No banks added yet.</p>
+                  ) : bankers.length === 0 ? (
+                    <p style={{ fontSize: 13, color: "var(--text-muted)" }}>No banker accounts yet.</p>
                   ) : (
                     <div className="team-list">
-                      {banks.map((b) => (
+                      {bankers.map((b) => (
                         <div key={b.name} className="team-row">
                           <div className="team-avatar">{b.name[0].toUpperCase()}</div>
                           <div className="team-info">
                             <span className="team-name">{b.name}</span>
-                            <span className="team-role-badge bank-email">{b.email}</span>
+                            <span className="team-role-badge banker">Banker</span>
                           </div>
-                          {deleteBankTarget === b.name ? (
+                          {deleteBankerTarget === b.name ? (
                             <div className="team-delete-confirm">
                               <span>Delete?</span>
-                              <button className="btn btn-danger btn-sm" onClick={() => handleDeleteBank(b.name)} disabled={deleteBankLoading}>
-                                {deleteBankLoading ? <RefreshCw size={12} className="spin" /> : "Yes"}
+                              <button className="btn btn-danger btn-sm" onClick={() => handleDeleteBanker(b.name)} disabled={deleteBankerLoading}>
+                                {deleteBankerLoading ? <RefreshCw size={12} className="spin" /> : "Yes"}
                               </button>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setDeleteBankTarget(null)} disabled={deleteBankLoading}>No</button>
+                              <button className="btn btn-secondary btn-sm" onClick={() => setDeleteBankerTarget(null)} disabled={deleteBankerLoading}>No</button>
                             </div>
                           ) : (
-                            <button className="icon-btn del-btn" title={`Remove ${b.name}`} onClick={() => setDeleteBankTarget(b.name)}>
-                              <Trash2 size={13} />
-                            </button>
+                            <>
+                              <button className="icon-btn" title={`Reset ${b.name}'s password`} onClick={() => { setResetPwTarget(b.name); setResetPwValue(""); setResetPwMsg(null); }}>
+                                <KeyRound size={13} />
+                              </button>
+                              <button className="icon-btn del-btn" title={`Remove ${b.name}`} onClick={() => setDeleteBankerTarget(b.name)}>
+                                <Trash2 size={13} />
+                              </button>
+                            </>
                           )}
                         </div>
                       ))}
                     </div>
                   )}
 
-                  <p className="settings-section-label" style={{ marginTop: 20 }}>Add Bank</p>
-                  <form onSubmit={handleCreateBank} className="settings-form">
+                  <p className="settings-section-label" style={{ marginTop: 20 }}>Add Banker</p>
+                  <form onSubmit={handleCreateBanker} className="settings-form">
                     <div className="input-group">
-                      <label>Bank Name</label>
-                      <select className="input-field" value={newBankName} onChange={(e) => setNewBankName(e.target.value)}>
-                        <option value="">Select Bank</option>
-                        {KNOWN_BANKS.map((b) => (
-                          <option key={b} value={b}>{b}</option>
-                        ))}
-                      </select>
+                      <label>Name</label>
+                      <input className="input-field" type="text" placeholder="e.g. HDFC - Rajesh" value={newBankerName} onChange={(e) => setNewBankerName(e.target.value)} />
                     </div>
-                    {newBankName === "Others" && (
-                      <div className="input-group">
-                        <label>Custom Bank Name</label>
-                        <input className="input-field" type="text" placeholder="Enter bank name" value={newBankNameCustom} onChange={(e) => setNewBankNameCustom(e.target.value)} />
-                      </div>
-                    )}
                     <div className="input-group">
-                      <label>Bank Email</label>
-                      <input className="input-field" type="email" placeholder="loans@bank.com" value={newBankEmail} onChange={(e) => setNewBankEmail(e.target.value)} />
+                      <label>Password</label>
+                      <input className="input-field" type="password" placeholder="Min. 6 characters" value={newBankerPass} onChange={(e) => setNewBankerPass(e.target.value)} />
                     </div>
-                    {createBankMsg && <p className={`settings-msg ${createBankMsg.type}`}>{createBankMsg.text}</p>}
-                    <button type="submit" className="btn btn-primary btn-sm" disabled={createBankLoading}>
-                      {createBankLoading ? <><RefreshCw size={13} className="spin" /> Adding…</> : <><Plus size={13} /> Add Bank</>}
+                    {createBankerMsg && <p className={`settings-msg ${createBankerMsg.type}`}>{createBankerMsg.text}</p>}
+                    <button type="submit" className="btn btn-primary btn-sm" disabled={createBankerLoading}>
+                      {createBankerLoading ? <><RefreshCw size={13} className="spin" /> Creating…</> : <><Plus size={13} /> Create Banker</>}
                     </button>
                   </form>
                 </div>
               )}
             </div>
           )}
+
         </div>
       </div>
+
+      {resetPwTarget && (
+        <div className="modal-backdrop" onClick={() => !resetPwLoading && setResetPwTarget(null)}>
+          <div className="modal-box animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-icon"><KeyRound size={28} /></div>
+            <h3>Reset Password</h3>
+            <p>
+              Set a new password for <strong>{resetPwTarget}</strong>. They'll need to use it next time they log in.
+            </p>
+            <form onSubmit={handleResetPassword} className="settings-form" style={{ textAlign: "left" }}>
+              <div className="input-group">
+                <label>New Password</label>
+                <input className="input-field" type="password" placeholder="Min. 6 characters" value={resetPwValue} onChange={(e) => setResetPwValue(e.target.value)} autoFocus />
+              </div>
+              {resetPwMsg && <p className={`settings-msg ${resetPwMsg.type}`}>{resetPwMsg.text}</p>}
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setResetPwTarget(null)} disabled={resetPwLoading}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={resetPwLoading}>
+                  {resetPwLoading ? <><RefreshCw size={13} className="spin" /> Resetting…</> : "Reset Password"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -1903,9 +1911,15 @@ export default function Admin() {
         <ReportModal student={reportStudent} onClose={() => setReportStudent(null)} />
       )}
 
-      {/* Send to Bank Modal */}
+      {/* Grant Bank Access Modal */}
       {bankStudent && (
-        <SendToBankModal student={bankStudent} onClose={() => setBankStudent(null)} />
+        <GrantBankAccessModal
+          student={bankStudent}
+          onClose={() => setBankStudent(null)}
+          onAccessChanged={(name, sharedBankers) => {
+            setStudents((prev) => prev.map((s) => s.name === name ? { ...s, sharedBankers } : s));
+          }}
+        />
       )}
 
       {/* Delete modal */}

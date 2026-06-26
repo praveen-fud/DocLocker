@@ -54,7 +54,7 @@ export default function AdminLogin() {
       }
       if (result.success) {
         loginAdmin(result.role, result.advisorName, result.name, result.token);
-        navigate("/admin");
+        navigate(result.role === "banker" ? "/banker-portal" : "/admin");
       } else {
         setError(result.error || "Invalid name or password. Please try again.");
       }
@@ -106,7 +106,7 @@ export default function AdminLogin() {
             <p>
               Enter your name and password to access the dashboard.
               <br />
-              Advisors see only their own students.
+              Advisors and bankers see only their own students.
             </p>
 
             <form onSubmit={handleLogin} className="admin-login-form card">

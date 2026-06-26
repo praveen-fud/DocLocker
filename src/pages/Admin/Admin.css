@@ -1292,113 +1292,10 @@
   gap: 8px;
 }
 
-/* ── Delete Modal ───────────────────────────────────────────── */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
-  background: rgba(15, 37, 68, 0.55);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-
-.modal-box {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
-  padding: 36px 32px;
-  max-width: 420px;
-  width: 100%;
-  text-align: center;
-  box-shadow: var(--shadow-lift);
-  animation: fadeSlideUp 0.25s ease both;
-}
-
-/* ── Send to Bank modal — text-left content, scrolls instead of
-   overflowing the viewport on short/mobile screens ── */
-.bank-modal-box {
-  max-width: 460px;
-  max-height: 85vh;
-  overflow-y: auto;
-  text-align: left;
-}
-.bank-modal-title {
-  text-align: center;
-}
-.bank-modal-desc {
-  text-align: center;
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.5;
-}
-.bank-modal-loading {
-  padding: 20px 0;
-}
-.bank-modal-empty {
-  font-size: 13px;
-  color: var(--text-muted);
-  text-align: center;
-  padding: 12px 0;
-}
-.bank-checklist {
-  margin-bottom: 16px;
-  max-height: 240px;
-  overflow-y: auto;
-}
-.bank-check-row {
-  cursor: pointer;
-}
-.bank-checkbox {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  accent-color: var(--blue);
-  cursor: pointer;
-}
-
-@media (max-width: 480px) {
-  .bank-modal-box {
-    max-height: 90vh;
-    padding: 28px 20px;
-  }
-}
-
-.modal-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-lg);
-  margin: 0 auto 22px;
-  background: var(--red-dim);
-  border: 1px solid rgba(220, 38, 38, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--red);
-}
-
-.modal-box h3 {
-  font-size: 21px;
-  font-weight: 800;
-  margin-bottom: 10px;
-  letter-spacing: -0.02em;
-}
-.modal-box p {
-  font-size: 14px;
-  color: var(--text-secondary);
-  line-height: 1.65;
-  margin-bottom: 28px;
-}
-.modal-box p strong {
-  color: var(--text-primary);
-}
-.modal-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-}
+/* Modal/settings-form primitives (.modal-backdrop, .modal-box, .modal-icon,
+   .modal-actions, .bank-modal-*, .settings-form, .settings-msg,
+   .password-wrap, .show-pass) now live in index.css — shared with
+   BankerPortal instead of duplicated per page. */
 
 /* ── Report Modal ──────────────────────────────────────────── */
 .rpt-backdrop {
@@ -2107,35 +2004,9 @@
   color: var(--text-muted);
   margin-bottom: 14px;
 }
-.settings-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-.settings-msg {
-  font-size: 13px;
-  font-weight: 500;
-  padding: 10px 14px;
-  border-radius: var(--radius-md);
-  margin-bottom: 14px;
-  line-height: 1.4;
-}
-.settings-msg.ok {
-  background: rgba(34, 211, 174, 0.08);
-  border: 1px solid rgba(34, 211, 174, 0.25);
-  color: var(--green);
-}
-.settings-msg.err {
-  background: var(--red-dim);
-  border: 1px solid rgba(220, 38, 38, 0.25);
-  color: var(--red);
-}
-.settings-msg.warn {
-  background: var(--amber-dim);
-  border: 1px solid rgba(217, 119, 6, 0.25);
-  color: var(--amber);
-  text-align: left;
-}
+/* .settings-form and .settings-msg now live in index.css (shared with
+   BankerPortal). Admin.css keeps its own .input-group/.input-field below
+   since those are intentionally a themed override of the global versions. */
 
 /* Input group */
 .input-group {
@@ -2167,23 +2038,12 @@
   border-color: rgba(26, 110, 181, 0.4);
   box-shadow: 0 0 0 3px rgba(26, 110, 181, 0.08);
 }
-.password-wrap {
-  position: relative;
-}
+/* .password-wrap and .show-pass now live in index.css. Admin.css's
+   .input-field above needs the same right-padding when paired with the
+   show/hide button — kept here since the selector targets this page's
+   own .input-field. */
 .password-wrap .input-field {
   padding-right: 40px;
-}
-.show-pass {
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
 }
 
 /* Team list */
@@ -2250,6 +2110,11 @@
   background: var(--blue-dim);
   color: var(--blue);
   border: 1px solid rgba(26, 110, 181, 0.25);
+}
+.team-role-badge.banker {
+  background: var(--purple-dim);
+  color: var(--purple);
+  border: 1px solid rgba(124, 58, 237, 0.25);
 }
 /* Bank email — unlike role badges this is free-text and can be long, so it
    needs normal casing and truncation instead of the fixed-width uppercase pill. */

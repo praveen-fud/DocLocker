@@ -195,6 +195,170 @@ h6 {
   box-shadow: 0 4px 24px rgba(15, 37, 68, 0.08);
 }
 
+/* ============================================================
+   Shared modal + settings-form primitives — used by Admin and
+   BankerPortal alike, so they live globally instead of being
+   duplicated per page.
+   ============================================================ */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: rgba(15, 37, 68, 0.55);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.modal-box {
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(26, 110, 181, 0.16);
+  border-radius: 20px;
+  padding: 36px 32px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 8px 30px rgba(15, 37, 68, 0.16);
+}
+.modal-box h3 {
+  font-size: 21px;
+  font-weight: 800;
+  margin-bottom: 10px;
+  letter-spacing: -0.02em;
+}
+.modal-box p {
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.65;
+  margin-bottom: 28px;
+}
+.modal-box p strong {
+  color: #0f2544;
+}
+.modal-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  margin: 0 auto 22px;
+  background: rgba(26, 110, 181, 0.10);
+  border: 1px solid rgba(26, 110, 181, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1a6eb5;
+}
+.modal-icon.danger {
+  background: rgba(220, 38, 38, 0.10);
+  border-color: rgba(220, 38, 38, 0.3);
+  color: #dc2626;
+}
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+/* Send-to-bank / change-password style modal — text-left content, scrolls
+   instead of overflowing the viewport on short/mobile screens. */
+.bank-modal-box {
+  max-width: 460px;
+  max-height: 85vh;
+  overflow-y: auto;
+  text-align: left;
+}
+.bank-modal-title {
+  text-align: center;
+}
+.bank-modal-desc {
+  text-align: center;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.bank-modal-loading {
+  padding: 20px 0;
+}
+.bank-modal-empty {
+  font-size: 13px;
+  color: #94a3b8;
+  text-align: center;
+  padding: 12px 0;
+}
+.bank-checklist {
+  margin-bottom: 16px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.bank-check-row {
+  cursor: pointer;
+}
+.bank-checkbox {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+@media (max-width: 480px) {
+  .bank-modal-box {
+    max-height: 90vh;
+    padding: 28px 20px;
+  }
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.settings-msg {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin-bottom: 14px;
+  line-height: 1.4;
+}
+.settings-msg.ok {
+  background: rgba(34, 211, 174, 0.08);
+  border: 1px solid rgba(34, 211, 174, 0.25);
+  color: #16a34a;
+}
+.settings-msg.err {
+  background: rgba(220, 38, 38, 0.10);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  color: #dc2626;
+}
+.settings-msg.warn {
+  background: rgba(217, 119, 6, 0.10);
+  border: 1px solid rgba(217, 119, 6, 0.25);
+  color: #d97706;
+  text-align: left;
+}
+
+.password-wrap {
+  position: relative;
+}
+.password-wrap .input-field {
+  padding-right: 40px;
+}
+.show-pass {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+.show-pass:hover {
+  color: #1a6eb5;
+}
+
 .input-group {
   margin-bottom: 20px;
 }

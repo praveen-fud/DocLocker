@@ -1,11 +1,11 @@
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { LogOut, LayoutDashboard, GraduationCap, Shield } from "lucide-react";
+import { LogOut, LayoutDashboard, GraduationCap, Shield, Building2 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import logoImg from "../../assets/logo.jpeg";
 import "./Navbar.css";
 
 export default function Navbar() {
-  const { student, clearStudent, isAdmin, logoutAdmin } = useStudent();
+  const { student, clearStudent, isAdmin, adminRole, logoutAdmin } = useStudent();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -35,7 +35,18 @@ export default function Navbar() {
 
         {/* Dynamic Action Controls Deck */}
         <div className="navbar-actions-deck">
-          {isAdmin && (
+          {isAdmin && adminRole === "banker" && (
+            <Link
+              to="/banker-portal"
+              className={`navbar-deck-link ${location.pathname === "/banker-portal" ? "active" : ""}`}
+            >
+              <Building2 size={15} />
+              <span>Banker Portal</span>
+              <div className="navbar-link-active-indicator" />
+            </Link>
+          )}
+
+          {isAdmin && adminRole !== "banker" && (
             <Link
               to="/admin"
               className={`navbar-deck-link ${location.pathname === "/admin" ? "active" : ""}`}

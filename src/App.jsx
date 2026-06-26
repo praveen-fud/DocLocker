@@ -6,9 +6,10 @@ import Home from "./pages/Home/Home";
 import "./index.css";
 
 // Heavy pages loaded only when actually navigated to
-const Portal     = lazy(() => import("./pages/Portal/Portal"));
-const Admin      = lazy(() => import("./pages/Admin/Admin"));
-const AdminLogin = lazy(() => import("./pages/AdminLogin/AdminLogin"));
+const Portal       = lazy(() => import("./pages/Portal/Portal"));
+const Admin        = lazy(() => import("./pages/Admin/Admin"));
+const AdminLogin   = lazy(() => import("./pages/AdminLogin/AdminLogin"));
+const BankerPortal = lazy(() => import("./pages/BankerPortal/BankerPortal"));
 
 function PageLoader() {
   return (
@@ -24,8 +25,17 @@ function ProtectedPortal() {
 }
 
 function ProtectedAdmin() {
-  const { isAdmin } = useStudent();
-  return isAdmin ? <Admin /> : <Navigate to="/admin-login" replace />;
+  const { isAdmin, adminRole } = useStudent();
+  if (!isAdmin) return <Navigate to="/admin-login" replace />;
+  if (adminRole === "banker") return <Navigate to="/banker-portal" replace />;
+  return <Admin />;
+}
+
+function ProtectedBankerPortal() {
+  const { isAdmin, adminRole } = useStudent();
+  if (!isAdmin) return <Navigate to="/admin-login" replace />;
+  if (adminRole !== "banker") return <Navigate to="/admin" replace />;
+  return <BankerPortal />;
 }
 
 function AppRoutes() {
@@ -34,11 +44,12 @@ function AppRoutes() {
       <Navbar />
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          <Route path="/"            element={<Home />} />
-          <Route path="/portal"      element={<ProtectedPortal />} />
-          <Route path="/admin"       element={<ProtectedAdmin />} />
-          <Route path="/admin-login" element={<AdminLogin />} />
-          <Route path="*"            element={<Navigate to="/" />} />
+          <Route path="/"              element={<Home />} />
+          <Route path="/portal"        element={<ProtectedPortal />} />
+          <Route path="/admin"         element={<ProtectedAdmin />} />
+          <Route path="/admin-login"   element={<AdminLogin />} />
+          <Route path="/banker-portal" element={<ProtectedBankerPortal />} />
+          <Route path="*"              element={<Navigate to="/" />} />
         </Routes>
       </Suspense>
     </>
