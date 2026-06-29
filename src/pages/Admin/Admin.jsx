@@ -1181,6 +1181,162 @@ function GrantBankAccessModal({ student, onClose, onAccessChanged }) {
   );
 }
 
+/* ─── Banker Access Manager ────────────────────────────────────── */
+// Reverse view of GrantBankAccessModal: pick a banker first, then see/manage
+// every student that banker can currently access, plus grant new ones.
+
+function BankerAccessManagerModal({ students, bankers, onClose, onAccessChanged }) {
+  const [selectedBankerState, setSelectedBanker] = useState("");
+  const [search, setSearch] = useState("");
+  const [togglingName, setTogglingName] = useState(null);
+  const [error, setError] = useState("");
+
+  // Falls back to the first banker until the user explicitly picks one —
+  // derived during render instead of synced via an effect, so there's no
+  // extra render pass just to apply the default.
+  const selectedBanker = selectedBankerState || bankers[0]?.name || "";
+
+  const toggleAccess = async (student, grant) => {
+    setTogglingName(student.name);
+    setError("");
+    try {
+      const identifier = student.email || student.phone || "";
+      const r = await callAPI("PUT", "/api/students/banker-access", {
+        studentName: student.name, studentIdentifier: identifier, bankerName: selectedBanker, grant,
+      });
+      if (r.success) {
+        onAccessChanged?.(student.name, r.sharedBankers);
+      } else {
+        setError(r.error || "Failed to update access.");
+      }
+    } catch (e) {
+      setError(e.message || "Network error. Try again.");
+    } finally {
+      setTogglingName(null);
+    }
+  };
+
+  const grantedStudents = students.filter((s) => (s.sharedBankers || []).includes(selectedBanker));
+  const grantedNames = new Set(grantedStudents.map((s) => s.name));
+
+  const q = search.trim().toLowerCase();
+  const availableStudents = students.filter((s) => {
+    if (grantedNames.has(s.name)) return false;
+    if (!q) return true;
+    return (s.name || "").toLowerCase().includes(q) ||
+      (s.email || "").toLowerCase().includes(q) ||
+      (s.phone || "").includes(q);
+  });
+  const visibleAvailable = availableStudents.slice(0, 40);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="bam-modal animate-fade-in" onClick={(e) => e.stopPropagation()}>
+        <div className="bam-header">
+          <h3><Send size={16} /> Banker Access Management</h3>
+          <button className="icon-btn" onClick={onClose}><X size={16} /></button>
+        </div>
+
+        {bankers.length === 0 ? (
+          <p className="bam-empty">No banker accounts yet. Create one from Settings → Bankers.</p>
+        ) : (
+          <div className="bam-body">
+            <div className="bam-banker-list">
+              {bankers.map((b) => {
+                const count = students.filter((s) => (s.sharedBankers || []).includes(b.name)).length;
+                return (
+                  <button
+                    key={b.name}
+                    className={`bam-banker-row${selectedBanker === b.name ? " active" : ""}`}
+                    onClick={() => setSelectedBanker(b.name)}
+                  >
+                    <div className="bam-banker-avatar">{b.name[0].toUpperCase()}</div>
+                    <span className="bam-banker-name">{b.name}</span>
+                    <span className="bam-banker-count">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="bam-main">
+              <div className="bam-section">
+                <p className="bam-section-title">
+                  Students <strong>{selectedBanker}</strong> can access ({grantedStudents.length})
+                </p>
+                {grantedStudents.length === 0 ? (
+                  <p className="bam-no-students">No students granted yet.</p>
+                ) : (
+                  <div className="bam-student-list">
+                    {grantedStudents.map((s) => (
+                      <div key={s.name} className="bam-student-row">
+                        <div className="bam-student-avatar">{(s.name || "?")[0].toUpperCase()}</div>
+                        <div className="bam-student-info">
+                          <span className="bam-student-name">{s.name}</span>
+                          <span className="bam-student-contact">{s.email || s.phone || "No contact info"}</span>
+                        </div>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          disabled={togglingName === s.name}
+                          onClick={() => toggleAccess(s, false)}
+                        >
+                          {togglingName === s.name ? <RefreshCw size={12} className="spin" /> : "Revoke"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="bam-section">
+                <p className="bam-section-title">Grant access to another student</p>
+                <div className="bam-search">
+                  <Search size={14} />
+                  <input
+                    placeholder="Search students by name, email, or phone…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
+                <div className="bam-student-list bam-add-list">
+                  {visibleAvailable.length === 0 ? (
+                    <p className="bam-no-students">
+                      {search ? "No matching students." : "All students already have access."}
+                    </p>
+                  ) : (
+                    visibleAvailable.map((s) => (
+                      <div key={s.name} className="bam-student-row">
+                        <div className="bam-student-avatar">{(s.name || "?")[0].toUpperCase()}</div>
+                        <div className="bam-student-info">
+                          <span className="bam-student-name">{s.name}</span>
+                          <span className="bam-student-contact">{s.email || s.phone || "No contact info"}</span>
+                        </div>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          disabled={togglingName === s.name}
+                          onClick={() => toggleAccess(s, true)}
+                        >
+                          {togglingName === s.name ? <RefreshCw size={12} className="spin" /> : "Grant"}
+                        </button>
+                      </div>
+                    ))
+                  )}
+                  {availableStudents.length > visibleAvailable.length && (
+                    <p className="bam-more-hint">
+                      +{availableStudents.length - visibleAvailable.length} more — refine your search to find them
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {error && <div className="settings-msg err bam-error">{error}</div>}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Settings Panel ───────────────────────────────────────────── */
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
@@ -1642,6 +1798,8 @@ export default function Admin() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [advisorFilter, setAdvisorFilter] = useState("all");
+  const [bankerFilter, setBankerFilter] = useState("all");
+  const [bankers, setBankers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [expandedIdx, setExpandedIdx] = useState(null);
@@ -1650,6 +1808,7 @@ export default function Admin() {
   const [showSettings, setShowSettings] = useState(false);
   const [reportStudent, setReportStudent] = useState(null);
   const [bankStudent, setBankStudent] = useState(null);
+  const [showAccessManager, setShowAccessManager] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) navigate("/admin-login");
@@ -1669,11 +1828,19 @@ export default function Admin() {
     }
   }, []);
 
+  const loadBankers = useCallback(async () => {
+    try {
+      const r = await callAPI("GET", "/api/admins/bankers");
+      if (r.success) setBankers(r.bankers || []);
+    } catch { /* silent — banker filter just won't show options */ }
+  }, []);
+
   useEffect(() => {
     if (!isAdmin) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadStudents();
-  }, [isAdmin, loadStudents]);
+    void loadBankers();
+  }, [isAdmin, loadStudents, loadBankers]);
 
   const handleDelete = async (name) => {
     setDeleting(true);
@@ -1691,6 +1858,10 @@ export default function Admin() {
     }
   };
 
+  const handleAccessChanged = (name, sharedBankers) => {
+    setStudents((prev) => prev.map((s) => s.name === name ? { ...s, sharedBankers } : s));
+  };
+
   const openDriveFolder = (s) => {
     const url =
       s.driveUrl ||
@@ -1703,9 +1874,11 @@ export default function Admin() {
 
   // Advisor scope applies everywhere on the dashboard — stats, list, everything.
   // Advisors are locked to their own students; superadmins can narrow via advisorFilter.
+  // bankerFilter narrows further, on top of whichever scope above already applies.
   const scopedStudents = students.filter((s) => {
-    if (adminRole === "advisor") return s.advisor === adminAdvisorName;
-    if (advisorFilter !== "all") return s.advisor === advisorFilter;
+    if (adminRole === "advisor" && s.advisor !== adminAdvisorName) return false;
+    if (adminRole !== "advisor" && advisorFilter !== "all" && s.advisor !== advisorFilter) return false;
+    if (bankerFilter !== "all" && !(s.sharedBankers || []).includes(bankerFilter)) return false;
     return true;
   });
 
@@ -1775,6 +1948,10 @@ export default function Admin() {
                 <span className="btn-label">Root Drive</span>
               </a>
             )}
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowAccessManager(true)} title="Manage which students each banker can see">
+              <Send size={13} />
+              <span className="btn-label">Banker Access</span>
+            </button>
             <button className="btn btn-secondary btn-sm" onClick={() => setShowSettings(true)} title="Settings">
               <Settings size={13} />
               <span className="btn-label">Settings</span>
@@ -1831,6 +2008,19 @@ export default function Admin() {
               <option value="all">All Advisors</option>
               {advisorList.map((a) => (
                 <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          )}
+
+          {bankers.length > 0 && (
+            <select
+              className="advisor-filter-select banker-filter-select"
+              value={bankerFilter}
+              onChange={(e) => setBankerFilter(e.target.value)}
+            >
+              <option value="all">All Bankers</option>
+              {bankers.map((b) => (
+                <option key={b.name} value={b.name}>{b.name}</option>
               ))}
             </select>
           )}
@@ -1916,9 +2106,17 @@ export default function Admin() {
         <GrantBankAccessModal
           student={bankStudent}
           onClose={() => setBankStudent(null)}
-          onAccessChanged={(name, sharedBankers) => {
-            setStudents((prev) => prev.map((s) => s.name === name ? { ...s, sharedBankers } : s));
-          }}
+          onAccessChanged={handleAccessChanged}
+        />
+      )}
+
+      {/* Banker Access Manager — select a banker, see/manage every student they can access */}
+      {showAccessManager && (
+        <BankerAccessManagerModal
+          students={scopedStudents}
+          bankers={bankers}
+          onClose={() => setShowAccessManager(false)}
+          onAccessChanged={handleAccessChanged}
         />
       )}
 

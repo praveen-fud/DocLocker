@@ -547,6 +547,237 @@
   }
 }
 
+/* ── Banker Access Manager ─────────────────────────────────── */
+.bam-modal {
+  background: #ffffff;
+  border: 1px solid rgba(26, 110, 181, 0.16);
+  border-radius: 20px;
+  width: 100%;
+  max-width: 880px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(15, 37, 68, 0.25);
+}
+.bam-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid rgba(26, 110, 181, 0.12);
+  flex-shrink: 0;
+}
+.bam-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f2544;
+  letter-spacing: -0.01em;
+}
+.bam-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.bam-banker-list {
+  width: 220px;
+  flex-shrink: 0;
+  border-right: 1px solid rgba(26, 110, 181, 0.10);
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bam-banker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.bam-banker-row:hover {
+  background: rgba(26, 110, 181, 0.06);
+}
+.bam-banker-row.active {
+  background: rgba(26, 110, 181, 0.10);
+}
+.bam-banker-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(26, 110, 181, 0.12);
+  color: #1a6eb5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.bam-banker-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f2544;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bam-banker-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 7px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.bam-banker-row.active .bam-banker-count {
+  background: #1a6eb5;
+  color: #ffffff;
+}
+
+.bam-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.bam-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 10px;
+}
+.bam-section-title strong {
+  color: #1a6eb5;
+}
+.bam-no-students {
+  font-size: 13px;
+  color: #94a3b8;
+  padding: 10px 0;
+}
+.bam-student-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.bam-student-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: #f8fafc;
+  border: 1px solid rgba(26, 110, 181, 0.08);
+  border-radius: 10px;
+}
+.bam-student-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(26, 110, 181, 0.10);
+  color: #1a6eb5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.bam-student-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.bam-student-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f2544;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bam-student-contact {
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bam-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid rgba(26, 110, 181, 0.16);
+  border-radius: 10px;
+  padding: 9px 12px;
+  margin-bottom: 10px;
+  color: #94a3b8;
+}
+.bam-search input {
+  border: none;
+  outline: none;
+  flex: 1;
+  font-size: 13px;
+  font-family: inherit;
+  color: #0f2544;
+  background: none;
+}
+.bam-more-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
+  padding: 6px 0;
+}
+.bam-empty {
+  padding: 60px 30px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 14px;
+}
+.bam-error {
+  margin: 0 22px 16px;
+}
+
+@media (max-width: 720px) {
+  .bam-modal {
+    max-height: 92vh;
+  }
+  .bam-body {
+    flex-direction: column;
+  }
+  .bam-banker-list {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: visible;
+    border-right: none;
+    border-bottom: 1px solid rgba(26, 110, 181, 0.10);
+  }
+}
+
 /* ── Error banner ──────────────────────────────────────────── */
 .admin-error {
   display: flex;
