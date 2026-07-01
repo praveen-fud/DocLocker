@@ -599,3 +599,24 @@
 .lsm-remark-input:focus { border-color: rgba(220,38,38,0.6); box-shadow: 0 0 0 3px rgba(220,38,38,0.10); }
 .lsm-error { font-size: 12.5px; color: #dc2626; background: rgba(220,38,38,0.09); border: 1px solid rgba(220,38,38,0.2); border-radius: 6px; padding: 8px 12px; margin: 0; }
 .lsm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* Sanction letter upload */
+.lsm-upload-wrap { display: flex; flex-direction: column; gap: 7px; }
+.lsm-optional { font-size: 11px; font-weight: 500; color: #94a3b8; text-transform: none; letter-spacing: 0; }
+.lsm-file-drop {
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px dashed rgba(13,148,136,0.35); border-radius: 10px;
+  background: rgba(13,148,136,0.04); padding: 14px 16px; cursor: pointer;
+  transition: all 0.18s; min-height: 52px;
+}
+.lsm-file-drop:hover { border-color: rgba(13,148,136,0.6); background: rgba(13,148,136,0.08); }
+.lsm-file-drop.has-file { border-style: solid; border-color: rgba(13,148,136,0.5); background: rgba(13,148,136,0.07); }
+.lsm-file-placeholder { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 500; color: #0d9488; }
+.lsm-file-selected { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: #0d9488; width: 100%; }
+.lsm-file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lsm-file-remove {
+  background: rgba(220,38,38,0.10); border: 1px solid rgba(220,38,38,0.25); border-radius: 4px;
+  color: #dc2626; display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; cursor: pointer; flex-shrink: 0; transition: background 0.15s;
+}
+.lsm-file-remove:hover { background: rgba(220,38,38,0.20); }

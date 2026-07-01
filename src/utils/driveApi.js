@@ -209,3 +209,8 @@ export async function updateLoanStatus(studentName, studentIdentifier, loanStatu
   const folderKey = buildFolderKey(studentName, studentIdentifier || '');
   return apiPut(`/api/students/${encodeURIComponent(folderKey)}/loan-status`, { loanStatus, loanRemark });
 }
+
+// ── Upload sanction letter when loan is sanctioned ────────────────────────────
+export function uploadSanctionLetter(studentName, studentIdentifier, file) {
+  return uploadDocument({ studentName, studentIdentifier, subFolder: 'Loan_Documents', fileName: 'Sanction_Letter', file });
+}

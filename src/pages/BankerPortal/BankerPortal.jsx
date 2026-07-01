@@ -2,10 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Search, RefreshCw, AlertCircle, FileText, Eye, Download, ChevronDown,
   Building2, FolderOpen, X, GraduationCap, Banknote, FolderInput, KeyRound, EyeOff,
-  CheckCircle,
+  CheckCircle, Upload,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
-import { getAllStudentsFromDrive, getStudentFiles, getFileProxyUrl, changeOwnPassword, updateLoanStatus } from "../../utils/driveApi";
+import { getAllStudentsFromDrive, getStudentFiles, getFileProxyUrl, changeOwnPassword, updateLoanStatus, uploadSanctionLetter } from "../../utils/driveApi";
 import "./BankerPortal.css";
 
 const LOAN_STATUS_CONFIG = {
@@ -66,13 +66,16 @@ export default function BankerPortal() {
   const [loanModalStudent, setLoanModalStudent] = useState(null);
   const [loanStatus, setLoanStatus] = useState("pending");
   const [loanRemark, setLoanRemark] = useState("");
+  const [loanSanctionFile, setLoanSanctionFile] = useState(null);
   const [loanLoading, setLoanLoading] = useState(false);
+  const [loanLoadingMsg, setLoanLoadingMsg] = useState("");
   const [loanErr, setLoanErr] = useState("");
 
   const openLoanModal = (s) => {
     setLoanModalStudent(s);
     setLoanStatus(s.loanStatus || "pending");
     setLoanRemark(s.loanRemark || "");
+    setLoanSanctionFile(null);
     setLoanErr("");
   };
 
@@ -85,12 +88,21 @@ export default function BankerPortal() {
     setLoanLoading(true);
     setLoanErr("");
     try {
+      setLoanLoadingMsg("Updating status…");
       await updateLoanStatus(
         loanModalStudent.name,
         loanModalStudent.email || loanModalStudent.phone || "",
         loanStatus,
         loanRemark
       );
+      if (loanStatus === "sanctioned" && loanSanctionFile) {
+        setLoanLoadingMsg("Uploading sanction letter…");
+        await uploadSanctionLetter(
+          loanModalStudent.name,
+          loanModalStudent.email || loanModalStudent.phone || "",
+          loanSanctionFile
+        );
+      }
       setStudents((prev) =>
         prev.map((s) =>
           s.name === loanModalStudent.name ? { ...s, loanStatus, loanRemark } : s
@@ -101,6 +113,7 @@ export default function BankerPortal() {
       setLoanErr(e2.message || "Failed to update loan status.");
     } finally {
       setLoanLoading(false);
+      setLoanLoadingMsg("");
     }
   };
 
@@ -364,7 +377,7 @@ export default function BankerPortal() {
                     key={key}
                     type="button"
                     className={`lsm-option ${cfg.cls}${loanStatus === key ? " selected" : ""}`}
-                    onClick={() => { setLoanStatus(key); if (key !== "rejected") setLoanRemark(""); }}
+                    onClick={() => { setLoanStatus(key); if (key !== "rejected") setLoanRemark(""); if (key !== "sanctioned") setLoanSanctionFile(null); }}
                   >
                     <span className="lsm-option-dot" />
                     <span>{cfg.label}</span>
@@ -386,13 +399,39 @@ export default function BankerPortal() {
                   />
                 </div>
               )}
+              {loanStatus === "sanctioned" && (
+                <div className="lsm-upload-wrap">
+                  <label className="lsm-remark-label">
+                    Sanction Letter <span className="lsm-optional">— optional</span>
+                  </label>
+                  <label className={`lsm-file-drop${loanSanctionFile ? " has-file" : ""}`}>
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }}
+                      onChange={(e) => setLoanSanctionFile(e.target.files[0] || null)} />
+                    {loanSanctionFile ? (
+                      <div className="lsm-file-selected">
+                        <FileText size={15} />
+                        <span className="lsm-file-name">{loanSanctionFile.name}</span>
+                        <button type="button" className="lsm-file-remove"
+                          onClick={(e) => { e.preventDefault(); setLoanSanctionFile(null); }}>
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="lsm-file-placeholder">
+                        <Upload size={16} />
+                        <span>Click to upload PDF or image</span>
+                      </div>
+                    )}
+                  </label>
+                </div>
+              )}
               {loanErr && <p className="lsm-error">{loanErr}</p>}
               <div className="lsm-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setLoanModalStudent(null)} disabled={loanLoading}>
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={loanLoading}>
-                  {loanLoading ? <><RefreshCw size={13} className="spin" /> Saving…</> : "Update Status"}
+                  {loanLoading ? <><RefreshCw size={13} className="spin" /> {loanLoadingMsg}</> : "Update Status"}
                 </button>
               </div>
             </form>

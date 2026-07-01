@@ -35,9 +35,10 @@ import {
   AlertTriangle,
   XCircle,
   Send,
+  Upload,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
-import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus } from "../../utils/driveApi";
+import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter } from "../../utils/driveApi";
 import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields } from "../../context/schemas";
 import "./Admin.css";
 
@@ -269,22 +270,51 @@ function assessLoanEligibility(student) {
 
 /* ─── Sub-components ───────────────────────────────────────────── */
 
-function StatCard({ label, value, icon, color, active, onClick }) {
+function StatsPanel({ stats, loanStats, filter, setFilter, loanStatusFilter, setLoanStatusFilter }) {
+  const docCards = [
+    { key: "all",        label: "Total Students", value: stats.total,      color: "blue",  icon: <Building2 size={15} /> },
+    { key: "complete",   label: "Completed",       value: stats.complete,   color: "green", icon: <CheckCircle size={15} /> },
+    { key: "progress",   label: "In Progress",     value: stats.inProgress, color: "amber", icon: <TrendingUp size={15} /> },
+    { key: "notStarted", label: "Not Started",     value: stats.notStarted, color: "red",   icon: <Clock size={15} /> },
+  ];
+  const loanCards = [
+    { key: "pending",    label: "Pending",    value: loanStats.pending,    color: "slate" },
+    { key: "inprocess",  label: "In Process", value: loanStats.inprocess,  color: "orange" },
+    { key: "sanctioned", label: "Sanctioned", value: loanStats.sanctioned, color: "teal" },
+    { key: "rejected",   label: "Rejected",   value: loanStats.rejected,   color: "rose" },
+  ];
   return (
-    <button
-      type="button"
-      className={`stat-card stat-${color}${active ? " stat-active" : ""}`}
-      onClick={onClick}
-    >
-      <div className="stat-top">
-        <div className="stat-icon-wrap">{icon}</div>
-        <span className="stat-trend">
-          {color === "blue" ? "ALL" : color === "green" ? "✓" : color === "yellow" ? "~" : "○"}
-        </span>
+    <div className="kpi-section animate-fade-in">
+      <p className="kpi-section-title"><BarChart3 size={11} /> Document Progress</p>
+      <div className="kpi-grid">
+        {docCards.map(({ key, label, value, color, icon }) => (
+          <button key={key} type="button"
+            className={`kpi-card kpi-${color}${filter === key ? " kpi-active" : ""}`}
+            onClick={() => setFilter(filter === key && key !== "all" ? "all" : key)}>
+            <div className="kpi-top">
+              <span className="kpi-label">{label}</span>
+              <span className="kpi-icon">{icon}</span>
+            </div>
+            <span className="kpi-value">{value}</span>
+          </button>
+        ))}
       </div>
-      <div className="stat-value">{value}</div>
-      <div className="stat-label">{label}</div>
-    </button>
+
+      <p className="kpi-section-title kpi-section-title-loan"><Banknote size={11} /> Loan Application Status</p>
+      <div className="kpi-grid">
+        {loanCards.map(({ key, label, value, color }) => (
+          <button key={key} type="button"
+            className={`kpi-card kpi-${color}${loanStatusFilter === key ? " kpi-active" : ""}`}
+            onClick={() => setLoanStatusFilter(loanStatusFilter === key ? "all" : key)}>
+            <div className="kpi-top">
+              <span className="kpi-label">{label}</span>
+              <span className="kpi-dot" />
+            </div>
+            <span className="kpi-value">{value}</span>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -328,7 +358,9 @@ function LoanStatusBadge({ status }) {
 function LoanStatusModal({ student, onClose, onUpdated }) {
   const [status, setStatus] = useState(student.loanStatus || "pending");
   const [remark, setRemark] = useState(student.loanRemark || "");
+  const [sanctionFile, setSanctionFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState("");
   const [err, setErr] = useState("");
 
   const handleSubmit = async (e) => {
@@ -340,18 +372,19 @@ function LoanStatusModal({ student, onClose, onUpdated }) {
     setLoading(true);
     setErr("");
     try {
-      await updateLoanStatus(
-        student.name,
-        student.email || student.phone || "",
-        status,
-        remark
-      );
+      setLoadingMsg("Updating status…");
+      await updateLoanStatus(student.name, student.email || student.phone || "", status, remark);
+      if (status === "sanctioned" && sanctionFile) {
+        setLoadingMsg("Uploading sanction letter…");
+        await uploadSanctionLetter(student.name, student.email || student.phone || "", sanctionFile);
+      }
       onUpdated(student.name, status, remark);
       onClose();
     } catch (e2) {
       setErr(e2.message || "Failed to update loan status.");
     } finally {
       setLoading(false);
+      setLoadingMsg("");
     }
   };
 
@@ -359,9 +392,7 @@ function LoanStatusModal({ student, onClose, onUpdated }) {
     <div className="modal-backdrop" onClick={() => !loading && onClose()}>
       <div className="loan-status-modal animate-fade-in" onClick={(e) => e.stopPropagation()}>
         <div className="lsm-header">
-          <div className="lsm-icon">
-            <Banknote size={22} />
-          </div>
+          <div className="lsm-icon"><Banknote size={22} /></div>
           <div className="lsm-title-block">
             <h3 className="lsm-title">Update Loan Status</h3>
             <p className="lsm-sub">{student.name}</p>
@@ -375,10 +406,9 @@ function LoanStatusModal({ student, onClose, onUpdated }) {
           <div className="lsm-status-grid">
             {Object.entries(LOAN_STATUS_CONFIG).map(([key, cfg]) => (
               <button
-                key={key}
-                type="button"
+                key={key} type="button"
                 className={`lsm-option ${cfg.cls}${status === key ? " selected" : ""}`}
-                onClick={() => { setStatus(key); if (key !== "rejected") setRemark(""); }}
+                onClick={() => { setStatus(key); if (key !== "rejected") setRemark(""); if (key !== "sanctioned") setSanctionFile(null); }}
               >
                 <span className="lsm-option-dot" />
                 <span>{cfg.label}</span>
@@ -402,10 +432,42 @@ function LoanStatusModal({ student, onClose, onUpdated }) {
             </div>
           )}
 
+          {status === "sanctioned" && (
+            <div className="lsm-upload-wrap">
+              <label className="lsm-remark-label">
+                Sanction Letter <span className="lsm-optional">— optional</span>
+              </label>
+              <label className={`lsm-file-drop${sanctionFile ? " has-file" : ""}`}>
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  style={{ display: "none" }}
+                  onChange={(e) => setSanctionFile(e.target.files[0] || null)}
+                />
+                {sanctionFile ? (
+                  <div className="lsm-file-selected">
+                    <FileText size={15} />
+                    <span className="lsm-file-name">{sanctionFile.name}</span>
+                    <button
+                      type="button"
+                      className="lsm-file-remove"
+                      onClick={(e) => { e.preventDefault(); setSanctionFile(null); }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="lsm-file-placeholder">
+                    <Upload size={16} />
+                    <span>Click to upload PDF or image</span>
+                  </div>
+                )}
+              </label>
+            </div>
+          )}
+
           {student.loanRemark && student.loanStatus === "rejected" && status !== "rejected" && (
-            <p className="lsm-prev-remark">
-              Previous remark: <em>{student.loanRemark}</em>
-            </p>
+            <p className="lsm-prev-remark">Previous remark: <em>{student.loanRemark}</em></p>
           )}
 
           {err && <p className="lsm-error">{err}</p>}
@@ -415,11 +477,7 @@ function LoanStatusModal({ student, onClose, onUpdated }) {
               Cancel
             </button>
             <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? (
-                <><RefreshCw size={13} className="spin" /> Saving…</>
-              ) : (
-                "Update Status"
-              )}
+              {loading ? <><RefreshCw size={13} className="spin" /> {loadingMsg}</> : "Update Status"}
             </button>
           </div>
         </form>
@@ -1086,39 +1144,16 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewRe
         </div>
 
         <div className="student-actions-col" onClick={(e) => e.stopPropagation()}>
-          <button
-            className="icon-btn loan-btn"
-            title="Update Loan Status"
-            onClick={onLoanStatusUpdate}
-          >
+          <button className="icon-btn loan-btn" title="Update Loan Status" onClick={onLoanStatusUpdate}>
             <Banknote size={14} />
           </button>
-          <button
-            className="icon-btn report-btn"
-            title="View Eligibility Report"
-            onClick={onViewReport}
-          >
+          <button className="icon-btn report-btn" title="View Eligibility Report" onClick={onViewReport}>
             <BarChart3 size={14} />
           </button>
-          <button
-            className="icon-btn drive-btn"
-            title="Open Drive folder"
-            onClick={onOpenDrive}
-          >
-            <FolderOpen size={14} />
-          </button>
-          <button
-            className="icon-btn bank-btn"
-            title="Grant Bank Access"
-            onClick={onSendToBank}
-          >
+          <button className="icon-btn bank-btn" title="Grant Bank Access" onClick={onSendToBank}>
             <Send size={14} />
           </button>
-          <button
-            className="icon-btn del-btn"
-            title="Delete student"
-            onClick={onDelete}
-          >
+          <button className="icon-btn del-btn" title="Delete student" onClick={onDelete}>
             <Trash2 size={14} />
           </button>
         </div>
@@ -1152,20 +1187,22 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewRe
             {activeTab === "files" && <FilesTab student={student} />}
 
             <div className="detail-action-bar">
-              <button className="btn btn-loan btn-sm" onClick={onLoanStatusUpdate}>
-                <Banknote size={13} /> Update Loan Status
-              </button>
-              <button className="btn btn-primary btn-sm" onClick={onViewReport}>
-                <BarChart3 size={13} /> View Eligibility Report
-              </button>
-              <button className="btn btn-secondary btn-sm" onClick={onOpenDrive}>
-                <ExternalLink size={13} /> Open Drive Folder
-              </button>
-              <button className="btn btn-secondary btn-sm" onClick={onSendToBank}>
-                <Send size={13} /> Grant Bank Access
-              </button>
-              <button className="btn btn-danger btn-sm" onClick={onDelete}>
-                <Trash2 size={13} /> Delete Student
+              <div className="dab-primary">
+                <button className="btn btn-loan btn-sm" onClick={onLoanStatusUpdate}>
+                  <Banknote size={13} /> Loan Status
+                </button>
+                <button className="btn btn-primary btn-sm" onClick={onViewReport}>
+                  <BarChart3 size={13} /> Eligibility Report
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={onOpenDrive}>
+                  <ExternalLink size={13} /> Open Drive
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={onSendToBank}>
+                  <Send size={13} /> Bank Access
+                </button>
+              </div>
+              <button className="btn btn-danger btn-sm dab-delete" onClick={onDelete}>
+                <Trash2 size={13} /> Delete
               </button>
             </div>
           </div>
@@ -2104,23 +2141,15 @@ export default function Admin() {
           </div>
         </div>
 
-        {/* Document Progress Stats */}
-        <div className="stats-section-label animate-fade-in">Document Progress</div>
-        <div className="admin-stats animate-fade-in">
-          <StatCard label="Total Students" value={stats.total} icon={<Building2 size={18} />} color="blue" active={filter === "all"} onClick={() => setFilter("all")} />
-          <StatCard label="Completed" value={stats.complete} icon={<CheckCircle size={18} />} color="green" active={filter === "complete"} onClick={() => setFilter("complete")} />
-          <StatCard label="In Progress" value={stats.inProgress} icon={<TrendingUp size={18} />} color="yellow" active={filter === "progress"} onClick={() => setFilter("progress")} />
-          <StatCard label="Not Started" value={stats.notStarted} icon={<Clock size={18} />} color="red" active={filter === "notStarted"} onClick={() => setFilter("notStarted")} />
-        </div>
-
-        {/* Loan Application Stats */}
-        <div className="stats-section-label animate-fade-in">Loan Application Status</div>
-        <div className="admin-stats loan-stats animate-fade-in">
-          <StatCard label="Pending" value={loanStats.pending} icon={<Clock size={18} />} color="gray" active={loanStatusFilter === "pending"} onClick={() => setLoanStatusFilter(loanStatusFilter === "pending" ? "all" : "pending")} />
-          <StatCard label="In Process" value={loanStats.inprocess} icon={<TrendingUp size={18} />} color="orange" active={loanStatusFilter === "inprocess"} onClick={() => setLoanStatusFilter(loanStatusFilter === "inprocess" ? "all" : "inprocess")} />
-          <StatCard label="Sanctioned" value={loanStats.sanctioned} icon={<CheckCircle size={18} />} color="teal" active={loanStatusFilter === "sanctioned"} onClick={() => setLoanStatusFilter(loanStatusFilter === "sanctioned" ? "all" : "sanctioned")} />
-          <StatCard label="Rejected" value={loanStats.rejected} icon={<XCircle size={18} />} color="red" active={loanStatusFilter === "rejected"} onClick={() => setLoanStatusFilter(loanStatusFilter === "rejected" ? "all" : "rejected")} />
-        </div>
+        {/* Compact Stats Panel */}
+        <StatsPanel
+          stats={stats}
+          loanStats={loanStats}
+          filter={filter}
+          setFilter={setFilter}
+          loanStatusFilter={loanStatusFilter}
+          setLoanStatusFilter={setLoanStatusFilter}
+        />
 
         {/* Toolbar */}
         <div className="admin-toolbar">
