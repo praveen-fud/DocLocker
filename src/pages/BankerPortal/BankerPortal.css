@@ -435,3 +435,167 @@
     border-radius: 16px 16px 0 0;
   }
 }
+
+/* ── Loan Status Row (inside expanded student card) ────────────── */
+.bp-loan-status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(234, 88, 12, 0.04);
+  border: 1px solid rgba(234, 88, 12, 0.15);
+  border-radius: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.bp-loan-icon {
+  color: #ea580c;
+  flex-shrink: 0;
+}
+.bp-loan-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+.bp-loan-remark {
+  font-size: 11.5px;
+  color: #dc2626;
+  font-style: italic;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bp-loan-update-btn {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(234, 88, 12, 0.30);
+  background: rgba(234, 88, 12, 0.09);
+  color: #ea580c;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  margin-left: auto;
+}
+.bp-loan-update-btn:hover {
+  background: rgba(234, 88, 12, 0.18);
+}
+
+/* Loan status modal styles (shared from Admin.css pattern) */
+.loan-status-modal {
+  position: relative;
+  width: 440px;
+  max-width: calc(100vw - 32px);
+  background: #ffffff;
+  border-radius: 20px;
+  border: 1px solid rgba(26, 110, 181, 0.16);
+  box-shadow: 0 8px 30px rgba(15, 37, 68, 0.16);
+  overflow: hidden;
+}
+.lsm-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 22px 18px;
+  border-bottom: 1px solid rgba(26, 110, 181, 0.08);
+  background: rgba(248, 250, 252, 0.96);
+}
+.lsm-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: rgba(234, 88, 12, 0.10);
+  color: #ea580c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid rgba(234, 88, 12, 0.22);
+}
+.lsm-title-block { flex: 1; min-width: 0; }
+.lsm-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f2544;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.lsm-sub {
+  font-size: 12px;
+  color: #94a3b8;
+  margin: 2px 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+.lsm-close {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  border: 1px solid rgba(26, 110, 181, 0.08);
+  background: rgba(255,255,255,0.92);
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.lsm-close:hover { color: #0f2544; border-color: rgba(26,110,181,0.30); }
+.lsm-body { padding: 22px; display: flex; flex-direction: column; gap: 18px; }
+.lsm-status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.lsm-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 14px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(26, 110, 181, 0.08);
+  background: rgba(248, 250, 252, 0.96);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  text-align: left;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.lsm-option:hover { border-color: rgba(26, 110, 181, 0.30); }
+.lsm-option-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: #94a3b8; transition: background 0.15s; }
+.lsm-check { margin-left: auto; flex-shrink: 0; }
+.lsm-option.loan-pending.selected   { border-color: #94a3b8; background: rgba(148,163,184,0.12); color: #475569; }
+.lsm-option.loan-pending .lsm-option-dot   { background: #94a3b8; }
+.lsm-option.loan-inprocess.selected  { border-color: #ea580c; background: rgba(234,88,12,0.08); color: #ea580c; }
+.lsm-option.loan-inprocess .lsm-option-dot  { background: #ea580c; }
+.lsm-option.loan-inprocess .lsm-check { color: #ea580c; }
+.lsm-option.loan-sanctioned.selected { border-color: #0d9488; background: rgba(13,148,136,0.08); color: #0d9488; }
+.lsm-option.loan-sanctioned .lsm-option-dot { background: #0d9488; }
+.lsm-option.loan-sanctioned .lsm-check { color: #0d9488; }
+.lsm-option.loan-rejected.selected   { border-color: #dc2626; background: rgba(220,38,38,0.08); color: #dc2626; }
+.lsm-option.loan-rejected .lsm-option-dot   { background: #dc2626; }
+.lsm-option.loan-rejected .lsm-check { color: #dc2626; }
+.lsm-remark-wrap { display: flex; flex-direction: column; gap: 7px; }
+.lsm-remark-label { font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; }
+.required-star { color: #dc2626; }
+.lsm-remark-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(220, 38, 38, 0.35);
+  background: rgba(248, 250, 252, 0.96);
+  font-size: 13px;
+  color: #0f2544;
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.5;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+.lsm-remark-input:focus { border-color: rgba(220,38,38,0.6); box-shadow: 0 0 0 3px rgba(220,38,38,0.10); }
+.lsm-error { font-size: 12.5px; color: #dc2626; background: rgba(220,38,38,0.09); border: 1px solid rgba(220,38,38,0.2); border-radius: 6px; padding: 8px 12px; margin: 0; }
+.lsm-actions { display: flex; gap: 10px; justify-content: flex-end; }

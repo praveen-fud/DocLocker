@@ -37,7 +37,7 @@ import {
   Send,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
-import { getAllStudentsFromDrive, deleteStudent } from "../../utils/driveApi";
+import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus } from "../../utils/driveApi";
 import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields } from "../../context/schemas";
 import "./Admin.css";
 
@@ -308,6 +308,123 @@ function Badge({ progress }) {
       <span className="badge-dot" />
       Not Started
     </span>
+  );
+}
+
+/* ─── Loan Status ──────────────────────────────────────────────── */
+
+const LOAN_STATUS_CONFIG = {
+  pending:    { label: "Pending",     cls: "loan-pending" },
+  inprocess:  { label: "In Process",  cls: "loan-inprocess" },
+  sanctioned: { label: "Sanctioned",  cls: "loan-sanctioned" },
+  rejected:   { label: "Rejected",    cls: "loan-rejected" },
+};
+
+function LoanStatusBadge({ status }) {
+  const cfg = LOAN_STATUS_CONFIG[status || "pending"] || LOAN_STATUS_CONFIG.pending;
+  return <span className={`loan-badge ${cfg.cls}`}>{cfg.label}</span>;
+}
+
+function LoanStatusModal({ student, onClose, onUpdated }) {
+  const [status, setStatus] = useState(student.loanStatus || "pending");
+  const [remark, setRemark] = useState(student.loanRemark || "");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (status === "rejected" && !remark.trim()) {
+      setErr("A remark is required when rejecting a loan.");
+      return;
+    }
+    setLoading(true);
+    setErr("");
+    try {
+      await updateLoanStatus(
+        student.name,
+        student.email || student.phone || "",
+        status,
+        remark
+      );
+      onUpdated(student.name, status, remark);
+      onClose();
+    } catch (e2) {
+      setErr(e2.message || "Failed to update loan status.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={() => !loading && onClose()}>
+      <div className="loan-status-modal animate-fade-in" onClick={(e) => e.stopPropagation()}>
+        <div className="lsm-header">
+          <div className="lsm-icon">
+            <Banknote size={22} />
+          </div>
+          <div className="lsm-title-block">
+            <h3 className="lsm-title">Update Loan Status</h3>
+            <p className="lsm-sub">{student.name}</p>
+          </div>
+          <button className="lsm-close" onClick={onClose} disabled={loading}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="lsm-body">
+          <div className="lsm-status-grid">
+            {Object.entries(LOAN_STATUS_CONFIG).map(([key, cfg]) => (
+              <button
+                key={key}
+                type="button"
+                className={`lsm-option ${cfg.cls}${status === key ? " selected" : ""}`}
+                onClick={() => { setStatus(key); if (key !== "rejected") setRemark(""); }}
+              >
+                <span className="lsm-option-dot" />
+                <span>{cfg.label}</span>
+                {status === key && <CheckCircle size={14} className="lsm-check" />}
+              </button>
+            ))}
+          </div>
+
+          {status === "rejected" && (
+            <div className="lsm-remark-wrap">
+              <label className="lsm-remark-label">
+                Rejection Remark <span className="required-star">*</span>
+              </label>
+              <textarea
+                className="lsm-remark-input"
+                rows={3}
+                placeholder="Describe the reason for rejection…"
+                value={remark}
+                onChange={(e) => setRemark(e.target.value)}
+              />
+            </div>
+          )}
+
+          {student.loanRemark && student.loanStatus === "rejected" && status !== "rejected" && (
+            <p className="lsm-prev-remark">
+              Previous remark: <em>{student.loanRemark}</em>
+            </p>
+          )}
+
+          {err && <p className="lsm-error">{err}</p>}
+
+          <div className="lsm-actions">
+            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={loading}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={loading}>
+              {loading ? (
+                <><RefreshCw size={13} className="spin" /> Saving…</>
+              ) : (
+                "Update Status"
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
@@ -921,7 +1038,7 @@ function FilesTab({ student }) {
 
 /* ─── Student Row ──────────────────────────────────────────────── */
 
-function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewReport, onSendToBank }) {
+function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewReport, onSendToBank, onLoanStatusUpdate }) {
   const [activeTab, setActiveTab] = useState("personal");
 
   const totalUploads = getTotalUploads(student);
@@ -965,9 +1082,17 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewRe
 
         <div className="student-status-col">
           <Badge progress={progress} />
+          <LoanStatusBadge status={student.loanStatus} />
         </div>
 
         <div className="student-actions-col" onClick={(e) => e.stopPropagation()}>
+          <button
+            className="icon-btn loan-btn"
+            title="Update Loan Status"
+            onClick={onLoanStatusUpdate}
+          >
+            <Banknote size={14} />
+          </button>
           <button
             className="icon-btn report-btn"
             title="View Eligibility Report"
@@ -1027,6 +1152,9 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewRe
             {activeTab === "files" && <FilesTab student={student} />}
 
             <div className="detail-action-bar">
+              <button className="btn btn-loan btn-sm" onClick={onLoanStatusUpdate}>
+                <Banknote size={13} /> Update Loan Status
+              </button>
               <button className="btn btn-primary btn-sm" onClick={onViewReport}>
                 <BarChart3 size={13} /> View Eligibility Report
               </button>
@@ -1799,6 +1927,7 @@ export default function Admin() {
   const [filter, setFilter] = useState("all");
   const [advisorFilter, setAdvisorFilter] = useState("all");
   const [bankerFilter, setBankerFilter] = useState("all");
+  const [loanStatusFilter, setLoanStatusFilter] = useState("all");
   const [bankers, setBankers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -1809,6 +1938,7 @@ export default function Admin() {
   const [reportStudent, setReportStudent] = useState(null);
   const [bankStudent, setBankStudent] = useState(null);
   const [showAccessManager, setShowAccessManager] = useState(false);
+  const [loanStatusStudent, setLoanStatusStudent] = useState(null);
 
   useEffect(() => {
     if (!isAdmin) navigate("/admin-login");
@@ -1862,6 +1992,10 @@ export default function Admin() {
     setStudents((prev) => prev.map((s) => s.name === name ? { ...s, sharedBankers } : s));
   };
 
+  const handleLoanStatusChange = (name, loanStatus, loanRemark) => {
+    setStudents((prev) => prev.map((s) => s.name === name ? { ...s, loanStatus, loanRemark } : s));
+  };
+
   const openDriveFolder = (s) => {
     const url =
       s.driveUrl ||
@@ -1889,6 +2023,13 @@ export default function Admin() {
     notStarted: scopedStudents.filter((s) => getOverallProgress(s) === 0).length,
   };
 
+  const loanStats = {
+    pending:    scopedStudents.filter((s) => !s.loanStatus || s.loanStatus === "pending").length,
+    inprocess:  scopedStudents.filter((s) => s.loanStatus === "inprocess").length,
+    sanctioned: scopedStudents.filter((s) => s.loanStatus === "sanctioned").length,
+    rejected:   scopedStudents.filter((s) => s.loanStatus === "rejected").length,
+  };
+
   // Advisor dropdown options always list every advisor, regardless of current scope.
   const advisorList = Array.from(
     new Set(students.map((s) => s.advisor).filter(Boolean)),
@@ -1907,7 +2048,11 @@ export default function Admin() {
       (filter === "complete" && p === 100) ||
       (filter === "progress" && p > 0 && p < 100) ||
       (filter === "notStarted" && p === 0);
-    return matchesSearch && matchesFilter;
+    const matchesLoanStatus =
+      loanStatusFilter === "all" ||
+      (loanStatusFilter === "pending" && (!s.loanStatus || s.loanStatus === "pending")) ||
+      s.loanStatus === loanStatusFilter;
+    return matchesSearch && matchesFilter && matchesLoanStatus;
   });
 
   const rootUrl = import.meta.env.VITE_GOOGLE_DRIVE_FOLDER_ID
@@ -1959,12 +2104,22 @@ export default function Admin() {
           </div>
         </div>
 
-        {/* Stats */}
+        {/* Document Progress Stats */}
+        <div className="stats-section-label animate-fade-in">Document Progress</div>
         <div className="admin-stats animate-fade-in">
           <StatCard label="Total Students" value={stats.total} icon={<Building2 size={18} />} color="blue" active={filter === "all"} onClick={() => setFilter("all")} />
           <StatCard label="Completed" value={stats.complete} icon={<CheckCircle size={18} />} color="green" active={filter === "complete"} onClick={() => setFilter("complete")} />
           <StatCard label="In Progress" value={stats.inProgress} icon={<TrendingUp size={18} />} color="yellow" active={filter === "progress"} onClick={() => setFilter("progress")} />
           <StatCard label="Not Started" value={stats.notStarted} icon={<Clock size={18} />} color="red" active={filter === "notStarted"} onClick={() => setFilter("notStarted")} />
+        </div>
+
+        {/* Loan Application Stats */}
+        <div className="stats-section-label animate-fade-in">Loan Application Status</div>
+        <div className="admin-stats loan-stats animate-fade-in">
+          <StatCard label="Pending" value={loanStats.pending} icon={<Clock size={18} />} color="gray" active={loanStatusFilter === "pending"} onClick={() => setLoanStatusFilter(loanStatusFilter === "pending" ? "all" : "pending")} />
+          <StatCard label="In Process" value={loanStats.inprocess} icon={<TrendingUp size={18} />} color="orange" active={loanStatusFilter === "inprocess"} onClick={() => setLoanStatusFilter(loanStatusFilter === "inprocess" ? "all" : "inprocess")} />
+          <StatCard label="Sanctioned" value={loanStats.sanctioned} icon={<CheckCircle size={18} />} color="teal" active={loanStatusFilter === "sanctioned"} onClick={() => setLoanStatusFilter(loanStatusFilter === "sanctioned" ? "all" : "sanctioned")} />
+          <StatCard label="Rejected" value={loanStats.rejected} icon={<XCircle size={18} />} color="red" active={loanStatusFilter === "rejected"} onClick={() => setLoanStatusFilter(loanStatusFilter === "rejected" ? "all" : "rejected")} />
         </div>
 
         {/* Toolbar */}
@@ -2024,6 +2179,18 @@ export default function Admin() {
               ))}
             </select>
           )}
+
+          <select
+            className="advisor-filter-select loan-status-filter-select"
+            value={loanStatusFilter}
+            onChange={(e) => setLoanStatusFilter(e.target.value)}
+          >
+            <option value="all">All Loan Status</option>
+            <option value="pending">Pending</option>
+            <option value="inprocess">In Process</option>
+            <option value="sanctioned">Sanctioned</option>
+            <option value="rejected">Rejected</option>
+          </select>
         </div>
 
         {/* Error banner */}
@@ -2089,12 +2256,22 @@ export default function Admin() {
                   onOpenDrive={(e) => { if (e) e.stopPropagation(); openDriveFolder(s); }}
                   onViewReport={(e) => { if (e) e.stopPropagation(); setReportStudent(s); }}
                   onSendToBank={(e) => { if (e) e.stopPropagation(); setBankStudent(s); }}
+                  onLoanStatusUpdate={(e) => { if (e) e.stopPropagation(); setLoanStatusStudent(s); }}
                 />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {/* Loan Status Modal */}
+      {loanStatusStudent && (
+        <LoanStatusModal
+          student={loanStatusStudent}
+          onClose={() => setLoanStatusStudent(null)}
+          onUpdated={handleLoanStatusChange}
+        />
+      )}
 
       {/* Report Modal */}
       {reportStudent && (

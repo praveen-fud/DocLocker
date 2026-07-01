@@ -2,10 +2,23 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Search, RefreshCw, AlertCircle, FileText, Eye, Download, ChevronDown,
   Building2, FolderOpen, X, GraduationCap, Banknote, FolderInput, KeyRound, EyeOff,
+  CheckCircle,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
-import { getAllStudentsFromDrive, getStudentFiles, getFileProxyUrl, changeOwnPassword } from "../../utils/driveApi";
+import { getAllStudentsFromDrive, getStudentFiles, getFileProxyUrl, changeOwnPassword, updateLoanStatus } from "../../utils/driveApi";
 import "./BankerPortal.css";
+
+const LOAN_STATUS_CONFIG = {
+  pending:    { label: "Pending",    cls: "loan-pending" },
+  inprocess:  { label: "In Process", cls: "loan-inprocess" },
+  sanctioned: { label: "Sanctioned", cls: "loan-sanctioned" },
+  rejected:   { label: "Rejected",   cls: "loan-rejected" },
+};
+
+function BpLoanBadge({ status }) {
+  const cfg = LOAN_STATUS_CONFIG[status || "pending"] || LOAN_STATUS_CONFIG.pending;
+  return <span className={`loan-badge ${cfg.cls}`}>{cfg.label}</span>;
+}
 
 const GROUP_ICONS = {
   "GOVT ID": Building2,
@@ -49,6 +62,47 @@ export default function BankerPortal() {
   const [showPwText, setShowPwText] = useState(false);
   const [pwMsg, setPwMsg] = useState(null);
   const [pwLoading, setPwLoading] = useState(false);
+
+  const [loanModalStudent, setLoanModalStudent] = useState(null);
+  const [loanStatus, setLoanStatus] = useState("pending");
+  const [loanRemark, setLoanRemark] = useState("");
+  const [loanLoading, setLoanLoading] = useState(false);
+  const [loanErr, setLoanErr] = useState("");
+
+  const openLoanModal = (s) => {
+    setLoanModalStudent(s);
+    setLoanStatus(s.loanStatus || "pending");
+    setLoanRemark(s.loanRemark || "");
+    setLoanErr("");
+  };
+
+  const handleLoanSubmit = async (e) => {
+    e.preventDefault();
+    if (loanStatus === "rejected" && !loanRemark.trim()) {
+      setLoanErr("A remark is required when rejecting a loan.");
+      return;
+    }
+    setLoanLoading(true);
+    setLoanErr("");
+    try {
+      await updateLoanStatus(
+        loanModalStudent.name,
+        loanModalStudent.email || loanModalStudent.phone || "",
+        loanStatus,
+        loanRemark
+      );
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.name === loanModalStudent.name ? { ...s, loanStatus, loanRemark } : s
+        )
+      );
+      setLoanModalStudent(null);
+    } catch (e2) {
+      setLoanErr(e2.message || "Failed to update loan status.");
+    } finally {
+      setLoanLoading(false);
+    }
+  };
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -180,6 +234,7 @@ export default function BankerPortal() {
                       <span className="banker-card-name">{fullName}</span>
                       <span className="banker-card-contact">{s.email || s.phone || "No contact info"}</span>
                     </div>
+                    <BpLoanBadge status={s.loanStatus} />
                     {p.loanAmount && (
                       <span className="meta-pill">₹{Number(p.loanAmount).toLocaleString("en-IN")}</span>
                     )}
@@ -188,6 +243,22 @@ export default function BankerPortal() {
 
                   {isOpen && (
                     <div className="banker-card-body animate-fade-in">
+                      {/* Loan Status Row */}
+                      <div className="bp-loan-status-row">
+                        <Banknote size={14} className="bp-loan-icon" />
+                        <span className="bp-loan-label">Loan Status</span>
+                        <BpLoanBadge status={s.loanStatus} />
+                        {s.loanStatus === "rejected" && s.loanRemark && (
+                          <span className="bp-loan-remark">"{s.loanRemark}"</span>
+                        )}
+                        <button
+                          className="bp-loan-update-btn"
+                          onClick={(e) => { e.stopPropagation(); openLoanModal(s); }}
+                        >
+                          Update
+                        </button>
+                      </div>
+
                       {groupsLoading ? (
                         <div className="banker-loading" style={{ padding: "24px 0" }}>
                           <div className="loading-dots"><span /><span /><span /></div>
@@ -268,6 +339,63 @@ export default function BankerPortal() {
                 <img src={getFileProxyUrl(previewFile.id, "view")} alt={previewFile.name} />
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Loan Status Update Modal */}
+      {loanModalStudent && (
+        <div className="modal-backdrop" onClick={() => !loanLoading && setLoanModalStudent(null)}>
+          <div className="loan-status-modal animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="lsm-header">
+              <div className="lsm-icon"><Banknote size={22} /></div>
+              <div className="lsm-title-block">
+                <h3 className="lsm-title">Update Loan Status</h3>
+                <p className="lsm-sub">{loanModalStudent.name}</p>
+              </div>
+              <button className="lsm-close" onClick={() => setLoanModalStudent(null)} disabled={loanLoading}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleLoanSubmit} className="lsm-body">
+              <div className="lsm-status-grid">
+                {Object.entries(LOAN_STATUS_CONFIG).map(([key, cfg]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`lsm-option ${cfg.cls}${loanStatus === key ? " selected" : ""}`}
+                    onClick={() => { setLoanStatus(key); if (key !== "rejected") setLoanRemark(""); }}
+                  >
+                    <span className="lsm-option-dot" />
+                    <span>{cfg.label}</span>
+                    {loanStatus === key && <CheckCircle size={14} className="lsm-check" />}
+                  </button>
+                ))}
+              </div>
+              {loanStatus === "rejected" && (
+                <div className="lsm-remark-wrap">
+                  <label className="lsm-remark-label">
+                    Rejection Remark <span className="required-star">*</span>
+                  </label>
+                  <textarea
+                    className="lsm-remark-input"
+                    rows={3}
+                    placeholder="Describe the reason for rejection…"
+                    value={loanRemark}
+                    onChange={(e) => setLoanRemark(e.target.value)}
+                  />
+                </div>
+              )}
+              {loanErr && <p className="lsm-error">{loanErr}</p>}
+              <div className="lsm-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setLoanModalStudent(null)} disabled={loanLoading}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={loanLoading}>
+                  {loanLoading ? <><RefreshCw size={13} className="spin" /> Saving…</> : "Update Status"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

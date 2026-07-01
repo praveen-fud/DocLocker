@@ -203,3 +203,9 @@ export function getFileProxyUrl(fileId, mode = 'view') {
   const params = new URLSearchParams({ mode, token });
   return `${API_URL}/api/files/${fileId}/content?${params.toString()}`;
 }
+
+// ── Update student loan status (admin / advisor / banker with access) ─────────
+export async function updateLoanStatus(studentName, studentIdentifier, loanStatus, loanRemark = '') {
+  const folderKey = buildFolderKey(studentName, studentIdentifier || '');
+  return apiPut(`/api/students/${encodeURIComponent(folderKey)}/loan-status`, { loanStatus, loanRemark });
+}
