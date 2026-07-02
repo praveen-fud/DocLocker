@@ -2,10 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Search, RefreshCw, AlertCircle, FileText, Eye, Download, ChevronDown,
   Building2, FolderOpen, X, GraduationCap, Banknote, FolderInput, KeyRound, EyeOff,
-  CheckCircle, Upload,
+  CheckCircle, Upload, Archive,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
-import { getAllStudentsFromDrive, getStudentFiles, getFileProxyUrl, changeOwnPassword, updateLoanStatus, uploadSanctionLetter } from "../../utils/driveApi";
+import { getAllStudentsFromDrive, getStudentFiles, getFileProxyUrl, changeOwnPassword, updateLoanStatus, uploadSanctionLetter, getDownloadAllUrl } from "../../utils/driveApi";
 import "./BankerPortal.css";
 
 const LOAN_STATUS_CONFIG = {
@@ -63,6 +63,8 @@ export default function BankerPortal() {
   const [pwMsg, setPwMsg] = useState(null);
   const [pwLoading, setPwLoading] = useState(false);
 
+  const [downloadingAll, setDownloadingAll] = useState(false);
+
   const [loanModalStudent, setLoanModalStudent] = useState(null);
   const [loanStatus, setLoanStatus] = useState("pending");
   const [loanRemark, setLoanRemark] = useState("");
@@ -114,6 +116,21 @@ export default function BankerPortal() {
     } finally {
       setLoanLoading(false);
       setLoanLoadingMsg("");
+    }
+  };
+
+  const handleDownloadAll = async (student) => {
+    setDownloadingAll(true);
+    try {
+      const url = getDownloadAllUrl(student.name, student.email || student.phone || "");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } finally {
+      setTimeout(() => setDownloadingAll(false), 1500);
     }
   };
 
@@ -281,46 +298,64 @@ export default function BankerPortal() {
                       ) : Object.keys(groups).length === 0 ? (
                         <p className="banker-no-docs">No documents found for this student.</p>
                       ) : (
-                        Object.entries(groups).map(([group, files]) => {
-                          const GroupIcon = groupIconFor(group);
-                          return (
-                            <div key={group} className="banker-doc-group">
-                              <div className="banker-doc-group-title">
-                                <GroupIcon size={14} /> {group.replace(/_/g, " ")}
-                                <span className="banker-doc-count">{files.length}</span>
-                              </div>
-                              <div className="banker-doc-list">
-                                {files.map((f) => (
-                                  <div key={f.id} className="banker-doc-row">
-                                    <FileText size={15} className="banker-doc-file-icon" />
-                                    <div className="banker-doc-meta">
-                                      <span className="banker-doc-name">{f.name}</span>
-                                      <span className="banker-doc-size">{formatBytes(f.size)}</span>
-                                    </div>
-                                    <div className="banker-doc-actions">
-                                      {PREVIEWABLE.has(f.mimeType) && (
-                                        <button
+                        <>
+                          {Object.entries(groups).map(([group, files]) => {
+                            const GroupIcon = groupIconFor(group);
+                            return (
+                              <div key={group} className="banker-doc-group">
+                                <div className="banker-doc-group-title">
+                                  <GroupIcon size={14} /> {group.replace(/_/g, " ")}
+                                  <span className="banker-doc-count">{files.length}</span>
+                                </div>
+                                <div className="banker-doc-list">
+                                  {files.map((f) => (
+                                    <div key={f.id} className="banker-doc-row">
+                                      <FileText size={15} className="banker-doc-file-icon" />
+                                      <div className="banker-doc-meta">
+                                        <span className="banker-doc-name">{f.name}</span>
+                                        <span className="banker-doc-size">{formatBytes(f.size)}</span>
+                                      </div>
+                                      <div className="banker-doc-actions">
+                                        {PREVIEWABLE.has(f.mimeType) && (
+                                          <button
+                                            className="icon-btn"
+                                            title="View"
+                                            onClick={() => setPreviewFile(f)}
+                                          >
+                                            <Eye size={14} />
+                                          </button>
+                                        )}
+                                        <a
                                           className="icon-btn"
-                                          title="View"
-                                          onClick={() => setPreviewFile(f)}
+                                          title="Download"
+                                          href={getFileProxyUrl(f.id, "download")}
                                         >
-                                          <Eye size={14} />
-                                        </button>
-                                      )}
-                                      <a
-                                        className="icon-btn"
-                                        title="Download"
-                                        href={getFileProxyUrl(f.id, "download")}
-                                      >
-                                        <Download size={14} />
-                                      </a>
+                                          <Download size={14} />
+                                        </a>
+                                      </div>
                                     </div>
-                                  </div>
-                                ))}
+                                  ))}
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })
+                            );
+                          })}
+                          <div className="bp-download-all-bar">
+                            <span className="bp-download-all-info">
+                              {Object.values(groups).flat().length} document{Object.values(groups).flat().length !== 1 ? "s" : ""} across {Object.keys(groups).length} folder{Object.keys(groups).length !== 1 ? "s" : ""}
+                            </span>
+                            <button
+                              className="btn bp-download-all-btn"
+                              disabled={downloadingAll}
+                              onClick={() => handleDownloadAll(s)}
+                            >
+                              {downloadingAll
+                                ? <><RefreshCw size={13} className="spin" /> Preparing…</>
+                                : <><Archive size={13} /> Download All</>
+
+                              }
+                            </button>
+                          </div>
+                        </>
                       )}
                     </div>
                   )}

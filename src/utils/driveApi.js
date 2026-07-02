@@ -214,3 +214,23 @@ export async function updateLoanStatus(studentName, studentIdentifier, loanStatu
 export function uploadSanctionLetter(studentName, studentIdentifier, file) {
   return uploadDocument({ studentName, studentIdentifier, subFolder: 'Loan_Documents', fileName: 'Sanction_Letter', file });
 }
+
+// ── Recover student meta from the Summary PDF via OCR + Claude ───────────────
+export async function recoverMetaFromPdf(studentName, studentIdentifier = '') {
+  const folderKey = buildFolderKey(studentName, studentIdentifier);
+  return apiPost(`/api/students/${encodeURIComponent(folderKey)}/recover-meta`, {});
+}
+
+// ── Write a restored meta JSON back to Drive ──────────────────────────────────
+export async function restoreMeta(studentName, studentIdentifier = '', meta) {
+  const folderKey = buildFolderKey(studentName, studentIdentifier);
+  return apiPost(`/api/students/${encodeURIComponent(folderKey)}/restore-meta`, { metaJson: JSON.stringify(meta) });
+}
+
+// ── Build a URL to download all student documents as a zip ────────────────────
+export function getDownloadAllUrl(studentName, studentIdentifier = '') {
+  const folderKey = buildFolderKey(studentName, studentIdentifier);
+  const token = getAuthHeaders().Authorization?.replace('Bearer ', '') || '';
+  const params = new URLSearchParams({ token });
+  return `${API_URL}/api/students/${encodeURIComponent(folderKey)}/files/zip?${params.toString()}`;
+}

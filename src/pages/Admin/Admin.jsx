@@ -36,9 +36,11 @@ import {
   XCircle,
   Send,
   Upload,
+  ScanText,
+  ShieldCheck,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
-import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter } from "../../utils/driveApi";
+import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter, recoverMetaFromPdf, restoreMeta } from "../../utils/driveApi";
 import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields } from "../../context/schemas";
 import "./Admin.css";
 
@@ -520,6 +522,143 @@ function InfoPair({ label, value, mono }) {
       <div className="rpt-pair-label">{label}</div>
       <div className={`rpt-pair-value${!value ? " rpt-empty" : ""}${mono ? " mono" : ""}`}>
         {value || "—"}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Recover Meta Modal ─────────────────────────────────────── */
+
+function RecoverMetaModal({ student, onClose, onRestored }) {
+  const [phase, setPhase] = useState("idle"); // idle | scanning | preview | writing | done | error
+  const [recovered, setRecovered] = useState(null);
+  const [warning, setWarning] = useState(null);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const handleScan = async () => {
+    setPhase("scanning");
+    setErrorMsg("");
+    try {
+      const r = await recoverMetaFromPdf(student.name, student.email || student.phone || "");
+      if (!r.success) { setErrorMsg(r.error || "Recovery failed"); setPhase("error"); return; }
+      setRecovered(r.recovered);
+      setWarning(r.warning || null);
+      setPhase("preview");
+    } catch (e) {
+      setErrorMsg(e.message || "Unexpected error");
+      setPhase("error");
+    }
+  };
+
+  const handleRestore = async () => {
+    setPhase("writing");
+    try {
+      await restoreMeta(student.name, student.email || student.phone || "", recovered);
+      setPhase("done");
+      setTimeout(() => onRestored(recovered), 800);
+    } catch (e) {
+      setErrorMsg(e.message || "Write failed");
+      setPhase("error");
+    }
+  };
+
+  const p = recovered?.personalInfo || {};
+  const previewFields = [
+    ["Name", recovered?.name],
+    ["Email", recovered?.email],
+    ["Phone", recovered?.phone],
+    ["Advisor", recovered?.advisor],
+    ["Loan Amount", p.loanAmount ? `₹${Number(p.loanAmount).toLocaleString("en-IN")}` : null],
+    ["Target University", p.targetUniversity],
+    ["Course", p.courseNameUniversity],
+    ["10th Score", p.pct10Score ? `${p.pct10Score} (${p.pct10Type || "%"})` : null],
+    ["12th Score", p.pct12Score ? `${p.pct12Score} (${p.pct12Type || "%"})` : null],
+    ["Graduation", p.pctGradScore ? `${p.pctGradScore} ${p.pctGradType === "cgpa" ? "CGPA" : "%"}` : null],
+    ["Co-Applicants", recovered?.coApplicants],
+  ].filter(([, v]) => v != null && v !== "");
+
+  return (
+    <div className="modal-backdrop" onClick={() => phase !== "scanning" && phase !== "writing" && onClose()}>
+      <div className="modal-box recover-modal animate-fade-in" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-icon"><ScanText size={26} /></div>
+        <h3 className="bank-modal-title">Recover Meta from PDF</h3>
+        <p className="bank-modal-desc">
+          Scans <strong>Student_Summary.pdf</strong> from Drive, uses AI to reconstruct the
+          student's form data, then writes it back as <code>student_meta.json</code>.
+        </p>
+
+        {phase === "idle" && (
+          <>
+            <div className="recover-info-box">
+              <AlertTriangle size={13} />
+              <span>Only run this if the student's data was lost. It will <strong>replace</strong> the current meta.</span>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleScan}>
+                <ScanText size={13} /> Scan &amp; Recover
+              </button>
+            </div>
+          </>
+        )}
+
+        {phase === "scanning" && (
+          <div className="recover-loading">
+            <div className="loading-dots"><span /><span /><span /></div>
+            <p>OCR-ing PDF then asking Claude to reconstruct the data…</p>
+          </div>
+        )}
+
+        {phase === "preview" && recovered && (
+          <>
+            {warning && (
+              <div className="recover-warn-box">
+                <AlertTriangle size={13} /> {warning}
+              </div>
+            )}
+            <div className="recover-preview">
+              <p className="recover-preview-title">Recovered fields preview:</p>
+              <div className="recover-field-grid">
+                {previewFields.map(([label, value]) => (
+                  <div key={label} className="recover-field-row">
+                    <span className="recover-field-lbl">{label}</span>
+                    <span className="recover-field-val">{String(value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleRestore}>
+                <ShieldCheck size={13} /> Confirm &amp; Write
+              </button>
+            </div>
+          </>
+        )}
+
+        {phase === "writing" && (
+          <div className="recover-loading">
+            <div className="loading-dots"><span /><span /><span /></div>
+            <p>Writing recovered data to Drive…</p>
+          </div>
+        )}
+
+        {phase === "done" && (
+          <div className="recover-success">
+            <ShieldCheck size={22} />
+            <p>Meta restored successfully.</p>
+          </div>
+        )}
+
+        {phase === "error" && (
+          <>
+            <div className="settings-msg err">{errorMsg}</div>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={onClose}>Close</button>
+              <button className="btn btn-primary" onClick={handleScan}>Retry</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1096,7 +1235,7 @@ function FilesTab({ student }) {
 
 /* ─── Student Row ──────────────────────────────────────────────── */
 
-function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewReport, onSendToBank, onLoanStatusUpdate }) {
+function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewReport, onSendToBank, onLoanStatusUpdate, onRecoverMeta }) {
   const [activeTab, setActiveTab] = useState("personal");
 
   const totalUploads = getTotalUploads(student);
@@ -1199,6 +1338,9 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewRe
                 </button>
                 <button className="btn btn-secondary btn-sm" onClick={onSendToBank}>
                   <Send size={13} /> Bank Access
+                </button>
+                <button className="btn btn-recover btn-sm" onClick={onRecoverMeta} title="Recover meta JSON from Summary PDF">
+                  <ScanText size={13} /> Recover Meta
                 </button>
               </div>
               <button className="btn btn-danger btn-sm dab-delete" onClick={onDelete}>
@@ -1976,6 +2118,7 @@ export default function Admin() {
   const [bankStudent, setBankStudent] = useState(null);
   const [showAccessManager, setShowAccessManager] = useState(false);
   const [loanStatusStudent, setLoanStatusStudent] = useState(null);
+  const [recoverStudent, setRecoverStudent] = useState(null);
 
   useEffect(() => {
     if (!isAdmin) navigate("/admin-login");
@@ -2286,6 +2429,7 @@ export default function Admin() {
                   onViewReport={(e) => { if (e) e.stopPropagation(); setReportStudent(s); }}
                   onSendToBank={(e) => { if (e) e.stopPropagation(); setBankStudent(s); }}
                   onLoanStatusUpdate={(e) => { if (e) e.stopPropagation(); setLoanStatusStudent(s); }}
+                  onRecoverMeta={(e) => { if (e) e.stopPropagation(); setRecoverStudent(s); }}
                 />
               ))}
             </div>
@@ -2299,6 +2443,20 @@ export default function Admin() {
           student={loanStatusStudent}
           onClose={() => setLoanStatusStudent(null)}
           onUpdated={handleLoanStatusChange}
+        />
+      )}
+
+      {/* Recover Meta Modal */}
+      {recoverStudent && (
+        <RecoverMetaModal
+          student={recoverStudent}
+          onClose={() => setRecoverStudent(null)}
+          onRestored={(recovered) => {
+            setStudents((prev) => prev.map((s) =>
+              s.name === recoverStudent.name ? { ...s, ...recovered } : s
+            ));
+            setRecoverStudent(null);
+          }}
         />
       )}
 

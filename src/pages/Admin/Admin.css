@@ -3061,3 +3061,108 @@
     max-width: 140px;
   }
 }
+
+/* ── Recover Meta Modal ──────────────────────────────────────────────── */
+.recover-modal { max-width: 520px; }
+
+.recover-modal code {
+  font-family: "Fira Mono", "Consolas", monospace;
+  font-size: 11.5px;
+  background: rgba(15,37,68,0.07);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.recover-info-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(234,179,8,0.08);
+  border: 1px solid rgba(234,179,8,0.25);
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: #78350f;
+  margin-bottom: 16px;
+}
+.recover-warn-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(239,68,68,0.07);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: #991b1b;
+  margin-bottom: 12px;
+}
+
+.recover-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.recover-preview {
+  background: rgba(15,37,68,0.03);
+  border: 1px solid rgba(15,37,68,0.1);
+  border-radius: 10px;
+  padding: 14px 16px;
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+.recover-preview-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #94a3b8;
+  margin-bottom: 10px;
+}
+.recover-field-grid { display: flex; flex-direction: column; gap: 6px; }
+.recover-field-row {
+  display: flex;
+  gap: 10px;
+  font-size: 12.5px;
+  align-items: baseline;
+}
+.recover-field-lbl {
+  flex-shrink: 0;
+  width: 130px;
+  font-weight: 600;
+  color: #475569;
+  font-size: 11.5px;
+}
+.recover-field-val {
+  color: #0f2544;
+  flex: 1;
+  word-break: break-word;
+}
+
+.recover-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 0;
+  color: #15803d;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Recover button style in detail bar */
+.btn-recover {
+  background: rgba(99,102,241,0.10);
+  color: #4338ca;
+  border: 1px solid rgba(99,102,241,0.2);
+}
+.btn-recover:hover {
+  background: rgba(99,102,241,0.18);
+  border-color: rgba(99,102,241,0.35);
+}
