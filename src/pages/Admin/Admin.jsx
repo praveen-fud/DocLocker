@@ -38,10 +38,12 @@ import {
   Upload,
   ScanText,
   ShieldCheck,
+  Pencil,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter, recoverMetaFromPdf, restoreMeta } from "../../utils/driveApi";
 import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields } from "../../context/schemas";
+import { BANK_OPTIONS, getBankLogo } from "../../utils/bankOptions";
 import "./Admin.css";
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
@@ -1454,7 +1456,7 @@ function GrantBankAccessModal({ student, onClose, onAccessChanged }) {
           </div>
         ) : bankers.length === 0 ? (
           <p className="bank-modal-empty">
-            No banker accounts yet. Create one from Settings → Team.
+            No banker accounts yet. Use the "Banker Access" button to add one.
           </p>
         ) : (
           <div className="team-list bank-checklist">
@@ -1467,6 +1469,9 @@ function GrantBankAccessModal({ student, onClose, onAccessChanged }) {
                   disabled={togglingName === b.name}
                   onChange={() => toggleAccess(b.name)}
                 />
+                <div className="bank-logo-mini-wrap">
+                  <img src={getBankLogo(b.bank)} alt={b.bank || b.name} className="bank-logo-mini" onError={(e) => { e.target.style.display = "none"; }} />
+                </div>
                 <div className="team-info">
                   <span className="team-name">{b.name}</span>
                   <span className="team-role-badge banker">
@@ -1488,45 +1493,86 @@ function GrantBankAccessModal({ student, onClose, onAccessChanged }) {
   );
 }
 
-/* ─── Banker Access Manager ────────────────────────────────────── */
-// Reverse view of GrantBankAccessModal: pick a banker first, then see/manage
-// every student that banker can currently access, plus grant new ones.
+/* ─── Banker Access + Management (unified) ─────────────────────── */
 
-function BankerAccessManagerModal({ students, bankers, onClose, onAccessChanged }) {
-  const [selectedBankerState, setSelectedBanker] = useState("");
-  const [search, setSearch] = useState("");
+function BankerAccessManagerModal({ students, onClose, onAccessChanged, onBankersChanged }) {
+  // Bankers — fetched internally so add/edit/delete stays live
+  const [allBankers, setAllBankers] = useState([]);
+  const [bankersLoading, setBankersLoading] = useState(true);
+
+  // Filter + selection
+  const [bankFilter, setBankFilter] = useState("all");
+  const [selectedName, setSelectedName] = useState(null);
+
+  // Panel: "access" | "add" | "edit"
+  const [panel, setPanel] = useState("access");
+
+  // Add form
+  const [addBank, setAddBank] = useState("");
+  const [addName, setAddName] = useState("");
+  const [addEmail, setAddEmail] = useState("");
+  const [addPass, setAddPass] = useState("");
+  const [addShowPass, setAddShowPass] = useState(false);
+  const [addMsg, setAddMsg] = useState(null);
+  const [addLoading, setAddLoading] = useState(false);
+
+  // Edit form
+  const [editBanker, setEditBanker] = useState(null);
+  const [editBank, setEditBank] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPass, setEditPass] = useState("");
+  const [editShowPass, setEditShowPass] = useState(false);
+  const [editMsg, setEditMsg] = useState(null);
+  const [editLoading, setEditLoading] = useState(false);
+
+  // Delete
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Access management
+  const [accessSearch, setAccessSearch] = useState("");
   const [togglingName, setTogglingName] = useState(null);
-  const [error, setError] = useState("");
+  const [accessError, setAccessError] = useState("");
 
-  // Falls back to the first banker until the user explicitly picks one —
-  // derived during render instead of synced via an effect, so there's no
-  // extra render pass just to apply the default.
-  const selectedBanker = selectedBankerState || bankers[0]?.name || "";
-
-  const toggleAccess = async (student, grant) => {
-    setTogglingName(student.name);
-    setError("");
+  const fetchBankers = useCallback(async () => {
     try {
-      const identifier = student.email || student.phone || "";
-      const r = await callAPI("PUT", "/api/students/banker-access", {
-        studentName: student.name, studentIdentifier: identifier, bankerName: selectedBanker, grant,
-      });
+      const r = await callAPI("GET", "/api/admins/bankers");
       if (r.success) {
-        onAccessChanged?.(student.name, r.sharedBankers);
-      } else {
-        setError(r.error || "Failed to update access.");
+        const list = r.bankers || [];
+        setAllBankers(list);
+        setSelectedName((prev) => {
+          if (prev && list.find((b) => b.name === prev)) return prev;
+          return list[0]?.name || null;
+        });
       }
-    } catch (e) {
-      setError(e.message || "Network error. Try again.");
-    } finally {
-      setTogglingName(null);
+    } catch { /* silent */ }
+    finally { setBankersLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchBankers(); }, [fetchBankers]);
+
+  // Derived: unique banks that have registered officers
+  const uniqueBanks = Array.from(new Set(allBankers.map((b) => b.bank).filter(Boolean))).sort();
+
+  // Bankers visible in sidebar after bank filter
+  const visibleBankers = bankFilter === "all"
+    ? allBankers
+    : allBankers.filter((b) => b.bank === bankFilter);
+
+  const selectedBanker = allBankers.find((b) => b.name === selectedName) || null;
+
+  // Keep selected banker valid when filter changes
+  useEffect(() => {
+    if (selectedName && !visibleBankers.find((b) => b.name === selectedName)) {
+      setSelectedName(visibleBankers[0]?.name || null);
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bankFilter, allBankers]);
 
-  const grantedStudents = students.filter((s) => (s.sharedBankers || []).includes(selectedBanker));
+  // Access management data
+  const grantedStudents = students.filter((s) => (s.sharedBankers || []).includes(selectedName));
   const grantedNames = new Set(grantedStudents.map((s) => s.name));
-
-  const q = search.trim().toLowerCase();
+  const q = accessSearch.trim().toLowerCase();
   const availableStudents = students.filter((s) => {
     if (grantedNames.has(s.name)) return false;
     if (!q) return true;
@@ -1536,109 +1582,402 @@ function BankerAccessManagerModal({ students, bankers, onClose, onAccessChanged 
   });
   const visibleAvailable = availableStudents.slice(0, 40);
 
+  // Handlers
+  const toggleAccess = async (student, grant) => {
+    setTogglingName(student.name);
+    setAccessError("");
+    try {
+      const identifier = student.email || student.phone || "";
+      const r = await callAPI("PUT", "/api/students/banker-access", {
+        studentName: student.name, studentIdentifier: identifier, bankerName: selectedName, grant,
+      });
+      if (r.success) {
+        onAccessChanged?.(student.name, r.sharedBankers);
+      } else {
+        setAccessError(r.error || "Failed to update access.");
+      }
+    } catch (e) {
+      setAccessError(e.message || "Network error.");
+    } finally {
+      setTogglingName(null);
+    }
+  };
+
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    if (!addBank) { setAddMsg({ type: "err", text: "Please select a bank." }); return; }
+    if (!addName.trim()) { setAddMsg({ type: "err", text: "Name is required." }); return; }
+    if (addPass.length < 6) { setAddMsg({ type: "err", text: "Password must be at least 6 characters." }); return; }
+    setAddLoading(true); setAddMsg(null);
+    try {
+      const r = await callAPI("POST", "/api/admins", {
+        name: addName.trim(), role: "banker", password: addPass,
+        bank: addBank,
+      });
+      if (r.success) {
+        setAddMsg({ type: "ok", text: `${addName.trim()} added successfully.` });
+        setAddBank(""); setAddName(""); setAddPass("");
+        await fetchBankers(); onBankersChanged?.();
+        setTimeout(() => { setPanel("access"); setAddMsg(null); }, 1400);
+      } else {
+        setAddMsg({ type: "err", text: r.error || "Failed to create." });
+      }
+    } catch { setAddMsg({ type: "err", text: "Network error." }); }
+    finally { setAddLoading(false); }
+  };
+
+  const handleEdit = async (e) => {
+    e.preventDefault();
+    setEditLoading(true); setEditMsg(null);
+    try {
+      const r = await callAPI("PUT", `/api/admins/${encodeURIComponent(editBanker.name)}`, { bank: editBank, email: editEmail });
+      if (!r.success) { setEditMsg({ type: "err", text: r.error || "Failed to update." }); setEditLoading(false); return; }
+      if (editPass.length >= 6) {
+        const rp = await callAPI("PUT", `/api/admins/${encodeURIComponent(editBanker.name)}/reset-password`, { newPassword: editPass });
+        if (!rp.success) { setEditMsg({ type: "err", text: rp.error || "Failed to reset password." }); setEditLoading(false); return; }
+      }
+      setEditMsg({ type: "ok", text: "Saved successfully." });
+      await fetchBankers(); onBankersChanged?.();
+      setTimeout(() => { setPanel("access"); setEditBanker(null); setEditMsg(null); }, 1400);
+    } catch { setEditMsg({ type: "err", text: "Network error." }); }
+    finally { setEditLoading(false); }
+  };
+
+  const handleDelete = async (name) => {
+    setDeleteLoading(true);
+    try {
+      const r = await callAPI("DELETE", `/api/admins/${encodeURIComponent(name)}`);
+      if (r.success) {
+        setDeleteTarget(null);
+        if (editBanker?.name === name) { setPanel("access"); setEditBanker(null); }
+        await fetchBankers(); onBankersChanged?.();
+      } else { alert(r.error || "Failed to delete."); }
+    } catch { alert("Network error."); }
+    finally { setDeleteLoading(false); }
+  };
+
+  const openEdit = (b) => {
+    setEditBanker(b); setEditBank(b.bank || ""); setEditEmail(b.email || "");
+    setEditPass(""); setEditMsg(null); setPanel("edit");
+    setSelectedName(b.name);
+  };
+
+  const openAdd = () => {
+    setPanel("add"); setAddMsg(null);
+    setAddBank(""); setAddName(""); setAddEmail(""); setAddPass("");
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="bam-modal animate-fade-in" onClick={(e) => e.stopPropagation()}>
+
+        {/* ── Header ─────────────────────────────────────────────── */}
         <div className="bam-header">
-          <h3><Send size={16} /> Banker Access Management</h3>
-          <button className="icon-btn" onClick={onClose}><X size={16} /></button>
+          <div className="bam-header-left">
+            <div className="bam-header-icon"><Send size={18} /></div>
+            <div>
+              <h2 className="bam-title">Banker Access</h2>
+              <p className="bam-subtitle">
+                {allBankers.length} loan officer{allBankers.length !== 1 ? "s" : ""}
+                {uniqueBanks.length > 0 && ` · ${uniqueBanks.length} bank${uniqueBanks.length !== 1 ? "s" : ""}`}
+              </p>
+            </div>
+          </div>
+          <div className="bam-header-actions">
+            {panel !== "add" && (
+              <button className="btn btn-primary btn-sm bam-add-btn" onClick={openAdd}>
+                <Plus size={13} /> Add Loan Officer
+              </button>
+            )}
+            <button className="icon-btn" onClick={onClose}><X size={16} /></button>
+          </div>
         </div>
 
-        {bankers.length === 0 ? (
-          <p className="bam-empty">No banker accounts yet. Create one from Settings → Bankers.</p>
-        ) : (
-          <div className="bam-body">
-            <div className="bam-banker-list">
-              {bankers.map((b) => {
-                const count = students.filter((s) => (s.sharedBankers || []).includes(b.name)).length;
-                return (
-                  <button
-                    key={b.name}
-                    className={`bam-banker-row${selectedBanker === b.name ? " active" : ""}`}
-                    onClick={() => setSelectedBanker(b.name)}
-                  >
-                    <div className="bam-banker-avatar">{b.name[0].toUpperCase()}</div>
-                    <span className="bam-banker-name">{b.name}</span>
-                    <span className="bam-banker-count">{count}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="bam-main">
-              <div className="bam-section">
-                <p className="bam-section-title">
-                  Students <strong>{selectedBanker}</strong> can access ({grantedStudents.length})
-                </p>
-                {grantedStudents.length === 0 ? (
-                  <p className="bam-no-students">No students granted yet.</p>
-                ) : (
-                  <div className="bam-student-list">
-                    {grantedStudents.map((s) => (
-                      <div key={s.name} className="bam-student-row">
-                        <div className="bam-student-avatar">{(s.name || "?")[0].toUpperCase()}</div>
-                        <div className="bam-student-info">
-                          <span className="bam-student-name">{s.name}</span>
-                          <span className="bam-student-contact">{s.email || s.phone || "No contact info"}</span>
-                        </div>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          disabled={togglingName === s.name}
-                          onClick={() => toggleAccess(s, false)}
-                        >
-                          {togglingName === s.name ? <RefreshCw size={12} className="spin" /> : "Revoke"}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="bam-section">
-                <p className="bam-section-title">Grant access to another student</p>
-                <div className="bam-search">
-                  <Search size={14} />
-                  <input
-                    placeholder="Search students by name, email, or phone…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                </div>
-                <div className="bam-student-list bam-add-list">
-                  {visibleAvailable.length === 0 ? (
-                    <p className="bam-no-students">
-                      {search ? "No matching students." : "All students already have access."}
-                    </p>
-                  ) : (
-                    visibleAvailable.map((s) => (
-                      <div key={s.name} className="bam-student-row">
-                        <div className="bam-student-avatar">{(s.name || "?")[0].toUpperCase()}</div>
-                        <div className="bam-student-info">
-                          <span className="bam-student-name">{s.name}</span>
-                          <span className="bam-student-contact">{s.email || s.phone || "No contact info"}</span>
-                        </div>
-                        <button
-                          className="btn btn-primary btn-sm"
-                          disabled={togglingName === s.name}
-                          onClick={() => toggleAccess(s, true)}
-                        >
-                          {togglingName === s.name ? <RefreshCw size={12} className="spin" /> : "Grant"}
-                        </button>
-                      </div>
-                    ))
-                  )}
-                  {availableStudents.length > visibleAvailable.length && (
-                    <p className="bam-more-hint">
-                      +{availableStudents.length - visibleAvailable.length} more — refine your search to find them
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
+        {/* ── Bank filter chips ───────────────────────────────────── */}
+        {uniqueBanks.length > 0 && (
+          <div className="bam-bank-filters">
+            <button
+              className={`bam-bank-chip${bankFilter === "all" ? " active" : ""}`}
+              onClick={() => setBankFilter("all")}
+            >
+              <span className="bam-chip-all-icon"><Building2 size={13} /></span>
+              <span className="bam-chip-label">All</span>
+              <span className="bam-chip-count">{allBankers.length}</span>
+            </button>
+            {uniqueBanks.map((bank) => {
+              const cnt = allBankers.filter((b) => b.bank === bank).length;
+              return (
+                <button
+                  key={bank}
+                  className={`bam-bank-chip${bankFilter === bank ? " active" : ""}`}
+                  onClick={() => setBankFilter(bank)}
+                >
+                  <img src={getBankLogo(bank)} alt={bank} className="bam-chip-logo"
+                    onError={(e) => { e.target.style.display = "none"; }} />
+                  <span className="bam-chip-label">{bank}</span>
+                  <span className="bam-chip-count">{cnt}</span>
+                </button>
+              );
+            })}
           </div>
         )}
 
-        {error && <div className="settings-msg err bam-error">{error}</div>}
+        {/* ── Body ────────────────────────────────────────────────── */}
+        <div className="bam-body">
+
+          {/* Sidebar — banker list */}
+          <div className="bam-sidebar">
+            {bankersLoading ? (
+              <div className="bam-sidebar-loading">
+                <div className="loading-dots"><span /><span /><span /></div>
+              </div>
+            ) : visibleBankers.length === 0 ? (
+              <div className="bam-sidebar-empty">
+                <div className="bam-sidebar-empty-icon"><Building2 size={28} /></div>
+                <p>No loan officers yet</p>
+                <button className="btn btn-primary btn-sm" onClick={openAdd}><Plus size={12} /> Add first</button>
+              </div>
+            ) : (
+              visibleBankers.map((b) => {
+                const count = students.filter((s) => (s.sharedBankers || []).includes(b.name)).length;
+                const isSelected = selectedName === b.name;
+                return (
+                  <div
+                    key={b.name}
+                    className={`bam-banker-card${isSelected ? " selected" : ""}`}
+                    onClick={() => { setSelectedName(b.name); if (panel === "edit" || panel === "add") setPanel("access"); }}
+                  >
+                    <div className="bam-card-logo-wrap">
+                      <img src={getBankLogo(b.bank)} alt={b.bank || "Bank"} className="bam-card-logo"
+                        onError={(e) => { e.target.style.display = "none"; }} />
+                    </div>
+                    <div className="bam-card-info">
+                      <span className="bam-card-name">{b.name}</span>
+                      <span className="bam-card-bank">{b.bank || <em className="bam-card-nobank">No bank set</em>}</span>
+                      {b.email && <span className="bam-card-email">{b.email}</span>}
+                    </div>
+                    <div className="bam-card-right">
+                      <span className="bam-card-count" title={`${count} student${count !== 1 ? "s" : ""} with access`}>
+                        {count}
+                      </span>
+                      <div className="bam-card-actions" onClick={(e) => e.stopPropagation()}>
+                        <button className="bam-action-btn edit" title="Edit" onClick={() => openEdit(b)}>
+                          <Pencil size={11} />
+                        </button>
+                        {deleteTarget === b.name ? (
+                          <div className="bam-del-confirm">
+                            <button className="bam-del-yes" disabled={deleteLoading} onClick={() => handleDelete(b.name)}>
+                              {deleteLoading ? <RefreshCw size={10} className="spin" /> : "Yes"}
+                            </button>
+                            <button className="bam-del-no" onClick={() => setDeleteTarget(null)} disabled={deleteLoading}>No</button>
+                          </div>
+                        ) : (
+                          <button className="bam-action-btn delete" title="Remove" onClick={() => setDeleteTarget(b.name)}>
+                            <Trash2 size={11} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Main panel */}
+          <div className="bam-main">
+
+            {/* ── Access panel ── */}
+            {panel === "access" && (
+              selectedBanker ? (
+                <div className="bam-access-panel">
+                  {/* Banker identity bar */}
+                  <div className="bam-identity-bar">
+                    <div className="bam-identity-logo-wrap">
+                      <img src={getBankLogo(selectedBanker.bank)} alt={selectedBanker.bank || ""} className="bam-identity-logo"
+                        onError={(e) => { e.target.style.display = "none"; }} />
+                    </div>
+                    <div className="bam-identity-info">
+                      <span className="bam-identity-name">{selectedBanker.name}</span>
+                      <span className="bam-identity-bank">{selectedBanker.bank || "No bank set"}</span>
+                    </div>
+                    <button className="bam-identity-edit-btn" onClick={() => openEdit(selectedBanker)} title="Edit this loan officer">
+                      <Pencil size={13} /> Edit
+                    </button>
+                  </div>
+
+                  {/* Granted students */}
+                  <div className="bam-section">
+                    <div className="bam-section-header">
+                      <span className="bam-section-title">Can access</span>
+                      <span className="bam-section-badge">{grantedStudents.length}</span>
+                    </div>
+                    {grantedStudents.length === 0 ? (
+                      <p className="bam-no-students">No students assigned yet. Grant access below.</p>
+                    ) : (
+                      <div className="bam-student-list">
+                        {grantedStudents.map((s) => (
+                          <div key={s.name} className="bam-student-row">
+                            <div className="bam-student-avatar">{(s.name || "?")[0].toUpperCase()}</div>
+                            <div className="bam-student-info">
+                              <span className="bam-student-name">{s.name}</span>
+                              <span className="bam-student-contact">{s.email || s.phone || "—"}</span>
+                            </div>
+                            <button className="bam-revoke-btn" disabled={togglingName === s.name} onClick={() => toggleAccess(s, false)}>
+                              {togglingName === s.name ? <RefreshCw size={11} className="spin" /> : "Revoke"}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Grant more */}
+                  <div className="bam-section">
+                    <div className="bam-section-header">
+                      <span className="bam-section-title">Grant access</span>
+                    </div>
+                    <div className="bam-search-wrap">
+                      <Search size={13} className="bam-search-icon" />
+                      <input
+                        className="bam-search-input"
+                        placeholder="Search students by name, email, or phone…"
+                        value={accessSearch}
+                        onChange={(e) => setAccessSearch(e.target.value)}
+                      />
+                      {accessSearch && (
+                        <button className="bam-search-clear" onClick={() => setAccessSearch("")}><X size={12} /></button>
+                      )}
+                    </div>
+                    <div className="bam-student-list bam-grant-list">
+                      {visibleAvailable.length === 0 ? (
+                        <p className="bam-no-students">
+                          {accessSearch ? "No matching students." : "All students already have access."}
+                        </p>
+                      ) : (
+                        visibleAvailable.map((s) => (
+                          <div key={s.name} className="bam-student-row">
+                            <div className="bam-student-avatar">{(s.name || "?")[0].toUpperCase()}</div>
+                            <div className="bam-student-info">
+                              <span className="bam-student-name">{s.name}</span>
+                              <span className="bam-student-contact">{s.email || s.phone || "—"}</span>
+                            </div>
+                            <button className="bam-grant-btn" disabled={togglingName === s.name} onClick={() => toggleAccess(s, true)}>
+                              {togglingName === s.name ? <RefreshCw size={11} className="spin" /> : "Grant"}
+                            </button>
+                          </div>
+                        ))
+                      )}
+                      {availableStudents.length > visibleAvailable.length && (
+                        <p className="bam-more-hint">+{availableStudents.length - visibleAvailable.length} more — type to search</p>
+                      )}
+                    </div>
+                    {accessError && <p className="bam-error-inline">{accessError}</p>}
+                  </div>
+                </div>
+              ) : (
+                <div className="bam-empty-main">
+                  <div className="bam-empty-icon-wrap"><Building2 size={36} /></div>
+                  <h3>No loan officers yet</h3>
+                  <p>Add your first loan officer using the button above.</p>
+                  <button className="btn btn-primary" onClick={openAdd}><Plus size={13} /> Add Loan Officer</button>
+                </div>
+              )
+            )}
+
+            {/* ── Add form ── */}
+            {panel === "add" && (
+              <div className="bam-form-panel animate-fade-in">
+                <div className="bam-form-titlebar">
+                  <div className="bam-form-titlebar-icon add"><Plus size={16} /></div>
+                  <div>
+                    <h3 className="bam-form-h">Add Loan Officer</h3>
+                    <p className="bam-form-sub">Register a new banker who can log in and view student documents.</p>
+                  </div>
+                  <button className="icon-btn" onClick={() => setPanel("access")}><X size={16} /></button>
+                </div>
+                <form onSubmit={handleAdd} className="bam-form">
+                  <div className="bam-field">
+                    <label>Bank <span className="req">*</span></label>
+                    <div className="bam-select-wrap">
+                      {addBank && <img src={getBankLogo(addBank)} alt={addBank} className="bam-select-logo" />}
+                      <select className={`bam-select${addBank ? " has-logo" : ""}`} value={addBank} onChange={(e) => setAddBank(e.target.value)}>
+                        <option value="">— Select bank —</option>
+                        {BANK_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="bam-field">
+                    <label>Full Name <span className="req">*</span> <span className="bam-hint">(login username)</span></label>
+                    <input className="bam-input" type="text" placeholder="e.g. Rajesh Kumar" value={addName} onChange={(e) => setAddName(e.target.value)} />
+                  </div>
+                  <div className="bam-field">
+                    <label>Password <span className="req">*</span></label>
+                    <div className="bam-pw-wrap">
+                      <input className="bam-input" type={addShowPass ? "text" : "password"} placeholder="Min. 6 characters" value={addPass} onChange={(e) => setAddPass(e.target.value)} />
+                      <button type="button" className="bam-pw-toggle" onClick={() => setAddShowPass(!addShowPass)}>
+                        {addShowPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                  </div>
+                  {addMsg && <div className={`bam-msg ${addMsg.type}`}>{addMsg.text}</div>}
+                  <div className="bam-form-actions">
+                    <button type="submit" className="bam-submit-btn" disabled={addLoading}>
+                      {addLoading ? <><RefreshCw size={13} className="spin" /> Creating…</> : <><Plus size={13} /> Create Officer</>}
+                    </button>
+                    <button type="button" className="bam-cancel-btn" onClick={() => setPanel("access")}>Cancel</button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* ── Edit form ── */}
+            {panel === "edit" && editBanker && (
+              <div className="bam-form-panel animate-fade-in">
+                <div className="bam-form-titlebar">
+                  <div className="bam-edit-logo-wrap">
+                    <img src={getBankLogo(editBanker.bank)} alt={editBanker.bank || "Bank"} className="bam-edit-thumb"
+                      onError={(e) => { e.target.style.display = "none"; }} />
+                  </div>
+                  <div>
+                    <h3 className="bam-form-h">{editBanker.name}</h3>
+                    <p className="bam-form-sub">Since {new Date(editBanker.createdAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}</p>
+                  </div>
+                  <button className="icon-btn" onClick={() => { setPanel("access"); setEditBanker(null); }}><X size={16} /></button>
+                </div>
+                <form onSubmit={handleEdit} className="bam-form">
+                  <div className="bam-field">
+                    <label>Bank</label>
+                    <div className="bam-select-wrap">
+                      {editBank && <img src={getBankLogo(editBank)} alt={editBank} className="bam-select-logo" />}
+                      <select className={`bam-select${editBank ? " has-logo" : ""}`} value={editBank} onChange={(e) => setEditBank(e.target.value)}>
+                        <option value="">— Select bank —</option>
+                        {BANK_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="bam-field">
+                    <label>New Password <span className="bam-hint">(leave blank to keep current)</span></label>
+                    <div className="bam-pw-wrap">
+                      <input className="bam-input" type={editShowPass ? "text" : "password"} placeholder="Min. 6 characters" value={editPass} onChange={(e) => setEditPass(e.target.value)} />
+                      <button type="button" className="bam-pw-toggle" onClick={() => setEditShowPass(!editShowPass)}>
+                        {editShowPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                  </div>
+                  {editMsg && <div className={`bam-msg ${editMsg.type}`}>{editMsg.text}</div>}
+                  <div className="bam-form-actions">
+                    <button type="submit" className="bam-submit-btn" disabled={editLoading}>
+                      {editLoading ? <><RefreshCw size={13} className="spin" /> Saving…</> : <><CheckCircle size={13} /> Save Changes</>}
+                    </button>
+                    <button type="button" className="bam-cancel-btn" onClick={() => { setPanel("access"); setEditBanker(null); }}>Cancel</button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1690,15 +2029,6 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const [bankers, setBankers] = useState([]);
-  const [bankersLoading, setBankersLoading] = useState(false);
-  const [newBankerName, setNewBankerName] = useState("");
-  const [newBankerPass, setNewBankerPass] = useState("");
-  const [createBankerMsg, setCreateBankerMsg] = useState(null);
-  const [createBankerLoading, setCreateBankerLoading] = useState(false);
-  const [deleteBankerTarget, setDeleteBankerTarget] = useState(null);
-  const [deleteBankerLoading, setDeleteBankerLoading] = useState(false);
-
   const [resetPwTarget, setResetPwTarget] = useState(null);
   const [resetPwValue, setResetPwValue] = useState("");
   const [resetPwLoading, setResetPwLoading] = useState(false);
@@ -1711,43 +2041,6 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
       if (d.success) setAdmins(d.admins || []);
     } catch { /* silent */ }
     finally { setAdminsLoading(false); }
-  };
-
-  const loadBankers = async () => {
-    setBankersLoading(true);
-    try {
-      const d = await callAPI("GET", "/api/admins/bankers");
-      if (d.success) setBankers(d.bankers || []);
-    } catch { /* silent */ }
-    finally { setBankersLoading(false); }
-  };
-
-  const handleCreateBanker = async (e) => {
-    e.preventDefault();
-    if (!newBankerName.trim()) { setCreateBankerMsg({ type: "err", text: "Name is required." }); return; }
-    if (newBankerPass.length < 6) { setCreateBankerMsg({ type: "err", text: "Password must be at least 6 characters." }); return; }
-    setCreateBankerLoading(true); setCreateBankerMsg(null);
-    try {
-      const r = await callAPI("POST", "/api/admins", { name: newBankerName.trim(), role: "banker", password: newBankerPass });
-      if (r.success) {
-        setCreateBankerMsg({ type: "ok", text: `${newBankerName.trim()} created successfully.` });
-        setNewBankerName(""); setNewBankerPass("");
-        loadBankers();
-      } else {
-        setCreateBankerMsg({ type: "err", text: r.error || "Failed to create banker." });
-      }
-    } catch { setCreateBankerMsg({ type: "err", text: "Network error. Try again." }); }
-    finally { setCreateBankerLoading(false); }
-  };
-
-  const handleDeleteBanker = async (name) => {
-    setDeleteBankerLoading(true);
-    try {
-      const r = await callAPI("DELETE", `/api/admins/${encodeURIComponent(name)}`);
-      if (r.success) { setDeleteBankerTarget(null); loadBankers(); }
-      else { alert(r.error || "Failed to delete."); }
-    } catch { alert("Network error. Try again."); }
-    finally { setDeleteBankerLoading(false); }
   };
 
   const handleResetPassword = async (e) => {
@@ -1791,7 +2084,6 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
       if (r.success && (r.role === "superadmin" || r.role === "advisor")) {
         setTeamVerified(true);
         if (r.role === "superadmin") loadAdmins();
-        loadBankers();
       } else {
         setTeamErr("Incorrect password.");
       }
@@ -1848,15 +2140,6 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
             >
               <UserCheck size={16} />
               <span>Team</span>
-            </button>
-          )}
-          {(adminRole === "superadmin" || adminRole === "advisor") && (
-            <button
-              className={`settings-tab${tab === "bankers" ? " active" : ""}`}
-              onClick={() => { setTab("bankers"); if (teamVerified) loadBankers(); }}
-            >
-              <Building2 size={16} />
-              <span>Bankers</span>
             </button>
           )}
         </div>
@@ -1976,87 +2259,6 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
                     {createMsg && <p className={`settings-msg ${createMsg.type}`}>{createMsg.text}</p>}
                     <button type="submit" className="btn btn-primary btn-sm" disabled={createLoading}>
                       {createLoading ? <><RefreshCw size={13} className="spin" /> Creating…</> : <><Plus size={13} /> Create Member</>}
-                    </button>
-                  </form>
-                </div>
-              )}
-            </div>
-          )}
-
-          {tab === "bankers" && (
-            <div>
-              {!teamVerified ? (
-                <form onSubmit={handleVerifyTeamPass} className="settings-form">
-                  <p className="settings-section-label">Enter your password to manage bankers</p>
-                  <div className="input-group">
-                    <label>Your Password</label>
-                    <div className="password-wrap">
-                      <input className="input-field" type={showPass ? "text" : "password"} placeholder="Confirm your identity"
-                        value={teamPass} onChange={(e) => setTeamPass(e.target.value)} autoFocus />
-                      <button type="button" className="show-pass" onClick={() => setShowPass(!showPass)}>
-                        {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
-                      </button>
-                    </div>
-                  </div>
-                  {teamErr && <p className="settings-msg err">{teamErr}</p>}
-                  <button type="submit" className="btn btn-primary btn-sm" disabled={teamVerifying}>
-                    {teamVerifying ? <><RefreshCw size={13} className="spin" /> Verifying…</> : <><Shield size={13} /> Verify & Continue</>}
-                  </button>
-                </form>
-              ) : (
-                <div>
-                  <p className="settings-section-label">Banker Accounts</p>
-                  {bankersLoading ? (
-                    <div className="admin-loading" style={{ padding: "24px 0" }}>
-                      <div className="loading-dots"><span /><span /><span /></div>
-                    </div>
-                  ) : bankers.length === 0 ? (
-                    <p style={{ fontSize: 13, color: "var(--text-muted)" }}>No banker accounts yet.</p>
-                  ) : (
-                    <div className="team-list">
-                      {bankers.map((b) => (
-                        <div key={b.name} className="team-row">
-                          <div className="team-avatar">{b.name[0].toUpperCase()}</div>
-                          <div className="team-info">
-                            <span className="team-name">{b.name}</span>
-                            <span className="team-role-badge banker">Banker</span>
-                          </div>
-                          {deleteBankerTarget === b.name ? (
-                            <div className="team-delete-confirm">
-                              <span>Delete?</span>
-                              <button className="btn btn-danger btn-sm" onClick={() => handleDeleteBanker(b.name)} disabled={deleteBankerLoading}>
-                                {deleteBankerLoading ? <RefreshCw size={12} className="spin" /> : "Yes"}
-                              </button>
-                              <button className="btn btn-secondary btn-sm" onClick={() => setDeleteBankerTarget(null)} disabled={deleteBankerLoading}>No</button>
-                            </div>
-                          ) : (
-                            <>
-                              <button className="icon-btn" title={`Reset ${b.name}'s password`} onClick={() => { setResetPwTarget(b.name); setResetPwValue(""); setResetPwMsg(null); }}>
-                                <KeyRound size={13} />
-                              </button>
-                              <button className="icon-btn del-btn" title={`Remove ${b.name}`} onClick={() => setDeleteBankerTarget(b.name)}>
-                                <Trash2 size={13} />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <p className="settings-section-label" style={{ marginTop: 20 }}>Add Banker</p>
-                  <form onSubmit={handleCreateBanker} className="settings-form">
-                    <div className="input-group">
-                      <label>Name</label>
-                      <input className="input-field" type="text" placeholder="e.g. HDFC - Rajesh" value={newBankerName} onChange={(e) => setNewBankerName(e.target.value)} />
-                    </div>
-                    <div className="input-group">
-                      <label>Password</label>
-                      <input className="input-field" type="password" placeholder="Min. 6 characters" value={newBankerPass} onChange={(e) => setNewBankerPass(e.target.value)} />
-                    </div>
-                    {createBankerMsg && <p className={`settings-msg ${createBankerMsg.type}`}>{createBankerMsg.text}</p>}
-                    <button type="submit" className="btn btn-primary btn-sm" disabled={createBankerLoading}>
-                      {createBankerLoading ? <><RefreshCw size={13} className="spin" /> Creating…</> : <><Plus size={13} /> Create Banker</>}
                     </button>
                   </form>
                 </div>
@@ -2273,7 +2475,7 @@ export default function Admin() {
                 <span className="btn-label">Root Drive</span>
               </a>
             )}
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowAccessManager(true)} title="Manage which students each banker can see">
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowAccessManager(true)} title="Manage bankers and student access">
               <Send size={13} />
               <span className="btn-label">Banker Access</span>
             </button>
@@ -2474,13 +2676,13 @@ export default function Admin() {
         />
       )}
 
-      {/* Banker Access Manager — select a banker, see/manage every student they can access */}
+      {/* Banker Access — manage loan officers, bank filters, and per-student access */}
       {showAccessManager && (
         <BankerAccessManagerModal
           students={scopedStudents}
-          bankers={bankers}
           onClose={() => setShowAccessManager(false)}
           onAccessChanged={handleAccessChanged}
+          onBankersChanged={loadBankers}
         />
       )}
 
@@ -2502,6 +2704,7 @@ export default function Admin() {
           adminRole={adminRole}
         />
       )}
+
     </div>
   );
 }

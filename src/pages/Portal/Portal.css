@@ -2,8 +2,7 @@
    1. Portal Viewport Structure & Layout Systems
    ========================================================================== */
 .portal-page {
-  /* No top padding here — PdfUnlockBanner (rendered just before this page)
-     already clears the fixed Navbar via its own margin-top. */
+  padding-top: 72px;
   min-height: 100vh;
   width: 100%;
   box-sizing: border-box;

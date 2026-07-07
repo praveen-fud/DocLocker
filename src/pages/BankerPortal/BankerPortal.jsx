@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import { getAllStudentsFromDrive, getStudentFiles, getFileProxyUrl, changeOwnPassword, updateLoanStatus, uploadSanctionLetter, getDownloadAllUrl } from "../../utils/driveApi";
+import { getBankLogo } from "../../utils/bankOptions";
 import "./BankerPortal.css";
 
 const LOAN_STATUS_CONFIG = {
@@ -42,8 +43,15 @@ function formatBytes(size) {
 
 const PREVIEWABLE = new Set(["application/pdf", "image/jpeg", "image/jpg", "image/png"]);
 
+function getTimeGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 export default function BankerPortal() {
-  const { isAdmin, adminName } = useStudent();
+  const { isAdmin, adminName, adminBank } = useStudent();
 
   const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
@@ -200,15 +208,26 @@ export default function BankerPortal() {
   return (
     <div className="banker-page">
       <div className="banker-container">
-        <div className="banker-header animate-fade-in">
-          <div className="banker-header-left">
-            <h1 className="banker-title">
-              <div className="banker-title-icon"><Building2 size={18} /></div>
-              Banker Portal
-            </h1>
-            <p className="banker-sub">Welcome, {adminName} — showing students shared with you</p>
+
+        {/* ── Welcome Hero ─────────────────────────────────────── */}
+        <div className="bp-hero animate-fade-in">
+          <div className="bp-hero-glow" />
+          <div className="bp-hero-content">
+            <div className="bp-hero-logo-wrap">
+              <img
+                src={getBankLogo(adminBank)}
+                alt={adminBank || "Bank"}
+                className="bp-hero-logo"
+                onError={(e) => { e.target.style.display = "none"; }}
+              />
+            </div>
+            <div className="bp-hero-text">
+              <p className="bp-hero-greeting">{getTimeGreeting()}, {adminName}! 👋</p>
+              <h1 className="bp-hero-bank">{adminBank || "Banker Portal"}</h1>
+              <p className="bp-hero-tagline">Your loan application workspace — students shared with you appear below.</p>
+            </div>
           </div>
-          <div className="banker-header-actions">
+          <div className="bp-hero-actions">
             <button className="btn btn-secondary btn-sm" onClick={loadStudents} disabled={loading}>
               <RefreshCw size={13} className={loading ? "spin" : ""} />
               <span>Refresh</span>

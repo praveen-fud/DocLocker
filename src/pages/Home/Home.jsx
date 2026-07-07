@@ -17,8 +17,6 @@ import {
   isValidPhone,
   isValidEmail,
 } from "../../utils/driveApi";
-import PdfUnlockBanner from "../../components/PdfUnlockBanner/PdfUnlockBanner";
-
 import "./Home.css";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "";
@@ -188,7 +186,6 @@ export default function Home() {
 
   return (
     <>
-      <PdfUnlockBanner />
       <div className="home-page dashboard-viewport">
         <div className="ambient-glow-network">
           <div className="glow-cluster core-teal-glow" />

@@ -53,7 +53,7 @@ export default function AdminLogin() {
         return;
       }
       if (result.success) {
-        loginAdmin(result.role, result.advisorName, result.name, result.token);
+        loginAdmin(result.role, result.advisorName, result.name, result.token, result.bank || "");
         navigate(result.role === "banker" ? "/banker-portal" : "/admin");
       } else {
         setError(result.error || "Invalid name or password. Please try again.");

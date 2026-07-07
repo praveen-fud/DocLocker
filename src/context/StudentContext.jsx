@@ -20,11 +20,11 @@ function isAdminSessionValid() {
 function getStoredAdminRole() {
   try {
     const raw = localStorage.getItem("abroad_admin_session");
-    if (!raw) return "superadmin";
+    if (!raw) return null;
     const { role } = JSON.parse(raw);
-    return role || "superadmin";
+    return role || null;
   } catch {
-    return "superadmin";
+    return null;
   }
 }
 
@@ -61,6 +61,17 @@ function getStoredAdminToken() {
   }
 }
 
+function getStoredAdminBank() {
+  try {
+    const raw = localStorage.getItem("abroad_admin_session");
+    if (!raw) return "";
+    const { adminBank } = JSON.parse(raw);
+    return adminBank || "";
+  } catch {
+    return "";
+  }
+}
+
 export function StudentProvider({ children }) {
   const [student, setStudentState] = useState(() => {
     try {
@@ -73,7 +84,7 @@ export function StudentProvider({ children }) {
 
   const [isAdmin, setIsAdmin] = useState(() => isAdminSessionValid());
   const [adminRole, setAdminRole] = useState(() =>
-    isAdminSessionValid() ? getStoredAdminRole() : "superadmin",
+    isAdminSessionValid() ? getStoredAdminRole() : null,
   );
   const [adminAdvisorName, setAdminAdvisorName] = useState(() =>
     isAdminSessionValid() ? getStoredAdvisorName() : "",
@@ -83,6 +94,9 @@ export function StudentProvider({ children }) {
   );
   const [adminToken, setAdminToken] = useState(() =>
     isAdminSessionValid() ? getStoredAdminToken() : "",
+  );
+  const [adminBank, setAdminBank] = useState(() =>
+    isAdminSessionValid() ? getStoredAdminBank() : "",
   );
 
   const setStudent = (data) => {
@@ -95,16 +109,18 @@ export function StudentProvider({ children }) {
     localStorage.removeItem("abroad_student");
   };
 
-  // role: "superadmin" | "advisor"
+  // role: "superadmin" | "advisor" | "banker"
   // advisorName: the advisor's name (same as adminName for advisors)
   // name: the login name of this admin
   // token: JWT from backend
-  const loginAdmin = (role = "superadmin", advisorName = "", name = "", token = "") => {
+  // bank: the bank name for banker accounts
+  const loginAdmin = (role = "superadmin", advisorName = "", name = "", token = "", bank = "") => {
     setIsAdmin(true);
     setAdminRole(role);
     setAdminAdvisorName(advisorName);
     setAdminName(name);
     setAdminToken(token);
+    setAdminBank(bank);
     localStorage.setItem(
       "abroad_admin_session",
       JSON.stringify({
@@ -113,6 +129,7 @@ export function StudentProvider({ children }) {
         advisorName,
         adminName: name,
         token,
+        adminBank: bank,
         expiresAt: Date.now() + ADMIN_SESSION_TTL_MS,
       }),
     );
@@ -121,10 +138,11 @@ export function StudentProvider({ children }) {
 
   const logoutAdmin = () => {
     setIsAdmin(false);
-    setAdminRole("superadmin");
+    setAdminRole(null);
     setAdminAdvisorName("");
     setAdminName("");
     setAdminToken("");
+    setAdminBank("");
     localStorage.removeItem("abroad_admin_session");
     localStorage.removeItem("abroad_admin");
   };
@@ -146,10 +164,11 @@ export function StudentProvider({ children }) {
         setStudent,
         clearStudent,
         isAdmin: validSession,
-        adminRole: validSession ? adminRole : "superadmin",
+        adminRole: validSession ? adminRole : null,
         adminAdvisorName: validSession ? adminAdvisorName : "",
         adminName: validSession ? adminName : "",
         adminToken: validSession ? adminToken : "",
+        adminBank: validSession ? adminBank : "",
         loginAdmin,
         logoutAdmin,
       }}

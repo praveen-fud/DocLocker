@@ -22,7 +22,6 @@ import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields } from "..
 import { extractPersonalAutoFill, extractCoApplicantAutoFill, getDocSourceLabel } from "../../utils/autoFillMap";
 import FileUploadBox from "../../components/FileUploadBox/FileUploadBox";
 import ProgressBar from "../../components/ProgressBar/ProgressBar";
-import PdfUnlockBanner from "../../components/PdfUnlockBanner/PdfUnlockBanner";
 import "./Portal.css";
 
 const CUR_YEAR = new Date().getFullYear();
@@ -263,7 +262,6 @@ export default function Portal() {
 
   return (
     <>
-      <PdfUnlockBanner />
       <div className="portal-page page-bg">
         <div className="portal-container">
           <div className="portal-header animate-fade-in">

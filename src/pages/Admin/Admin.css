@@ -1,12 +1,12 @@
-/* ============================================================
-   ADMIN DASHBOARD — Production CSS
-   Font stack: "Sora" (headings) + "DM Sans" (body) — matches app
+﻿/* ============================================================
+   ADMIN DASHBOARD â€” Production CSS
+   Font stack: "Sora" (headings) + "DM Sans" (body) â€” matches app
    Theme: Light navy/blue, unified with the rest of DocLocker
    ============================================================ */
 
 @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap");
 
-/* ── CSS Variables ─────────────────────────────────────────── */
+/* â”€â”€ CSS Variables â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 :root {
   --bg-base: rgba(255, 255, 255, 0.55);
   --bg-surface: rgba(255, 255, 255, 0.92);
@@ -54,7 +54,7 @@
   --shadow-lift: 0 8px 30px rgba(15, 37, 68, 0.16);
 }
 
-/* ── Reset / Base ──────────────────────────────────────────── */
+/* â”€â”€ Reset / Base â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 *,
 *::before,
 *::after {
@@ -63,7 +63,7 @@
   padding: 0;
 }
 
-/* ── Page ──────────────────────────────────────────────────── */
+/* â”€â”€ Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .admin-page {
   font-family: var(--font-body);
   background: transparent;
@@ -93,7 +93,7 @@
   padding: 36px 28px 100px;
 }
 
-/* ── Animations ────────────────────────────────────────────── */
+/* â”€â”€ Animations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @keyframes fadeSlideUp {
   from {
     opacity: 0;
@@ -126,7 +126,7 @@
   animation: spin 0.8s linear infinite;
 }
 
-/* ── Header ────────────────────────────────────────────────── */
+/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .admin-header {
   display: flex;
   align-items: flex-start;
@@ -183,7 +183,7 @@
   flex-shrink: 0;
 }
 
-/* ── Buttons ───────────────────────────────────────────────── */
+/* â”€â”€ Buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -248,10 +248,10 @@
   transform: translateY(-1px);
 }
 
-/* ── Stats Grid ────────────────────────────────────────────── */
-/* ══════════════════════════════════════════════════════════════
-   KPI METRIC CARDS  — 2-section grid with gradient themes
-   ══════════════════════════════════════════════════════════════ */
+/* â”€â”€ Stats Grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   KPI METRIC CARDS  â€” 2-section grid with gradient themes
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 .kpi-section {
   margin-bottom: 20px;
   animation: fadeSlideUp 0.4s ease 0.05s both;
@@ -276,7 +276,7 @@
   gap: 10px;
 }
 
-/* ── Base card ── */
+/* â”€â”€ Base card â”€â”€ */
 .kpi-card {
   position: relative;
   padding: 14px 16px 12px;
@@ -339,7 +339,7 @@
   letter-spacing: -0.04em;
 }
 
-/* ── Blue — Total Students ── */
+/* â”€â”€ Blue â€” Total Students â”€â”€ */
 .kpi-blue {
   background: linear-gradient(145deg, rgba(26,110,181,0.10) 0%, var(--bg-surface) 55%);
 }
@@ -349,7 +349,7 @@
 .kpi-blue:hover      { border-color: rgba(26,110,181,0.35); box-shadow: 0 8px 24px rgba(26,110,181,0.14); }
 .kpi-blue.kpi-active { border-color: var(--blue); background: rgba(26,110,181,0.12); box-shadow: 0 0 0 3px rgba(26,110,181,0.14); }
 
-/* ── Green — Completed ── */
+/* â”€â”€ Green â€” Completed â”€â”€ */
 .kpi-green {
   background: linear-gradient(145deg, rgba(34,211,174,0.10) 0%, var(--bg-surface) 55%);
 }
@@ -359,7 +359,7 @@
 .kpi-green:hover      { border-color: rgba(34,211,174,0.35); box-shadow: 0 8px 24px rgba(34,211,174,0.12); }
 .kpi-green.kpi-active { border-color: var(--green); background: rgba(34,211,174,0.12); box-shadow: 0 0 0 3px rgba(34,211,174,0.14); }
 
-/* ── Amber — In Progress ── */
+/* â”€â”€ Amber â€” In Progress â”€â”€ */
 .kpi-amber {
   background: linear-gradient(145deg, rgba(217,119,6,0.10) 0%, var(--bg-surface) 55%);
 }
@@ -369,7 +369,7 @@
 .kpi-amber:hover      { border-color: rgba(217,119,6,0.35); box-shadow: 0 8px 24px rgba(217,119,6,0.12); }
 .kpi-amber.kpi-active { border-color: var(--amber); background: rgba(217,119,6,0.12); box-shadow: 0 0 0 3px rgba(217,119,6,0.14); }
 
-/* ── Red — Not Started ── */
+/* â”€â”€ Red â€” Not Started â”€â”€ */
 .kpi-red {
   background: linear-gradient(145deg, rgba(220,38,38,0.08) 0%, var(--bg-surface) 55%);
 }
@@ -379,7 +379,7 @@
 .kpi-red:hover      { border-color: rgba(220,38,38,0.30); box-shadow: 0 8px 24px rgba(220,38,38,0.10); }
 .kpi-red.kpi-active { border-color: var(--red); background: rgba(220,38,38,0.10); box-shadow: 0 0 0 3px rgba(220,38,38,0.12); }
 
-/* ── Slate — Pending ── */
+/* â”€â”€ Slate â€” Pending â”€â”€ */
 .kpi-slate {
   background: linear-gradient(145deg, rgba(148,163,184,0.08) 0%, var(--bg-surface) 55%);
 }
@@ -389,7 +389,7 @@
 .kpi-slate:hover      { border-color: rgba(148,163,184,0.40); box-shadow: 0 8px 24px rgba(148,163,184,0.10); }
 .kpi-slate.kpi-active { border-color: #94a3b8; background: rgba(148,163,184,0.12); box-shadow: 0 0 0 3px rgba(148,163,184,0.12); }
 
-/* ── Orange — In Process ── */
+/* â”€â”€ Orange â€” In Process â”€â”€ */
 .kpi-orange {
   background: linear-gradient(145deg, rgba(234,88,12,0.09) 0%, var(--bg-surface) 55%);
 }
@@ -399,7 +399,7 @@
 .kpi-orange:hover      { border-color: rgba(234,88,12,0.35); box-shadow: 0 8px 24px rgba(234,88,12,0.10); }
 .kpi-orange.kpi-active { border-color: #ea580c; background: rgba(234,88,12,0.11); box-shadow: 0 0 0 3px rgba(234,88,12,0.12); }
 
-/* ── Teal — Sanctioned ── */
+/* â”€â”€ Teal â€” Sanctioned â”€â”€ */
 .kpi-teal {
   background: linear-gradient(145deg, rgba(13,148,136,0.09) 0%, var(--bg-surface) 55%);
 }
@@ -409,7 +409,7 @@
 .kpi-teal:hover      { border-color: rgba(13,148,136,0.35); box-shadow: 0 8px 24px rgba(13,148,136,0.10); }
 .kpi-teal.kpi-active { border-color: #0d9488; background: rgba(13,148,136,0.11); box-shadow: 0 0 0 3px rgba(13,148,136,0.12); }
 
-/* ── Rose — Rejected ── */
+/* â”€â”€ Rose â€” Rejected â”€â”€ */
 .kpi-rose {
   background: linear-gradient(145deg, rgba(225,29,72,0.08) 0%, var(--bg-surface) 55%);
 }
@@ -419,7 +419,7 @@
 .kpi-rose:hover      { border-color: rgba(225,29,72,0.30); box-shadow: 0 8px 24px rgba(225,29,72,0.10); }
 .kpi-rose.kpi-active { border-color: #e11d48; background: rgba(225,29,72,0.10); box-shadow: 0 0 0 3px rgba(225,29,72,0.10); }
 
-/* ── Search + Toolbar ──────────────────────────────────────── */
+/* â”€â”€ Search + Toolbar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .admin-toolbar {
   display: flex;
   gap: 12px;
@@ -557,153 +557,500 @@
   }
 }
 
-/* ── Banker Access Manager ─────────────────────────────────── */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   BANKER ACCESS MODAL  â€” unified banker management + access control
+   Three zones: gradient header Â· bank-filter chips Â· sidebar + main
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+
+/* Modal shell */
 .bam-modal {
-  background: #ffffff;
-  border: 1px solid rgba(26, 110, 181, 0.16);
+  background: #fff;
   border-radius: 20px;
   width: 100%;
-  max-width: 880px;
-  max-height: 85vh;
+  max-width: 940px;
+  max-height: 88vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(15, 37, 68, 0.25);
+  box-shadow: 0 24px 72px rgba(15,37,68,0.22), 0 0 0 1px rgba(26,110,181,0.10);
 }
+
+/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .bam-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 14px;
   padding: 18px 22px;
-  border-bottom: 1px solid rgba(26, 110, 181, 0.12);
+  background: linear-gradient(135deg, #1a6eb5 0%, #0f4c8a 100%);
   flex-shrink: 0;
 }
-.bam-header h3 {
+.bam-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+.bam-header-icon {
+  width: 40px;
+  height: 40px;
+  background: rgba(255,255,255,0.18);
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+.bam-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 2px;
+}
+.bam-subtitle {
+  font-size: 12px;
+  color: rgba(255,255,255,0.72);
+  margin: 0;
+}
+.bam-header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 16px;
-  font-weight: 800;
-  color: #0f2544;
-  letter-spacing: -0.01em;
+  flex-shrink: 0;
 }
+.bam-add-btn {
+  background: rgba(255,255,255,0.20) !important;
+  border: 1px solid rgba(255,255,255,0.30) !important;
+  color: #fff !important;
+  backdrop-filter: blur(4px);
+  transition: background 0.15s !important;
+}
+.bam-add-btn:hover {
+  background: rgba(255,255,255,0.32) !important;
+}
+.bam-header .icon-btn {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  border-radius: 9px;
+}
+.bam-header .icon-btn:hover { background: rgba(255,255,255,0.28); }
+
+/* â”€â”€ Bank filter chips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.bam-bank-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  overflow-x: auto;
+  flex-shrink: 0;
+  scrollbar-width: none;
+}
+.bam-bank-filters::-webkit-scrollbar { display: none; }
+
+.bam-bank-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px 5px 7px;
+  border-radius: 20px;
+  border: 1.5px solid #e2e8f0;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+  transition: border-color 0.14s, background 0.14s, color 0.14s, box-shadow 0.14s;
+  font-family: inherit;
+}
+.bam-bank-chip:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.bam-bank-chip.active {
+  background: #1a6eb5;
+  border-color: #1a6eb5;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(26,110,181,0.30);
+}
+.bam-chip-all-icon {
+  display: flex;
+  align-items: center;
+  opacity: 0.7;
+}
+.bam-chip-logo {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  object-fit: contain;
+  background: #f1f5f9;
+  border: 1px solid rgba(0,0,0,0.06);
+  flex-shrink: 0;
+}
+.bam-bank-chip.active .bam-chip-logo {
+  background: rgba(255,255,255,0.25);
+  border-color: rgba(255,255,255,0.30);
+}
+.bam-chip-label { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.bam-chip-count {
+  font-size: 10.5px;
+  font-weight: 700;
+  background: rgba(0,0,0,0.07);
+  color: inherit;
+  padding: 1px 6px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.bam-bank-chip.active .bam-chip-count {
+  background: rgba(255,255,255,0.25);
+}
+
+/* â”€â”€ Body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .bam-body {
   display: flex;
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
-.bam-banker-list {
-  width: 220px;
+
+/* â”€â”€ Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.bam-sidebar {
+  width: 258px;
   flex-shrink: 0;
-  border-right: 1px solid rgba(26, 110, 181, 0.10);
+  border-right: 1px solid #e2e8f0;
+  background: #f8fafc;
   overflow-y: auto;
-  padding: 10px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-.bam-banker-row {
+
+.bam-sidebar-loading,
+.bam-sidebar-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 36px 16px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
+.bam-sidebar-empty-icon {
+  opacity: 0.35;
+}
+
+/* Banker card */
+.bam-banker-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: none;
-  background: none;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1.5px solid transparent;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15,37,68,0.06);
   cursor: pointer;
-  text-align: left;
-  font-family: inherit;
-  transition: background 0.15s;
+  transition: border-color 0.14s, box-shadow 0.14s, background 0.14s;
   flex-shrink: 0;
 }
-.bam-banker-row:hover {
-  background: rgba(26, 110, 181, 0.06);
+.bam-banker-card:hover {
+  border-color: #bfdbfe;
+  box-shadow: 0 3px 10px rgba(26,110,181,0.10);
+  background: #fff;
 }
-.bam-banker-row.active {
-  background: rgba(26, 110, 181, 0.10);
+.bam-banker-card.selected {
+  border-color: #1a6eb5;
+  background: #eff6ff;
+  box-shadow: 0 3px 12px rgba(26,110,181,0.18);
 }
-.bam-banker-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: rgba(26, 110, 181, 0.12);
-  color: #1a6eb5;
+
+.bam-card-logo-wrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 13px;
   flex-shrink: 0;
 }
-.bam-banker-name {
+.bam-card-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.bam-card-info {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: #0f2544;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.bam-card-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e293b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.bam-banker-count {
+.bam-card-bank {
   font-size: 11px;
-  font-weight: 700;
-  color: #64748b;
-  background: #f1f5f9;
-  padding: 2px 7px;
-  border-radius: 10px;
-  flex-shrink: 0;
+  color: #1a6eb5;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.bam-banker-row.active .bam-banker-count {
-  background: #1a6eb5;
-  color: #ffffff;
+.bam-card-nobank { color: #94a3b8; font-style: italic; }
+.bam-card-email {
+  font-size: 10.5px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
+.bam-card-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.bam-card-count {
+  font-size: 11px;
+  font-weight: 700;
+  background: #e0f2fe;
+  color: #0369a1;
+  padding: 2px 7px;
+  border-radius: 8px;
+  line-height: 1.4;
+}
+.bam-banker-card.selected .bam-card-count {
+  background: #1a6eb5;
+  color: #fff;
+}
+
+.bam-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.bam-banker-card:hover .bam-card-actions,
+.bam-banker-card.selected .bam-card-actions {
+  opacity: 1;
+}
+.bam-action-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s;
+}
+.bam-action-btn.edit   { background: #dbeafe; color: #1d4ed8; }
+.bam-action-btn.edit:hover   { background: #bfdbfe; }
+.bam-action-btn.delete { background: #fee2e2; color: #dc2626; }
+.bam-action-btn.delete:hover { background: #fca5a5; }
+
+.bam-del-confirm {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.bam-del-yes {
+  padding: 2px 7px;
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.bam-del-yes:hover { background: #b91c1c; }
+.bam-del-no {
+  padding: 2px 7px;
+  background: #e2e8f0;
+  color: #475569;
+  border: none;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.bam-del-no:hover { background: #cbd5e1; }
+
+/* â”€â”€ Main panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .bam-main {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  padding: 18px 22px;
   display: flex;
   flex-direction: column;
-  gap: 22px;
 }
-.bam-section-title {
-  font-size: 13px;
+
+/* Empty state when no bankers exist */
+.bam-empty-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 32px;
+  text-align: center;
+  color: #94a3b8;
+}
+.bam-empty-icon-wrap {
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1d4ed8;
+}
+.bam-empty-main h3 { font-size: 16px; font-weight: 700; color: #1e293b; margin: 0; }
+.bam-empty-main p  { font-size: 13.5px; color: #64748b; margin: 0; max-width: 260px; }
+
+/* â”€â”€ Access panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.bam-access-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* Identity bar at top of main panel */
+.bam-identity-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+  border-bottom: 1px solid #bae6fd;
+  flex-shrink: 0;
+}
+.bam-identity-logo-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 4px;
+}
+.bam-identity-logo { width: 100%; height: 100%; object-fit: contain; }
+.bam-identity-info { flex: 1; min-width: 0; }
+.bam-identity-name {
+  display: block;
+  font-size: 15px;
   font-weight: 700;
-  color: #334155;
+  color: #0c4a6e;
+}
+.bam-identity-bank {
+  display: block;
+  font-size: 12px;
+  color: #0369a1;
+  font-weight: 600;
+}
+.bam-identity-edit-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  background: #fff;
+  border: 1.5px solid #bae6fd;
+  border-radius: 9px;
+  color: #0369a1;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.13s, border-color 0.13s;
+  flex-shrink: 0;
+}
+.bam-identity-edit-btn:hover { background: #e0f2fe; border-color: #7dd3fc; }
+
+/* Access sections */
+.bam-section {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.bam-section:last-child { border-bottom: none; }
+.bam-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 10px;
 }
-.bam-section-title strong {
-  color: #1a6eb5;
+.bam-section-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
+.bam-section-badge {
+  font-size: 11px;
+  font-weight: 700;
+  background: #1a6eb5;
+  color: #fff;
+  padding: 1px 7px;
+  border-radius: 8px;
+}
+
 .bam-no-students {
   font-size: 13px;
   color: #94a3b8;
-  padding: 10px 0;
+  padding: 6px 0 2px;
+  font-style: italic;
 }
 .bam-student-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 220px;
+  gap: 6px;
+  max-height: 200px;
   overflow-y: auto;
 }
+.bam-grant-list { max-height: 180px; }
+
 .bam-student-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
+  gap: 9px;
+  padding: 8px 11px;
   background: #f8fafc;
-  border: 1px solid rgba(26, 110, 181, 0.08);
+  border: 1px solid #e2e8f0;
   border-radius: 10px;
+  transition: border-color 0.12s;
 }
+.bam-student-row:hover { border-color: #93c5fd; }
 .bam-student-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: rgba(26, 110, 181, 0.10);
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: rgba(26,110,181,0.12);
   color: #1a6eb5;
   display: flex;
   align-items: center;
@@ -715,19 +1062,18 @@
 .bam-student-info {
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
 }
 .bam-student-name {
+  display: block;
   font-size: 13px;
   font-weight: 600;
-  color: #0f2544;
+  color: #1e293b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .bam-student-contact {
+  display: block;
   font-size: 11px;
   color: #94a3b8;
   white-space: nowrap;
@@ -735,60 +1081,308 @@
   text-overflow: ellipsis;
 }
 
-.bam-search {
+.bam-revoke-btn {
+  padding: 4px 10px;
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+  transition: background 0.12s;
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: #ffffff;
-  border: 1px solid rgba(26, 110, 181, 0.16);
-  border-radius: 10px;
-  padding: 9px 12px;
-  margin-bottom: 10px;
-  color: #94a3b8;
+  gap: 4px;
 }
-.bam-search input {
-  border: none;
-  outline: none;
-  flex: 1;
+.bam-revoke-btn:hover:not(:disabled) { background: #fca5a5; }
+.bam-revoke-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.bam-grant-btn {
+  padding: 4px 10px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #93c5fd;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+  transition: background 0.12s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.bam-grant-btn:hover:not(:disabled) { background: #bfdbfe; }
+.bam-grant-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.bam-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.bam-search-icon {
+  position: absolute;
+  left: 10px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+.bam-search-input {
+  width: 100%;
+  padding: 8px 32px 8px 32px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 9px;
   font-size: 13px;
   font-family: inherit;
-  color: #0f2544;
+  color: #1e293b;
+  background: #fff;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.14s;
+}
+.bam-search-input:focus { border-color: #1a6eb5; }
+.bam-search-clear {
+  position: absolute;
+  right: 8px;
   background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
 }
 .bam-more-hint {
+  font-size: 11.5px;
+  color: #94a3b8;
+  text-align: center;
+  padding: 6px 0 0;
+  font-style: italic;
+}
+.bam-error-inline {
+  font-size: 12.5px;
+  color: #dc2626;
+  background: #fee2e2;
+  padding: 7px 10px;
+  border-radius: 8px;
+  margin-top: 8px;
+}
+
+/* â”€â”€ Add / Edit form panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.bam-form-panel {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+.bam-form-titlebar {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.bam-form-titlebar-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.bam-form-titlebar-icon.add { background: #dbeafe; color: #1d4ed8; }
+.bam-edit-logo-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 3px;
+}
+.bam-edit-thumb { width: 100%; height: 100%; object-fit: contain; }
+.bam-form-h {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 2px 0 3px;
+}
+.bam-form-sub { font-size: 12.5px; color: #64748b; margin: 0; }
+.bam-form-titlebar > .icon-btn { margin-left: auto; flex-shrink: 0; }
+
+.bam-form { display: flex; flex-direction: column; gap: 0; }
+.bam-field { margin-bottom: 14px; }
+.bam-field label {
+  display: block;
   font-size: 12px;
-  color: #94a3b8;
-  text-align: center;
-  padding: 6px 0;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
 }
-.bam-empty {
-  padding: 60px 30px;
-  text-align: center;
-  color: #94a3b8;
-  font-size: 14px;
+.bam-field .req { color: #ef4444; }
+.bam-hint { font-size: 11px; color: #94a3b8; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.bam-input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: #1e293b;
+  background: #fff;
+  box-sizing: border-box;
+  transition: border-color 0.14s, box-shadow 0.14s;
 }
-.bam-error {
-  margin: 0 22px 16px;
+.bam-input:focus {
+  outline: none;
+  border-color: #1a6eb5;
+  box-shadow: 0 0 0 3px rgba(26,110,181,0.10);
+}
+.bam-pw-wrap { position: relative; display: flex; align-items: center; }
+.bam-pw-wrap .bam-input { padding-right: 38px; }
+.bam-pw-toggle {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+.bam-select-wrap { position: relative; display: flex; align-items: center; }
+.bam-select-logo {
+  position: absolute;
+  left: 9px;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  object-fit: contain;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  pointer-events: none;
+}
+.bam-select {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: #1e293b;
+  background: #fff;
+  appearance: none;
+  cursor: pointer;
+  transition: border-color 0.14s, box-shadow 0.14s;
+}
+.bam-select.has-logo { padding-left: 38px; }
+.bam-select:focus {
+  outline: none;
+  border-color: #1a6eb5;
+  box-shadow: 0 0 0 3px rgba(26,110,181,0.10);
 }
 
-@media (max-width: 720px) {
-  .bam-modal {
-    max-height: 92vh;
-  }
-  .bam-body {
-    flex-direction: column;
-  }
-  .bam-banker-list {
+.bam-msg {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.bam-msg.ok  { background: #dcfce7; color: #16a34a; }
+.bam-msg.err { background: #fee2e2; color: #dc2626; }
+
+.bam-form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.bam-submit-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 18px;
+  background: linear-gradient(135deg, #1a6eb5, #0f4c8a);
+  color: #fff;
+  border: none;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.14s, transform 0.12s;
+}
+.bam-submit-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+.bam-submit-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.bam-cancel-btn {
+  padding: 10px 16px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.13s;
+}
+.bam-cancel-btn:hover { background: #e2e8f0; }
+
+/* Bank logo mini in GrantBankAccessModal checklist */
+.bank-check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bank-logo-mini-wrap {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bank-logo-mini { width: 100%; height: 100%; object-fit: contain; }
+
+/* Responsive */
+@media (max-width: 680px) {
+  .bam-modal { max-height: 93vh; }
+  .bam-body  { flex-direction: column; }
+  .bam-sidebar {
     width: 100%;
+    max-height: 200px;
     flex-direction: row;
+    flex-wrap: nowrap;
     overflow-x: auto;
-    overflow-y: visible;
+    overflow-y: hidden;
     border-right: none;
-    border-bottom: 1px solid rgba(26, 110, 181, 0.10);
+    border-bottom: 1px solid #e2e8f0;
+    padding: 6px;
+    gap: 6px;
   }
+  .bam-banker-card { flex-shrink: 0; width: 180px; }
+  .bam-bank-filters { padding: 8px 10px; }
 }
 
-/* ── Error banner ──────────────────────────────────────────── */
+/* â”€â”€ Error banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .admin-error {
   display: flex;
   align-items: center;
@@ -817,7 +1411,7 @@
   opacity: 1;
 }
 
-/* ── Table wrapper ─────────────────────────────────────────── */
+/* â”€â”€ Table wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .admin-table-wrap {
   background: var(--bg-surface);
   border: 1px solid var(--border-dim);
@@ -863,7 +1457,7 @@
   text-align: right;
 }
 
-/* ── Loading / Empty states ────────────────────────────────── */
+/* â”€â”€ Loading / Empty states â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .admin-loading {
   display: flex;
   flex-direction: column;
@@ -924,7 +1518,7 @@
   line-height: 1.6;
 }
 
-/* ── Student rows ──────────────────────────────────────────── */
+/* â”€â”€ Student rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .student-block {
   border-bottom: 1px solid var(--border-dim);
   transition: background 0.15s;
@@ -1182,7 +1776,7 @@
   color: var(--teal);
 }
 
-/* ── Expanded Detail Panel ─────────────────────────────────── */
+/* â”€â”€ Expanded Detail Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .student-detail {
   padding: 0 22px 24px 22px;
   border-top: 1px solid var(--border-dim);
@@ -1554,10 +2148,10 @@
 
 /* Modal/settings-form primitives (.modal-backdrop, .modal-box, .modal-icon,
    .modal-actions, .bank-modal-*, .settings-form, .settings-msg,
-   .password-wrap, .show-pass) now live in index.css — shared with
+   .password-wrap, .show-pass) now live in index.css â€” shared with
    BankerPortal instead of duplicated per page. */
 
-/* ── Report Modal ──────────────────────────────────────────── */
+/* â”€â”€ Report Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .rpt-backdrop {
   align-items: flex-start;
   padding: 84px 16px 16px;
@@ -1943,7 +2537,7 @@
   transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* compound selectors — fill has both classes on same element */
+/* compound selectors â€” fill has both classes on same element */
 .cibil-fill.cibil-excellent {
   background: var(--green);
 }
@@ -2166,7 +2760,7 @@
   flex-shrink: 0;
 }
 
-/* ── Settings Panel ────────────────────────────────────────── */
+/* â”€â”€ Settings Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .settings-overlay {
   position: fixed;
   inset: 0;
@@ -2300,7 +2894,7 @@
 }
 /* .password-wrap and .show-pass now live in index.css. Admin.css's
    .input-field above needs the same right-padding when paired with the
-   show/hide button — kept here since the selector targets this page's
+   show/hide button â€” kept here since the selector targets this page's
    own .input-field. */
 .password-wrap .input-field {
   padding-right: 40px;
@@ -2376,7 +2970,7 @@
   color: var(--purple);
   border: 1px solid rgba(124, 58, 237, 0.25);
 }
-/* Bank email — unlike role badges this is free-text and can be long, so it
+/* Bank email â€” unlike role badges this is free-text and can be long, so it
    needs normal casing and truncation instead of the fixed-width uppercase pill. */
 .team-role-badge.bank-email {
   text-transform: none;
@@ -2399,9 +2993,9 @@
   flex-shrink: 0;
 }
 
-/* ── Responsive ────────────────────────────────────────────── */
+/* â”€â”€ Responsive â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
-/* Tablet landscape: ≤1024px */
+/* Tablet landscape: â‰¤1024px */
 @media (max-width: 1024px) {
   .admin-container {
     padding: 28px 20px 80px;
@@ -2414,7 +3008,7 @@
   }
 }
 
-/* Tablet portrait: ≤900px */
+/* Tablet portrait: â‰¤900px */
 @media (max-width: 900px) {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .header-actions .btn-sm .btn-label { display: none; }
@@ -2457,7 +3051,7 @@
   }
 }
 
-/* Large mobile: ≤640px */
+/* Large mobile: â‰¤640px */
 @media (max-width: 640px) {
   .admin-header {
     flex-direction: column;
@@ -2560,7 +3154,7 @@
   }
 }
 
-/* Small mobile: ≤480px */
+/* Small mobile: â‰¤480px */
 @media (max-width: 480px) {
   .admin-container {
     padding: 12px 10px 80px;
@@ -2653,7 +3247,7 @@
   }
 }
 
-/* Very small: ≤375px */
+/* Very small: â‰¤375px */
 @media (max-width: 375px) {
   .kpi-grid { gap: 6px; }
   .kpi-card { padding: 10px 10px 8px; }
@@ -2688,7 +3282,7 @@
 }
 
 
-/* ─── Loan Status Badge (inline in student rows) ──────────────── */
+/* â”€â”€â”€ Loan Status Badge (inline in student rows) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .loan-badge {
   display: inline-flex;
   align-items: center;
@@ -2714,7 +3308,7 @@
 .loan-sanctioned{ background: rgba(13,148,136,0.10);  color: #0d9488; border-color: rgba(13,148,136,0.28); }
 .loan-rejected  { background: rgba(220,38,38,0.09);   color: #dc2626; border-color: rgba(220,38,38,0.25); }
 
-/* ─── Loan Status Update Button ────────────────────────────────── */
+/* â”€â”€â”€ Loan Status Update Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .icon-btn.loan-btn {
   color: #ea580c;
 }
@@ -2733,12 +3327,12 @@
   transform: translateY(-1px);
 }
 
-/* ─── Loan Status Filter Select ────────────────────────────────── */
+/* â”€â”€â”€ Loan Status Filter Select â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .loan-status-filter-select {
   min-width: 148px;
 }
 
-/* ─── Loan Status Modal ─────────────────────────────────────────── */
+/* â”€â”€â”€ Loan Status Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .loan-status-modal {
   position: relative;
   width: 440px;
@@ -2910,7 +3504,7 @@
   border-color: rgba(220, 38, 38, 0.6);
   box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.10);
 }
-/* ── Sanction letter upload ──────────────────────────────────── */
+/* â”€â”€ Sanction letter upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .lsm-upload-wrap { display: flex; flex-direction: column; gap: 7px; }
 .lsm-optional { font-size: 11px; font-weight: 500; color: var(--text-muted); text-transform: none; letter-spacing: 0; }
 
@@ -2997,7 +3591,7 @@
   justify-content: flex-end;
 }
 
-/* ─── Student status col: stack both badges ──────────────────────── */
+/* â”€â”€â”€ Student status col: stack both badges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .student-status-col {
   display: flex;
   flex-direction: column;
@@ -3005,7 +3599,7 @@
   gap: 5px;
 }
 
-/* ─── Loan Status in BankerPortal ────────────────────────────────── */
+/* â”€â”€â”€ Loan Status in BankerPortal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .bp-loan-status-row {
   display: flex;
   align-items: center;
@@ -3038,7 +3632,7 @@
   background: rgba(234, 88, 12, 0.16);
 }
 
-/* ─── Responsive: loan status modal + badges ─────────────────────── */
+/* â”€â”€â”€ Responsive: loan status modal + badges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @media (max-width: 768px) {
   .loan-status-modal {
     width: calc(100vw - 24px);
@@ -3062,7 +3656,7 @@
   }
 }
 
-/* ── Recover Meta Modal ──────────────────────────────────────────────── */
+/* â”€â”€ Recover Meta Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .recover-modal { max-width: 520px; }
 
 .recover-modal code {
