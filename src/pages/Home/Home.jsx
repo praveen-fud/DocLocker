@@ -118,8 +118,9 @@ export default function Home() {
         personalInfo: {},
       };
 
-      // saveStudentMeta is intentionally NOT awaited — it does a fire-and-forget Drive sync.
-      saveStudentMeta(studentData.name, studentData, identifier);
+      // Await meta save so the Drive folder exists before the student reaches
+      // the portal and tries to upload. Failures are logged but non-blocking.
+      await saveStudentMeta(studentData.name, studentData, identifier);
 
       setStudent(studentData);
       navigate("/portal");
@@ -167,7 +168,14 @@ export default function Home() {
       // 3. Request search from file backend utils
       const found = await searchStudentByIdentifier(finalIdentifier);
       if (found) {
-        setStudent(found);
+        // found now contains the full meta. Ensure the typed identifier is set
+        // so uploads work even if meta was saved without it.
+        const isEmail = finalIdentifier.includes("@");
+        setStudent({
+          ...found,
+          email: isEmail ? finalIdentifier : (found.email || ""),
+          phone: isEmail ? (found.phone || "") : finalIdentifier,
+        });
         navigate("/portal");
       } else {
         setError(

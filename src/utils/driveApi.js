@@ -103,25 +103,38 @@ export function clearStudentFromLocalStorage() {
 }
 
 // ── Upload a file (multipart — no base64 overhead) ───────────────────────────
+// When no admin JWT exists (student self-service), uses /api/student-upload
+// which validates via the student's email/phone identifier instead.
 export async function uploadDocument({ studentName, studentIdentifier, subFolder, fileName, file, onProgress }) {
-
   const ext = file.name.split('.').pop().toLowerCase();
   const finalName = `${fileName}.${ext}`;
-  const folderKey = buildFolderKey(studentName, studentIdentifier);
+  const authHeaders = getAuthHeaders();
+  const hasAdminToken = !!authHeaders.Authorization;
 
   if (onProgress) onProgress(10);
 
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('studentName', folderKey);
   formData.append('subFolder', subFolder.trim());
   formData.append('fileName', finalName);
 
+  let endpoint;
+  if (hasAdminToken) {
+    // Staff upload — uses folder key, JWT auth
+    formData.append('studentName', buildFolderKey(studentName, studentIdentifier));
+    endpoint = '/api/upload';
+  } else {
+    // Student self-service — validated server-side by name + identifier pair
+    formData.append('studentName', (studentName || '').trim());
+    formData.append('studentIdentifier', (studentIdentifier || '').trim());
+    endpoint = '/api/student-upload';
+  }
+
   if (onProgress) onProgress(40);
 
-  const res = await fetch(`${API_URL}/api/upload`, {
+  const res = await fetch(`${API_URL}${endpoint}`, {
     method: 'POST',
-    headers: getAuthHeaders(),
+    headers: hasAdminToken ? authHeaders : {},
     body: formData,
     signal: AbortSignal.timeout(90000),
   });
@@ -136,10 +149,22 @@ export async function uploadDocument({ studentName, studentIdentifier, subFolder
 }
 
 // ── Save student metadata ─────────────────────────────────────────────────────
+// Staff path: fire-and-forget (folder already exists, JWT auth).
+// Student path: returns a Promise so callers can await folder creation.
 export function saveStudentMeta(studentName, meta, studentIdentifier = '') {
-  const folderKey = buildFolderKey(studentName, studentIdentifier);
-  apiPost('/api/meta', { studentName: folderKey, metaJson: JSON.stringify(meta) })
-    .catch((e) => console.warn('[DriveSync] saveMeta failed silently:', e.message));
+  const hasAdminToken = !!getAuthHeaders().Authorization;
+  if (hasAdminToken) {
+    const folderKey = buildFolderKey(studentName, studentIdentifier);
+    apiPost('/api/meta', { studentName: folderKey, metaJson: JSON.stringify(meta) })
+      .catch((e) => console.warn('[DriveSync] saveMeta failed silently:', e.message));
+    return Promise.resolve();
+  } else {
+    const id = (studentIdentifier || '').trim();
+    const name = (studentName || '').trim();
+    if (!id || !name) return Promise.resolve();
+    return apiPost('/api/student-meta', { studentName: name, studentIdentifier: id, metaJson: JSON.stringify(meta) })
+      .catch((e) => console.warn('[DriveSync] student-meta failed silently:', e.message));
+  }
 }
 
 // ── List all students ─────────────────────────────────────────────────────────
