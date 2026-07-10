@@ -29,7 +29,7 @@ export default function Navbar() {
             />
           </div>
           <div className="navbar-brand-typography">
-            <span className="navbar-brand-name">GuideUni</span>
+            <span className="navbar-brand-name">DocLocker</span>
           </div>
         </Link>
 
