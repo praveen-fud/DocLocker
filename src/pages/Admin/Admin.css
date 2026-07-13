@@ -549,11 +549,132 @@
   color: var(--text-primary);
 }
 
+/* ── Consultancy filter (advisors only) ─────────────────────────
+   Dropdown of consultancy names aggregated from student meta
+   (personalInfo.consultantNameLoc) — shares .advisor-filter-select
+   styling; teal accent when a consultancy is actively selected. */
+.consultancy-filter-select.has-value {
+  border-color: rgba(0, 209, 178, 0.45);
+  color: var(--teal);
+}
+
 @media (max-width: 900px) {
   .advisor-filter-select {
     min-width: 0;
     max-width: 100%;
     width: 100%;
+  }
+}
+
+/* ── Consultancy strip (inline editor in expanded student row) ──
+   Advisor-only: view/set/correct the student's consultancy without
+   leaving the dashboard. Writes personalInfo.consultantNameLoc. */
+.consultancy-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding: 10px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.consultancy-strip-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.consultancy-strip-view {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.consultancy-strip-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.consultancy-strip-value.empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.consultancy-edit-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.consultancy-strip-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.consultancy-strip-input {
+  flex: 1;
+  min-width: 160px;
+  height: 34px;
+  padding: 0 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.consultancy-strip-input:focus {
+  border-color: rgba(0, 209, 178, 0.4);
+  box-shadow: 0 0 0 3px rgba(0, 209, 178, 0.08);
+}
+.consultancy-strip-input::placeholder {
+  color: var(--text-muted);
+}
+.consultancy-strip-input:disabled {
+  opacity: 0.5;
+}
+
+.consultancy-strip-err {
+  width: 100%;
+  font-size: 12px;
+  color: #e11d48;
+}
+
+@media (max-width: 640px) {
+  .consultancy-strip {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .consultancy-strip-view,
+  .consultancy-strip-edit {
+    width: 100%;
+  }
+  .consultancy-edit-btn {
+    margin-left: 0;
+  }
+  .consultancy-strip-input {
+    width: 100%;
+    min-width: 0;
   }
 }
 

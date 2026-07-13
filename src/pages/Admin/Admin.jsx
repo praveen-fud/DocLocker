@@ -41,7 +41,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
-import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter, recoverMetaFromPdf, restoreMeta } from "../../utils/driveApi";
+import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter, recoverMetaFromPdf, restoreMeta, buildFolderKey } from "../../utils/driveApi";
 import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields } from "../../context/schemas";
 import { BANK_OPTIONS, getBankLogo } from "../../utils/bankOptions";
 import "./Admin.css";
@@ -1237,7 +1237,82 @@ function FilesTab({ student }) {
 
 /* ─── Student Row ──────────────────────────────────────────────── */
 
-function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewReport, onSendToBank, onLoanStatusUpdate, onRecoverMeta }) {
+/* ─── Consultancy inline editor (advisor only) ─────────────────── */
+
+function ConsultancyEditor({ value, onSave, suggestions = [] }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  const begin = () => { setDraft(value || ""); setErr(""); setEditing(true); };
+  const cancel = () => { setEditing(false); setErr(""); };
+  const save = async () => {
+    setSaving(true);
+    setErr("");
+    try {
+      await onSave(draft.trim());
+      setEditing(false);
+    } catch (e) {
+      setErr(e.message || "Could not save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="consultancy-strip">
+      <div className="consultancy-strip-label">
+        <Building2 size={13} />
+        <span>Consultancy</span>
+      </div>
+
+      {!editing ? (
+        <div className="consultancy-strip-view">
+          <span className={`consultancy-strip-value${value ? "" : " empty"}`}>
+            {value || "Not set"}
+          </span>
+          <button className="btn btn-secondary btn-sm consultancy-edit-btn" onClick={begin}>
+            <Pencil size={12} /> {value ? "Edit" : "Set consultancy"}
+          </button>
+        </div>
+      ) : (
+        <div className="consultancy-strip-edit">
+          <input
+            className="consultancy-strip-input"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="e.g. ABC Overseas, Hyderabad"
+            autoFocus
+            disabled={saving}
+            list="consultancy-name-suggestions"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") save();
+              if (e.key === "Escape") cancel();
+            }}
+          />
+          {suggestions.length > 0 && (
+            <datalist id="consultancy-name-suggestions">
+              {suggestions.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+          )}
+          <button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={cancel} disabled={saving}>
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {err && <span className="consultancy-strip-err">{err}</span>}
+    </div>
+  );
+}
+
+function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewReport, onSendToBank, onLoanStatusUpdate, onRecoverMeta, canEditConsultancy, onConsultancySave, consultancySuggestions }) {
   const [activeTab, setActiveTab] = useState("personal");
 
   const totalUploads = getTotalUploads(student);
@@ -1326,6 +1401,14 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewRe
             {activeTab === "personal" && <PersonalTab student={student} />}
             {activeTab === "documents" && <DocumentsTab student={student} />}
             {activeTab === "files" && <FilesTab student={student} />}
+
+            {canEditConsultancy && (
+              <ConsultancyEditor
+                value={student.personalInfo?.consultantNameLoc || ""}
+                onSave={onConsultancySave}
+                suggestions={consultancySuggestions}
+              />
+            )}
 
             <div className="detail-action-bar">
               <div className="dab-primary">
@@ -2309,6 +2392,7 @@ export default function Admin() {
   const [advisorFilter, setAdvisorFilter] = useState("all");
   const [bankerFilter, setBankerFilter] = useState("all");
   const [loanStatusFilter, setLoanStatusFilter] = useState("all");
+  const [consultancyFilter, setConsultancyFilter] = useState("");
   const [bankers, setBankers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -2378,6 +2462,31 @@ export default function Admin() {
     setStudents((prev) => prev.map((s) => s.name === name ? { ...s, loanStatus, loanRemark } : s));
   };
 
+  // Advisor sets/corrects a student's consultancy from the admin panel.
+  // Writes the same meta field the student portal fills (personalInfo.consultantNameLoc)
+  // via the staff-only /api/meta route, so portal, summary PDF, and the
+  // consultancy filter all stay in sync.
+  const handleConsultancySave = async (student, value) => {
+    // Strip backend-added listing fields so only real meta goes back to Drive
+    const meta = { ...student };
+    delete meta.driveUrl;
+    delete meta._parseError;
+    const updatedMeta = {
+      ...meta,
+      personalInfo: { ...(meta.personalInfo || {}), consultantNameLoc: value },
+    };
+    const identifier = student.email || student.phone || "";
+    const folderKey = buildFolderKey(student.name, identifier);
+    const r = await callAPI("POST", "/api/meta", {
+      studentName: folderKey,
+      metaJson: JSON.stringify(updatedMeta),
+    });
+    if (!r.success) throw new Error(r.error || "Could not save consultancy");
+    setStudents((prev) =>
+      prev.map((s) => (s.name === student.name ? { ...s, personalInfo: updatedMeta.personalInfo } : s)),
+    );
+  };
+
   const openDriveFolder = (s) => {
     const url =
       s.driveUrl ||
@@ -2417,6 +2526,17 @@ export default function Admin() {
     new Set(students.map((s) => s.advisor).filter(Boolean)),
   ).sort();
 
+  // Unique consultancy names across the advisor's scoped students — these come
+  // from personalInfo.consultantNameLoc stored in each student's meta on Drive,
+  // so the dropdown always reflects what's actually saved in the backend.
+  const consultancyList = Array.from(
+    new Set(
+      scopedStudents
+        .map((s) => (s.personalInfo?.consultantNameLoc || "").trim())
+        .filter(Boolean),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+
   const filtered = scopedStudents.filter((s) => {
     const q = search.toLowerCase();
     const matchesSearch =
@@ -2434,7 +2554,15 @@ export default function Admin() {
       loanStatusFilter === "all" ||
       (loanStatusFilter === "pending" && (!s.loanStatus || s.loanStatus === "pending")) ||
       s.loanStatus === loanStatusFilter;
-    return matchesSearch && matchesFilter && matchesLoanStatus;
+    // Consultancy dropdown: exact name from the saved list, or "__none__" to
+    // surface students whose consultancy hasn't been set yet.
+    const consultancyValue = (s.personalInfo?.consultantNameLoc || "").trim();
+    const matchesConsultancy =
+      !consultancyFilter ||
+      (consultancyFilter === "__none__"
+        ? !consultancyValue
+        : consultancyValue === consultancyFilter);
+    return matchesSearch && matchesFilter && matchesLoanStatus && matchesConsultancy;
   });
 
   const rootUrl = import.meta.env.VITE_GOOGLE_DRIVE_FOLDER_ID
@@ -2528,6 +2656,21 @@ export default function Admin() {
             ))}
           </div>
 
+          {adminRole === "advisor" && (
+            <select
+              className={`advisor-filter-select consultancy-filter-select${consultancyFilter ? " has-value" : ""}`}
+              value={consultancyFilter}
+              onChange={(e) => setConsultancyFilter(e.target.value)}
+              aria-label="Filter students by consultancy"
+            >
+              <option value="">All Consultancies</option>
+              {consultancyList.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+              <option value="__none__">— No consultancy set —</option>
+            </select>
+          )}
+
           {adminRole !== "advisor" && advisorList.length > 0 && (
             <select
               className="advisor-filter-select"
@@ -2595,24 +2738,28 @@ export default function Admin() {
             <div className="admin-empty">
               <div className="admin-empty-icon"><Users size={28} /></div>
               <h3>
-                {search || filter !== "all"
+                {search || filter !== "all" || consultancyFilter
                   ? "No students match"
                   : adminRole === "advisor"
                     ? "No students assigned yet"
                     : "No students yet"}
               </h3>
               <p>
-                {search || filter !== "all"
-                  ? "Try adjusting your search or filter."
-                  : adminRole === "advisor"
-                    ? `No students have selected ${adminAdvisorName} as their advisor yet.`
-                    : "Add a student to get started."}
+                {consultancyFilter === "__none__"
+                  ? "Every student has a consultancy set."
+                  : consultancyFilter
+                    ? `No students found for consultancy "${consultancyFilter}".`
+                    : search || filter !== "all"
+                      ? "Try adjusting your search or filter."
+                      : adminRole === "advisor"
+                        ? `No students have selected ${adminAdvisorName} as their advisor yet.`
+                        : "Add a student to get started."}
               </p>
-              {(search || filter !== "all") && (
+              {(search || filter !== "all" || consultancyFilter) && (
                 <button
                   className="btn btn-secondary btn-sm"
                   style={{ marginTop: 8 }}
-                  onClick={() => { setSearch(""); setFilter("all"); }}
+                  onClick={() => { setSearch(""); setFilter("all"); setConsultancyFilter(""); }}
                 >
                   Clear filters
                 </button>
@@ -2632,6 +2779,9 @@ export default function Admin() {
                   onSendToBank={(e) => { if (e) e.stopPropagation(); setBankStudent(s); }}
                   onLoanStatusUpdate={(e) => { if (e) e.stopPropagation(); setLoanStatusStudent(s); }}
                   onRecoverMeta={(e) => { if (e) e.stopPropagation(); setRecoverStudent(s); }}
+                  canEditConsultancy={adminRole === "advisor"}
+                  onConsultancySave={(value) => handleConsultancySave(s, value)}
+                  consultancySuggestions={consultancyList}
                 />
               ))}
             </div>
