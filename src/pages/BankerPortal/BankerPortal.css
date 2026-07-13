@@ -578,6 +578,9 @@
 .lsm-option.loan-rejected.selected   { border-color: #dc2626; background: rgba(220,38,38,0.08); color: #dc2626; }
 .lsm-option.loan-rejected .lsm-option-dot   { background: #dc2626; }
 .lsm-option.loan-rejected .lsm-check { color: #dc2626; }
+.lsm-option.loan-dropped.selected    { border-color: #7c3aed; background: rgba(124,58,237,0.08); color: #7c3aed; }
+.lsm-option.loan-dropped .lsm-option-dot    { background: #7c3aed; }
+.lsm-option.loan-dropped .lsm-check  { color: #7c3aed; }
 .lsm-remark-wrap { display: flex; flex-direction: column; gap: 7px; }
 .lsm-remark-label { font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; }
 .required-star { color: #dc2626; }

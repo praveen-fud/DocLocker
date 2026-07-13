@@ -14,6 +14,14 @@ const LOAN_STATUS_CONFIG = {
   inprocess:  { label: "In Process", cls: "loan-inprocess" },
   sanctioned: { label: "Sanctioned", cls: "loan-sanctioned" },
   rejected:   { label: "Rejected",   cls: "loan-rejected" },
+  dropped:    { label: "Dropped",    cls: "loan-dropped" },
+};
+
+// Statuses that must carry an explanatory remark (mirrors backend validation)
+const REMARK_STATUSES = ["rejected", "dropped"];
+const REMARK_LABELS = {
+  rejected: { label: "Rejection Remark", placeholder: "Describe the reason for rejection…" },
+  dropped:  { label: "Drop Remark",      placeholder: "Describe why the application was dropped…" },
 };
 
 function BpLoanBadge({ status }) {
@@ -91,8 +99,8 @@ export default function BankerPortal() {
 
   const handleLoanSubmit = async (e) => {
     e.preventDefault();
-    if (loanStatus === "rejected" && !loanRemark.trim()) {
-      setLoanErr("A remark is required when rejecting a loan.");
+    if (REMARK_STATUSES.includes(loanStatus) && !loanRemark.trim()) {
+      setLoanErr(`A remark is required when the loan is ${loanStatus === "rejected" ? "rejected" : "dropped"}.`);
       return;
     }
     setLoanLoading(true);
@@ -297,7 +305,7 @@ export default function BankerPortal() {
                         <Banknote size={14} className="bp-loan-icon" />
                         <span className="bp-loan-label">Loan Status</span>
                         <BpLoanBadge status={s.loanStatus} />
-                        {s.loanStatus === "rejected" && s.loanRemark && (
+                        {REMARK_STATUSES.includes(s.loanStatus) && s.loanRemark && (
                           <span className="bp-loan-remark">"{s.loanRemark}"</span>
                         )}
                         <button
@@ -431,7 +439,7 @@ export default function BankerPortal() {
                     key={key}
                     type="button"
                     className={`lsm-option ${cfg.cls}${loanStatus === key ? " selected" : ""}`}
-                    onClick={() => { setLoanStatus(key); if (key !== "rejected") setLoanRemark(""); if (key !== "sanctioned") setLoanSanctionFile(null); }}
+                    onClick={() => { setLoanStatus(key); if (!REMARK_STATUSES.includes(key)) setLoanRemark(""); if (key !== "sanctioned") setLoanSanctionFile(null); }}
                   >
                     <span className="lsm-option-dot" />
                     <span>{cfg.label}</span>
@@ -439,15 +447,15 @@ export default function BankerPortal() {
                   </button>
                 ))}
               </div>
-              {loanStatus === "rejected" && (
+              {REMARK_STATUSES.includes(loanStatus) && (
                 <div className="lsm-remark-wrap">
                   <label className="lsm-remark-label">
-                    Rejection Remark <span className="required-star">*</span>
+                    {REMARK_LABELS[loanStatus].label} <span className="required-star">*</span>
                   </label>
                   <textarea
                     className="lsm-remark-input"
                     rows={3}
-                    placeholder="Describe the reason for rejection…"
+                    placeholder={REMARK_LABELS[loanStatus].placeholder}
                     value={loanRemark}
                     onChange={(e) => setLoanRemark(e.target.value)}
                   />

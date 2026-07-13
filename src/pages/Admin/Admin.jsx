@@ -286,6 +286,7 @@ function StatsPanel({ stats, loanStats, filter, setFilter, loanStatusFilter, set
     { key: "inprocess",  label: "In Process", value: loanStats.inprocess,  color: "orange" },
     { key: "sanctioned", label: "Sanctioned", value: loanStats.sanctioned, color: "teal" },
     { key: "rejected",   label: "Rejected",   value: loanStats.rejected,   color: "rose" },
+    { key: "dropped",    label: "Dropped",    value: loanStats.dropped,    color: "violet" },
   ];
   return (
     <div className="kpi-section animate-fade-in">
@@ -305,7 +306,7 @@ function StatsPanel({ stats, loanStats, filter, setFilter, loanStatusFilter, set
       </div>
 
       <p className="kpi-section-title kpi-section-title-loan"><Banknote size={11} /> Loan Application Status</p>
-      <div className="kpi-grid">
+      <div className="kpi-grid kpi-grid-5">
         {loanCards.map(({ key, label, value, color }) => (
           <button key={key} type="button"
             className={`kpi-card kpi-${color}${loanStatusFilter === key ? " kpi-active" : ""}`}
@@ -352,6 +353,14 @@ const LOAN_STATUS_CONFIG = {
   inprocess:  { label: "In Process",  cls: "loan-inprocess" },
   sanctioned: { label: "Sanctioned",  cls: "loan-sanctioned" },
   rejected:   { label: "Rejected",    cls: "loan-rejected" },
+  dropped:    { label: "Dropped",     cls: "loan-dropped" },
+};
+
+// Statuses that must carry an explanatory remark (mirrors backend validation)
+const REMARK_STATUSES = ["rejected", "dropped"];
+const REMARK_LABELS = {
+  rejected: { label: "Rejection Remark", placeholder: "Describe the reason for rejection…" },
+  dropped:  { label: "Drop Remark",      placeholder: "Describe why the application was dropped…" },
 };
 
 function LoanStatusBadge({ status }) {
@@ -369,8 +378,8 @@ function LoanStatusModal({ student, onClose, onUpdated }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (status === "rejected" && !remark.trim()) {
-      setErr("A remark is required when rejecting a loan.");
+    if (REMARK_STATUSES.includes(status) && !remark.trim()) {
+      setErr(`A remark is required when the loan is ${status === "rejected" ? "rejected" : "dropped"}.`);
       return;
     }
     setLoading(true);
@@ -412,7 +421,7 @@ function LoanStatusModal({ student, onClose, onUpdated }) {
               <button
                 key={key} type="button"
                 className={`lsm-option ${cfg.cls}${status === key ? " selected" : ""}`}
-                onClick={() => { setStatus(key); if (key !== "rejected") setRemark(""); if (key !== "sanctioned") setSanctionFile(null); }}
+                onClick={() => { setStatus(key); if (!REMARK_STATUSES.includes(key)) setRemark(""); if (key !== "sanctioned") setSanctionFile(null); }}
               >
                 <span className="lsm-option-dot" />
                 <span>{cfg.label}</span>
@@ -421,15 +430,15 @@ function LoanStatusModal({ student, onClose, onUpdated }) {
             ))}
           </div>
 
-          {status === "rejected" && (
+          {REMARK_STATUSES.includes(status) && (
             <div className="lsm-remark-wrap">
               <label className="lsm-remark-label">
-                Rejection Remark <span className="required-star">*</span>
+                {REMARK_LABELS[status].label} <span className="required-star">*</span>
               </label>
               <textarea
                 className="lsm-remark-input"
                 rows={3}
-                placeholder="Describe the reason for rejection…"
+                placeholder={REMARK_LABELS[status].placeholder}
                 value={remark}
                 onChange={(e) => setRemark(e.target.value)}
               />
@@ -470,7 +479,7 @@ function LoanStatusModal({ student, onClose, onUpdated }) {
             </div>
           )}
 
-          {student.loanRemark && student.loanStatus === "rejected" && status !== "rejected" && (
+          {student.loanRemark && REMARK_STATUSES.includes(student.loanStatus) && !REMARK_STATUSES.includes(status) && (
             <p className="lsm-prev-remark">Previous remark: <em>{student.loanRemark}</em></p>
           )}
 
@@ -2519,6 +2528,7 @@ export default function Admin() {
     inprocess:  scopedStudents.filter((s) => s.loanStatus === "inprocess").length,
     sanctioned: scopedStudents.filter((s) => s.loanStatus === "sanctioned").length,
     rejected:   scopedStudents.filter((s) => s.loanStatus === "rejected").length,
+    dropped:    scopedStudents.filter((s) => s.loanStatus === "dropped").length,
   };
 
   // Advisor dropdown options always list every advisor, regardless of current scope.
@@ -2707,6 +2717,7 @@ export default function Admin() {
             <option value="inprocess">In Process</option>
             <option value="sanctioned">Sanctioned</option>
             <option value="rejected">Rejected</option>
+            <option value="dropped">Dropped</option>
           </select>
         </div>
 

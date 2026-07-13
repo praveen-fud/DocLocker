@@ -419,6 +419,23 @@
 .kpi-rose:hover      { border-color: rgba(225,29,72,0.30); box-shadow: 0 8px 24px rgba(225,29,72,0.10); }
 .kpi-rose.kpi-active { border-color: #e11d48; background: rgba(225,29,72,0.10); box-shadow: 0 0 0 3px rgba(225,29,72,0.10); }
 
+.kpi-violet {
+  border-color: rgba(124,58,237,0.18);
+}
+.kpi-violet::before    { background: #7c3aed; }
+.kpi-violet .kpi-dot   { background: #7c3aed; }
+.kpi-violet .kpi-value { color: #7c3aed; }
+.kpi-violet:hover      { border-color: rgba(124,58,237,0.35); box-shadow: 0 8px 24px rgba(124,58,237,0.10); }
+.kpi-violet.kpi-active { border-color: #7c3aed; background: rgba(124,58,237,0.10); box-shadow: 0 0 0 3px rgba(124,58,237,0.12); }
+
+/* Loan status row has 5 cards — 5-up on desktop, falls back with the grid */
+.kpi-grid.kpi-grid-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+@media (max-width: 900px) {
+  .kpi-grid.kpi-grid-5 { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* â”€â”€ Search + Toolbar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .admin-toolbar {
   display: flex;
@@ -3428,6 +3445,7 @@
 .loan-inprocess { background: rgba(234,88,12,0.10);   color: #ea580c; border-color: rgba(234,88,12,0.28); }
 .loan-sanctioned{ background: rgba(13,148,136,0.10);  color: #0d9488; border-color: rgba(13,148,136,0.28); }
 .loan-rejected  { background: rgba(220,38,38,0.09);   color: #dc2626; border-color: rgba(220,38,38,0.25); }
+.loan-dropped   { background: rgba(124,58,237,0.09);  color: #7c3aed; border-color: rgba(124,58,237,0.25); }
 
 /* â”€â”€â”€ Loan Status Update Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .icon-btn.loan-btn {
@@ -3589,6 +3607,10 @@
 .lsm-option.loan-rejected.selected   { border-color: #dc2626; background: rgba(220,38,38,0.08); color: #dc2626; }
 .lsm-option.loan-rejected .lsm-option-dot { background: #dc2626; }
 .lsm-option.loan-rejected .lsm-check { color: #dc2626; }
+
+.lsm-option.loan-dropped.selected    { border-color: #7c3aed; background: rgba(124,58,237,0.08); color: #7c3aed; }
+.lsm-option.loan-dropped .lsm-option-dot { background: #7c3aed; }
+.lsm-option.loan-dropped .lsm-check  { color: #7c3aed; }
 
 /* Remark textarea */
 .lsm-remark-wrap {
