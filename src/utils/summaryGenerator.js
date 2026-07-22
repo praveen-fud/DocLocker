@@ -1,6 +1,4 @@
 // utils/summaryGenerator.js
-import { buildFolderKey } from "./driveApi";
-
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 let _pdfDebounceTimer = null;
@@ -373,12 +371,15 @@ function _doGeneratePdf(studentName, studentData, studentIdentifier, uploadedDoc
 </html>`;
 
     // ── send to Express API ───────────────────────────────────────────────
-    const folderKey = buildFolderKey(studentName, studentIdentifier);
-    fetch(`${API_URL}/api/summary`, {
+    // Student self-service — no admin JWT exists here, so this must hit the
+    // no-auth student-summary route (validated by name + identifier), not
+    // the staff-only /api/summary.
+    fetch(`${API_URL}/api/student-summary`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        studentName: folderKey,
+        studentName,
+        studentIdentifier,
         htmlContent: html,
         documents: uploadedDocuments || [],
       }),
