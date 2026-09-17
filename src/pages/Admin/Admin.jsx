@@ -47,7 +47,6 @@ import {
   Landmark,
   LogIn,
   ChevronRight,
-  LifeBuoy,
   Bell,
   MoreVertical,
   Download,
@@ -2854,15 +2853,6 @@ function AdminSidebar({
         </nav>
 
         <div className="admin-sidebar-footer">
-          <div className="admin-sidebar-support-card">
-            <p>Need Help?</p>
-            <p>Get support from our team</p>
-            <button type="button" className="admin-sidebar-support-btn">
-              <LifeBuoy size={13} />
-              Contact Support
-            </button>
-          </div>
-
           <div className="admin-sidebar-user">
             <div className="admin-sidebar-user-avatar">{(adminName || "?")[0].toUpperCase()}</div>
             <div className="admin-sidebar-user-info">
@@ -3861,6 +3851,7 @@ export default function Admin() {
         </div>
 
         <div className="admin-table-wrap animate-fade-in">
+        <div className="admin-table-scroll">
           <div className="table-head">
             <div className="th th-check">
               <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} aria-label="Select all students on this page" />
@@ -3941,6 +3932,7 @@ export default function Admin() {
               })}
             </div>
           )}
+        </div>
 
           {!loading && filtered.length > 0 && (
             <div className="table-pagination">

@@ -87,7 +87,7 @@
   /* Student table — shared column template so .table-head and
      .student-row always line up (checkbox / name / consultancy /
      advisor / status / progress / files / updated / actions). */
-  --table-cols: 44px minmax(220px, 1.8fr) 140px 140px 140px 190px 70px 130px 150px;
+  --table-cols: 40px minmax(200px, 1.8fr) 124px 124px 128px 170px 60px 118px 138px;
 }
 
 /* â”€â”€ Reset / Base â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -638,43 +638,6 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.admin-sidebar-support-card {
-  background: var(--primary-tint-strong);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  margin: 4px;
-  padding: 16px;
-}
-.admin-sidebar-support-card p:first-child {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-.admin-sidebar-support-card p:nth-child(2) {
-  font-size: 11.5px;
-  color: var(--text-secondary);
-  margin: 2px 0 10px;
-}
-.admin-sidebar-support-btn {
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-accent);
-  background: var(--bg-surface);
-  color: var(--primary);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.admin-sidebar-support-btn:hover {
-  background: var(--primary-tint);
 }
 
 .admin-sidebar-user {
@@ -2574,6 +2537,35 @@
   box-shadow: var(--shadow-card);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+}
+
+/* The table's columns have a real minimum width (9 columns of tabular
+   data); once the viewport can't fit that, this scrolls horizontally
+   instead of silently clipping columns off the edge — pagination sits
+   outside it and never scrolls sideways. Inert (no-op) below the ~900px
+   breakpoint where rows switch to a flex-wrap card layout instead. */
+.admin-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+/* Common laptop widths (1280–1600px) — full-size columns no longer fit
+   once the sidebar is subtracted, so this range gets a tighter column
+   set and gap, keeping horizontal scroll the exception rather than the
+   default down to ~1150px, instead of every laptop needing to scroll. */
+@media (max-width: 1600px) {
+  :root {
+    --table-cols: 36px minmax(190px, 1.6fr) 104px 104px 112px 152px 54px 104px 138px;
+  }
+  .table-head {
+    gap: 10px;
+    padding: 0 16px;
+  }
+  .student-row {
+    gap: 10px;
+    padding: 14px 16px;
+  }
 }
 
 .bulk-toolbar {
@@ -4654,6 +4646,12 @@
     min-width: calc(50% - 4px);
     justify-content: center;
     min-height: 42px;
+    /* A 2-up grid still has to survive "Eligibility Report" — let a long
+       label wrap to a second line instead of forcing the button (and
+       everything else on that row) wider than its 50% share. */
+    white-space: normal;
+    text-align: center;
+    line-height: 1.25;
   }
   .dab-delete {
     width: 100%;
@@ -4729,6 +4727,11 @@
   }
   .student-cell-text {
     display: none;
+  }
+  /* One button per row below 480px — a 2-up grid can't guarantee "Eligibility
+     Report" or "Bank Access" actually fit in a 50% share at this width. */
+  .dab-primary .btn {
+    min-width: 100%;
   }
   .detail-tab {
     padding: 12px 14px;
