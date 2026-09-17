@@ -1,11 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Users,
   Search,
   FolderOpen,
   CheckCircle,
-  Clock,
   AlertCircle,
   RefreshCw,
   UserPlus,
@@ -16,8 +15,8 @@ import {
   User,
   UsersIcon,
   ChevronDown,
+  ChevronLeft,
   Shield,
-  TrendingUp,
   Building2,
   Settings,
   KeyRound,
@@ -39,11 +38,29 @@ import {
   ScanText,
   ShieldCheck,
   Pencil,
+  LayoutGrid,
+  History,
+  LogOut,
+  Menu,
+  ArrowUpRight,
+  Filter,
+  Landmark,
+  LogIn,
+  ChevronRight,
+  LifeBuoy,
+  Bell,
+  MoreVertical,
+  Download,
+  Hourglass,
+  Wallet,
+  MinusCircle,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
-import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter, recoverMetaFromPdf, restoreMeta, buildFolderKey } from "../../utils/driveApi";
+import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter, recoverMetaFromPdf, restoreMeta, buildFolderKey, getAuditLog, getDownloadAllUrl, getFileProxyUrl } from "../../utils/driveApi";
 import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields } from "../../context/schemas";
 import { BANK_OPTIONS, getBankLogo } from "../../utils/bankOptions";
+import logoImg from "../../assets/logo.jpeg";
+import heroImg from "../../assets/bg.png";
 import "./Admin.css";
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
@@ -274,144 +291,124 @@ function assessLoanEligibility(student) {
 
 /* ─── Sub-components ───────────────────────────────────────────── */
 
-// True once at mount and kept in sync if the OS-level setting changes mid-session.
-function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(
-    () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const onChange = () => setReduced(mq.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-  return reduced;
-}
-
-// Decorative "financing partners" logos, responsive between two layouts so
-// something is always visible without ever overlapping real content:
-//   - Default (all screens up to very wide): a single horizontal marquee
-//     strip, rendered in normal document flow right after the header — it
-//     takes its own space, never floats over anything, so it works down to
-//     mobile widths.
-//   - Very wide screens only (see CSS breakpoint): swaps to two fixed
-//     vertical rails in the empty gutters beside the centered, max-width
-//     admin container (left rail drifts top→bottom, right rail bottom→top).
-// Both variants render in the DOM at all times; the CSS media query picks
-// exactly one to display (animations don't run on the display:none one, so
-// there's no wasted motion/CPU from the hidden variant). Every logo set is
-// duplicated once per track so the loop wraps with no visible seam. Pure
-// transform animation (GPU-composited), pauses on hover, aria-hidden since
-// it's purely decorative, and honors prefers-reduced-motion both via this
-// JS check (skips duplicating content) and a CSS media-query backstop.
+// Connected banks & lenders — a continuously auto-scrolling logo strip.
+// The tile list is duplicated once so the track can loop seamlessly at
+// -50%; hovering (or `prefers-reduced-motion`) pauses the motion.
 function PartnerBanksShowcase() {
-  const reducedMotion = usePrefersReducedMotion();
   const banks = BANK_OPTIONS.filter((b) => b.value !== "Others");
   if (banks.length === 0) return null;
 
-  const renderChips = (list) =>
-    list.map((b, i) => (
-      <div className="partner-chip" key={b.value + i} title={b.label}>
-        <img src={b.logo} alt="" loading="lazy" width={76} height={38} />
-      </div>
-    ));
-
-  const doubled = reducedMotion ? banks : [...banks, ...banks];
-
   return (
-    <>
-      {/* Small/medium/normal screens — inline horizontal strip */}
-      <div className="partner-banks-strip-inline animate-fade-in" aria-hidden="true">
-        {reducedMotion ? (
-          <div className="partner-strip-static">{renderChips(banks)}</div>
-        ) : (
-          <div className="partner-strip-track">{renderChips(doubled)}</div>
-        )}
+    <div className="banks-card animate-fade-in">
+      <div className="banks-card-head">
+        <p className="banks-card-title"><Landmark size={15} /> Connected Banks &amp; Lenders</p>
       </div>
-
-      {/* Very wide screens only — fixed vertical side rails */}
-      <div className="partner-rail partner-rail-left" aria-hidden="true">
-        <div className="partner-rail-track partner-rail-track-down">{renderChips(doubled)}</div>
-      </div>
-      <div className="partner-rail partner-rail-right" aria-hidden="true">
-        <div className="partner-rail-track partner-rail-track-up">{renderChips(doubled)}</div>
-      </div>
-    </>
-  );
-}
-
-function StatsPanel({ stats, loanStats, filter, setFilter, loanStatusFilter, setLoanStatusFilter }) {
-  const docCards = [
-    { key: "all",        label: "Total Students", value: stats.total,      color: "blue",  icon: <Building2 size={15} /> },
-    { key: "complete",   label: "Completed",       value: stats.complete,   color: "green", icon: <CheckCircle size={15} /> },
-    { key: "progress",   label: "In Progress",     value: stats.inProgress, color: "amber", icon: <TrendingUp size={15} /> },
-    { key: "notStarted", label: "Not Started",     value: stats.notStarted, color: "red",   icon: <Clock size={15} /> },
-  ];
-  const loanCards = [
-    { key: "pending",    label: "Pending",    value: loanStats.pending,    color: "slate" },
-    { key: "inprocess",  label: "In Process", value: loanStats.inprocess,  color: "orange" },
-    { key: "sanctioned", label: "Sanctioned", value: loanStats.sanctioned, color: "teal" },
-    { key: "disbursed",  label: "Disbursed",  value: loanStats.disbursed,  color: "emerald" },
-    { key: "rejected",   label: "Rejected",   value: loanStats.rejected,   color: "rose" },
-    { key: "dropped",    label: "Dropped",    value: loanStats.dropped,    color: "violet" },
-  ];
-  return (
-    <div className="kpi-section animate-fade-in">
-      <p className="kpi-section-title"><BarChart3 size={11} /> Document Progress</p>
-      <div className="kpi-grid">
-        {docCards.map(({ key, label, value, color, icon }) => (
-          <button key={key} type="button"
-            className={`kpi-card kpi-${color}${filter === key ? " kpi-active" : ""}`}
-            onClick={() => setFilter(filter === key && key !== "all" ? "all" : key)}>
-            <div className="kpi-top">
-              <span className="kpi-label">{label}</span>
-              <span className="kpi-icon">{icon}</span>
+      <div className="banks-tile-row">
+        <div className="banks-tile-track">
+          {banks.concat(banks).map((b, i) => (
+            <div className="banks-tile" key={`${b.value}-${i}`} title={b.label}>
+              <img src={b.logo} alt={b.label} loading="lazy" />
             </div>
-            <span className="kpi-value">{value}</span>
-          </button>
-        ))}
-      </div>
-
-      <p className="kpi-section-title kpi-section-title-loan"><Banknote size={11} /> Loan Application Status</p>
-      <div className="kpi-grid kpi-grid-6">
-        {loanCards.map(({ key, label, value, color }) => (
-          <button key={key} type="button"
-            className={`kpi-card kpi-${color}${loanStatusFilter === key ? " kpi-active" : ""}`}
-            onClick={() => setLoanStatusFilter(loanStatusFilter === key ? "all" : key)}>
-            <div className="kpi-top">
-              <span className="kpi-label">{label}</span>
-              <span className="kpi-dot" />
-            </div>
-            <span className="kpi-value">{value}</span>
-          </button>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-function Badge({ progress }) {
-  if (progress === 100)
-    return (
-      <span className="badge badge-success">
-        <span className="badge-dot" />
-        Complete
-      </span>
-    );
-  if (progress > 0)
-    return (
-      <span className="badge badge-warning">
-        <span className="badge-dot" />
-        In Progress
-      </span>
-    );
+// A percentage-of-total trend line, not a fabricated "vs last month" figure
+// we have no historical snapshots to actually compute. Returns null (renders
+// nothing) rather than a misleading "0%" when the total itself is zero.
+function shareOfTotal(value, total) {
+  if (!total) return null;
+  return Math.round((value / total) * 100);
+}
+
+// One ring in the Document Progress card. Total Students reads as the
+// complete circle (it IS the whole); every other ring is that stat's real
+// share of the total, so the fill itself is honest, not decorative.
+function StatRing({ pct, color, value, label, active, onClick }) {
+  const clamped = Math.max(0, Math.min(100, pct));
   return (
-    <span className="badge badge-error">
-      <span className="badge-dot" />
-      Not Started
-    </span>
+    <button type="button" className={`stat-ring tone-${color}${active ? " stat-ring--active" : ""}`} onClick={onClick}>
+      <svg viewBox="0 0 36 36" className="stat-ring-svg">
+        <circle cx="18" cy="18" r="15.9" fill="none" strokeWidth="3" className="stat-ring-track" />
+        <circle
+          cx="18" cy="18" r="15.9" fill="none" strokeWidth="3"
+          strokeDasharray={`${clamped} ${100 - clamped}`}
+          strokeDashoffset="25"
+          className="stat-ring-fill"
+        />
+      </svg>
+      <span className="stat-ring-center">
+        <span className="stat-ring-value">{value}</span>
+        <span className="stat-ring-label">{label}</span>
+      </span>
+    </button>
   );
 }
+
+function StatsPanel({ stats, loanStats, filter, setFilter, loanStatusFilter, setLoanStatusFilter }) {
+  const docRings = [
+    { key: "all", label: "Total Students", value: stats.total, color: "blue", pct: 100 },
+    { key: "complete", label: "Completed", value: stats.complete, color: "green", pct: shareOfTotal(stats.complete, stats.total) || 0 },
+    { key: "progress", label: "In Progress", value: stats.inProgress, color: "amber", pct: shareOfTotal(stats.inProgress, stats.total) || 0 },
+    { key: "notStarted", label: "Not Started", value: stats.notStarted, color: "red", pct: shareOfTotal(stats.notStarted, stats.total) || 0 },
+  ];
+  const loanTotal = loanStats.pending + loanStats.inprocess + loanStats.sanctioned + loanStats.disbursed + loanStats.rejected + loanStats.dropped;
+  const loanCards = [
+    { key: "pending",    label: "Pending",    value: loanStats.pending,    color: "slate",   icon: <Hourglass size={15} /> },
+    { key: "inprocess",  label: "In Process", value: loanStats.inprocess,  color: "orange",  icon: <RefreshCw size={15} /> },
+    { key: "sanctioned", label: "Sanctioned", value: loanStats.sanctioned, color: "teal",    icon: <CheckCircle size={15} /> },
+    { key: "disbursed",  label: "Disbursed",  value: loanStats.disbursed,  color: "emerald", icon: <Wallet size={15} /> },
+    { key: "rejected",   label: "Rejected",   value: loanStats.rejected,   color: "rose",    icon: <XCircle size={15} /> },
+    { key: "dropped",    label: "Dropped",    value: loanStats.dropped,    color: "violet",  icon: <MinusCircle size={15} /> },
+  ].map((c) => ({ ...c, pct: shareOfTotal(c.value, loanTotal) }));
+
+  return (
+    <div className="stats-row animate-fade-in">
+      <div className="stats-card">
+        <div className="stats-card-head">
+          <p className="stats-card-title"><BarChart3 size={15} /> Document Progress</p>
+        </div>
+        <div className="ring-grid">
+          {docRings.map(({ key, label, value, color, pct }) => (
+            <StatRing
+              key={key}
+              color={color}
+              value={value}
+              label={label}
+              pct={pct}
+              active={filter === key}
+              onClick={() => setFilter(filter === key && key !== "all" ? "all" : key)}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="stats-card">
+        <div className="stats-card-head">
+          <p className="stats-card-title"><Banknote size={15} /> Loan Application Status</p>
+        </div>
+        <div className="loan-stat-row">
+          {loanCards.map(({ key, label, value, color, icon, pct }) => (
+            <button key={key} type="button"
+              className={`loan-stat-item tone-${color}${loanStatusFilter === key ? " active" : ""}`}
+              onClick={() => setLoanStatusFilter(loanStatusFilter === key ? "all" : key)}>
+              <span className="loan-stat-top">
+                <span className="loan-stat-icon">{icon}</span>
+                {pct !== null && <span className="loan-stat-pct">{pct}%</span>}
+              </span>
+              <span className="loan-stat-value">{value}</span>
+              <span className="loan-stat-label">{label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 /* ─── Loan Status ──────────────────────────────────────────────── */
 
@@ -1584,14 +1581,24 @@ function AdvisorEditor({ value, onSave, options = [] }) {
   );
 }
 
-function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewReport, onSendToBank, onLoanStatusUpdate, onRecoverMeta, canEditConsultancy, onConsultancySave, consultancySuggestions, canEditAdvisor, onAdvisorSave, advisorOptions, isDuplicate }) {
+function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDelete, onOpenDrive, onViewReport, onSendToBank, onLoanStatusUpdate, onRecoverMeta, canEditConsultancy, onConsultancySave, consultancySuggestions, canEditAdvisor, onAdvisorSave, advisorOptions, isDuplicate }) {
   const [activeTab, setActiveTab] = useState("personal");
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [photoFailed, setPhotoFailed] = useState(false);
 
   const totalUploads = getTotalUploads(student);
   const progress = getOverallProgress(student);
   const progClass = getProgressClass(progress);
   const avatarVariant = getAvatarVariant(student.name);
   const files = getAllUploadedFiles(student.uploads);
+  const consultancy = student.personalInfo?.consultantNameLoc || "";
+
+  // The Govt ID / KYC section's "Passport Size Photo" upload — same field
+  // the student's own portal collects. Only tried as an <img> when its
+  // filename looks like an actual image; that upload slot also accepts
+  // PDFs and Word docs, which can't render as a thumbnail.
+  const photoUpload = student.uploads?.applicant?.photo;
+  const hasPhoto = !!photoUpload?.id && /\.(jpe?g|png|webp|gif)$/i.test(photoUpload.name || "") && !photoFailed;
 
   const tabs = [
     { id: "personal", label: "Personal", icon: <User size={12} />, count: null },
@@ -1599,72 +1606,114 @@ function StudentRow({ student, isOpen, onToggle, onDelete, onOpenDrive, onViewRe
     { id: "files", label: "Files", icon: <FileText size={12} />, count: files.length },
   ];
 
+  const updated = student.updatedAt ? new Date(student.updatedAt) : null;
+
   return (
-    <div className={`student-block${isOpen ? " open" : ""}`}>
+    <div className={`student-block${isOpen ? " open" : ""}${selected ? " row-selected" : ""}`}>
       <div className="student-row" onClick={onToggle}>
-        <div className={`student-avatar avatar-${avatarVariant}`}>
-          {(student.name || "?")[0].toUpperCase()}
+        <div className="student-cell-check" onClick={(e) => e.stopPropagation()}>
+          <input type="checkbox" checked={selected} onChange={onToggleSelect} aria-label={`Select ${student.name}`} />
         </div>
 
-        <div className="student-info">
-          <span className="student-name">{student.name || "Unknown Student"}</span>
-          <span className="student-contact">{student.email || student.phone || "No contact info"}</span>
-          {student._parseError && (
-            <span
-              className="student-meta-error-badge"
-              title={`This student's data file is unreadable and could not be loaded: ${student._parseError}. Filters, progress, and details may be inaccurate until it's fixed (try Recover Meta).`}
-            >
-              <AlertTriangle size={11} /> Data unreadable
-            </span>
-          )}
-          {isDuplicate && (
-            <span
-              className="student-meta-error-badge student-duplicate-badge"
-              title="Another student record shares this same email or phone number — likely a duplicate Drive folder from a double submission. Check both records before deleting either one."
-            >
-              <AlertTriangle size={11} /> Possible duplicate
-            </span>
-          )}
+        <div className="student-cell-name">
+          <div className={`student-avatar${hasPhoto ? " has-photo" : ` avatar-${avatarVariant}`}`}>
+            {hasPhoto ? (
+              <img
+                src={getFileProxyUrl(photoUpload.id, "view")}
+                alt=""
+                onError={() => setPhotoFailed(true)}
+              />
+            ) : (
+              <User size={16} />
+            )}
+          </div>
+          <div className="student-info">
+            <span className="student-name">{student.name || "Unknown Student"}</span>
+            <span className="student-contact">{student.email || student.phone || "No contact info"}</span>
+            {student._parseError && (
+              <span
+                className="student-meta-error-badge"
+                title={`This student's data file is unreadable and could not be loaded: ${student._parseError}. Filters, progress, and details may be inaccurate until it's fixed (try Recover Meta).`}
+              >
+                <AlertTriangle size={11} /> Data unreadable
+              </span>
+            )}
+            {isDuplicate && (
+              <span
+                className="student-meta-error-badge student-duplicate-badge"
+                title="Another student record shares this same email or phone number — likely a duplicate Drive folder from a double submission. Check both records before deleting either one."
+              >
+                <AlertTriangle size={11} /> Possible duplicate
+              </span>
+            )}
+          </div>
         </div>
 
-        <div className="student-meta">
-          {student.advisor && <span className="meta-pill">{student.advisor}</span>}
-          {student.personalInfo?.loanAmount && (
-            <span className="meta-pill">₹{Number(student.personalInfo.loanAmount).toLocaleString("en-IN")}</span>
-          )}
-          <span className="meta-pill">{totalUploads} files</span>
+        <div className="student-cell-text">{consultancy || <span className="cell-empty">—</span>}</div>
+        <div className="student-cell-text">{student.advisor || <span className="cell-empty">—</span>}</div>
+
+        <div className="student-cell-status">
+          <LoanStatusBadge status={student.loanStatus} />
         </div>
 
-        <div className={`student-progress-col ${progClass}`}>
+        <div className={`student-cell-progress ${progClass}`}>
           <div className="progress-track">
             <div className="progress-fill" style={{ width: `${progress}%` }} />
           </div>
           <span className="progress-pct">{progress}%</span>
         </div>
 
-        <div className="student-status-col">
-          <Badge progress={progress} />
-          <LoanStatusBadge status={student.loanStatus} />
+        <div className="student-cell-files">
+          <FileText size={13} />
+          {totalUploads}
         </div>
 
-        <div className="student-actions-col" onClick={(e) => e.stopPropagation()}>
-          <button className="icon-btn loan-btn" title="Update Loan Status" onClick={onLoanStatusUpdate}>
-            <Banknote size={14} />
-          </button>
-          <button className="icon-btn report-btn" title="View Eligibility Report" onClick={onViewReport}>
-            <BarChart3 size={14} />
-          </button>
-          <button className="icon-btn bank-btn" title="Grant Bank Access" onClick={onSendToBank}>
-            <Send size={14} />
-          </button>
-          <button className="icon-btn del-btn" title="Delete student" onClick={onDelete}>
-            <Trash2 size={14} />
-          </button>
+        <div className="student-cell-updated">
+          {updated ? (
+            <>
+              <span>{updated.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
+              <span className="cell-updated-time">{updated.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
+            </>
+          ) : (
+            <span className="cell-empty">—</span>
+          )}
         </div>
 
-        <button className={`chevron-btn${isOpen ? " open" : ""}`}>
-          <ChevronDown size={16} />
-        </button>
+        <div className="student-cell-actions" onClick={(e) => e.stopPropagation()}>
+          <button className="icon-btn" title="View" onClick={onToggle}>
+            <Eye size={16} />
+          </button>
+          <button className="icon-btn" title="Analytics" onClick={onViewReport}>
+            <BarChart3 size={16} />
+          </button>
+          <button className="icon-btn" title="Send to bank" onClick={onSendToBank}>
+            <Send size={16} />
+          </button>
+          <button className="icon-btn del-btn" title="Delete" onClick={onDelete}>
+            <Trash2 size={16} />
+          </button>
+          <div className="row-more-wrap">
+            <button className="icon-btn" title="More" onClick={() => setMoreOpen((o) => !o)}>
+              <MoreVertical size={16} />
+            </button>
+            {moreOpen && (
+              <>
+                <div className="row-more-scrim" onClick={() => setMoreOpen(false)} />
+                <div className="row-more-menu">
+                  <button onClick={(e) => { setMoreOpen(false); onLoanStatusUpdate(e); }}>
+                    <Banknote size={14} /> Update Loan Status
+                  </button>
+                  <button onClick={(e) => { setMoreOpen(false); onOpenDrive(e); }}>
+                    <ExternalLink size={14} /> Open Drive
+                  </button>
+                  <button onClick={(e) => { setMoreOpen(false); onRecoverMeta(e); }}>
+                    <ScanText size={14} /> Recover Meta
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {isOpen && (
@@ -1874,7 +1923,7 @@ function GrantBankAccessModal({ student, onClose, onAccessChanged }) {
 
 /* ─── Banker Access + Management (unified) ─────────────────────── */
 
-function BankerAccessManagerModal({ students, onClose, onAccessChanged, onBankersChanged }) {
+function BankerAccessSection({ students, onAccessChanged, onBankersChanged }) {
   // Bankers — fetched internally so add/edit/delete stays live
   const [allBankers, setAllBankers] = useState([]);
   const [bankersLoading, setBankersLoading] = useState(true);
@@ -2047,30 +2096,28 @@ function BankerAccessManagerModal({ students, onClose, onAccessChanged, onBanker
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="bam-modal animate-fade-in" onClick={(e) => e.stopPropagation()}>
+    <div className="bam-page animate-fade-in">
 
-        {/* ── Header ─────────────────────────────────────────────── */}
-        <div className="bam-header">
-          <div className="bam-header-left">
-            <div className="bam-header-icon"><Send size={18} /></div>
-            <div>
-              <h2 className="bam-title">Banker Access</h2>
-              <p className="bam-subtitle">
-                {allBankers.length} loan officer{allBankers.length !== 1 ? "s" : ""}
-                {uniqueBanks.length > 0 && ` · ${uniqueBanks.length} bank${uniqueBanks.length !== 1 ? "s" : ""}`}
-              </p>
-            </div>
-          </div>
-          <div className="bam-header-actions">
-            {panel !== "add" && (
-              <button className="btn btn-primary btn-sm bam-add-btn" onClick={openAdd}>
-                <Plus size={13} /> Add Loan Officer
-              </button>
-            )}
-            <button className="icon-btn" onClick={onClose}><X size={16} /></button>
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <div className="bam-header">
+        <div className="bam-header-left">
+          <div className="bam-header-icon"><Send size={18} /></div>
+          <div>
+            <h2 className="bam-title">Banker Access</h2>
+            <p className="bam-subtitle">
+              {allBankers.length} loan officer{allBankers.length !== 1 ? "s" : ""}
+              {uniqueBanks.length > 0 && ` · ${uniqueBanks.length} bank${uniqueBanks.length !== 1 ? "s" : ""}`}
+            </p>
           </div>
         </div>
+        <div className="bam-header-actions">
+          {panel !== "add" && (
+            <button className="btn btn-primary btn-sm bam-add-btn" onClick={openAdd}>
+              <Plus size={13} /> Add Loan Officer
+            </button>
+          )}
+        </div>
+      </div>
 
         {/* ── Bank filter chips ───────────────────────────────────── */}
         {uniqueBanks.length > 0 && (
@@ -2358,7 +2405,6 @@ function BankerAccessManagerModal({ students, onClose, onAccessChanged, onBanker
           </div>
         </div>
       </div>
-    </div>
   );
 }
 
@@ -2696,9 +2742,498 @@ function studentKey(s) {
   return s.driveUrl || s.email || s.phone || s.name;
 }
 
+/* ─── Sidebar navigation ──────────────────────────────────────────── */
+
+const LOAN_STATUS_SUBITEMS = [
+  { value: "pending", label: "Pending" },
+  { value: "inprocess", label: "In Process" },
+  { value: "sanctioned", label: "Sanctioned" },
+  { value: "disbursed", label: "Disbursed" },
+  { value: "rejected", label: "Rejected" },
+  { value: "dropped", label: "Dropped" },
+];
+const DOC_PROGRESS_SUBITEMS = [
+  { value: "complete", label: "Completed" },
+  { value: "progress", label: "In Progress" },
+  { value: "notStarted", label: "Not Started" },
+];
+
+function AdminSidebar({
+  section, setSection, adminRole, adminName,
+  onOpenSettings, onLogout,
+  mobileOpen, onCloseMobile,
+  setLoanStatusFilter, setDocFilter,
+}) {
+  const [expanded, setExpanded] = useState(null);
+
+  const goStudents = (apply) => {
+    setSection("students");
+    apply?.();
+    onCloseMobile?.();
+  };
+
+  const NAV_ITEMS = [
+    { id: "dashboard", label: "Dashboard", icon: LayoutGrid, roles: ["superadmin", "advisor"] },
+    { id: "students",  label: "Students",  icon: Users,      roles: ["superadmin", "advisor"] },
+    { id: "advisors",  label: "Advisors",  icon: UserCheck,  roles: ["superadmin"] },
+    {
+      id: "loanApps", label: "Loan Applications", icon: FileText, roles: ["superadmin", "advisor"],
+      subItems: LOAN_STATUS_SUBITEMS.map((s) => ({
+        label: s.label,
+        onSelect: () => goStudents(() => setLoanStatusFilter(s.value)),
+      })),
+    },
+    {
+      id: "documents", label: "Document Management", icon: FolderOpen, roles: ["superadmin", "advisor"],
+      subItems: DOC_PROGRESS_SUBITEMS.map((s) => ({
+        label: s.label,
+        onSelect: () => goStudents(() => setDocFilter(s.value)),
+      })),
+    },
+    { id: "banks", label: "Banks & Lenders", icon: Landmark, roles: ["superadmin", "advisor"] },
+    {
+      id: "reports", label: "Reports", icon: BarChart3, roles: ["superadmin"],
+      subItems: [{ label: "Audit Log", onSelect: () => { setSection("audit"); onCloseMobile?.(); } }],
+    },
+  ];
+  const visibleNav = NAV_ITEMS.filter((n) => n.roles.includes(adminRole));
+
+  return (
+    <>
+      {mobileOpen && <div className="admin-sidebar-scrim" onClick={onCloseMobile} />}
+      <aside className={`admin-sidebar${mobileOpen ? " is-open" : ""}`}>
+        <div className="admin-sidebar-brand">
+          <div className="admin-sidebar-brand-icon"><img src={logoImg} alt="" /></div>
+          <div className="admin-sidebar-brand-text">
+            <span className="admin-sidebar-brand-name">DocLocker</span>
+            <span className="admin-sidebar-brand-tag">Admin Console</span>
+          </div>
+        </div>
+
+        <nav className="admin-sidebar-nav">
+          <p className="admin-sidebar-nav-label">Workspace</p>
+          {visibleNav.map(({ id, label, icon: Icon, subItems }) => {
+            const isActiveSection = id === "reports" ? section === "audit" : section === id;
+            const isExpanded = expanded === id;
+            return (
+              <div key={id}>
+                <button
+                  className={`admin-sidebar-link${isActiveSection && !subItems ? " active" : ""}`}
+                  onClick={() => {
+                    if (subItems) setExpanded(isExpanded ? null : id);
+                    else { setSection(id); onCloseMobile?.(); }
+                  }}
+                >
+                  <Icon size={18} />
+                  <span>{label}</span>
+                  {subItems ? (
+                    <ChevronRight size={14} className={`admin-sidebar-link-chevron${isExpanded ? " is-expanded" : ""}`} />
+                  ) : (
+                    isActiveSection && <span className="admin-sidebar-link-dot" />
+                  )}
+                </button>
+                {subItems && isExpanded && (
+                  <div className="admin-sidebar-sublinks">
+                    {subItems.map((s) => (
+                      <button key={s.label} className="admin-sidebar-sublink" onClick={s.onSelect}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          <p className="admin-sidebar-nav-label">Manage</p>
+          <button className="admin-sidebar-link" onClick={() => { onOpenSettings(); onCloseMobile?.(); }}>
+            <Settings size={18} />
+            <span>Settings</span>
+            <ArrowUpRight size={13} className="admin-sidebar-link-ext" />
+          </button>
+        </nav>
+
+        <div className="admin-sidebar-footer">
+          <div className="admin-sidebar-support-card">
+            <p>Need Help?</p>
+            <p>Get support from our team</p>
+            <button type="button" className="admin-sidebar-support-btn">
+              <LifeBuoy size={13} />
+              Contact Support
+            </button>
+          </div>
+
+          <div className="admin-sidebar-user">
+            <div className="admin-sidebar-user-avatar">{(adminName || "?")[0].toUpperCase()}</div>
+            <div className="admin-sidebar-user-info">
+              <span className="admin-sidebar-user-name">{adminName}</span>
+              <span className="admin-sidebar-user-role">{adminRole === "superadmin" ? "Super Admin" : "Advisor"}</span>
+            </div>
+          </div>
+
+          <button className="admin-sidebar-logout" onClick={onLogout}>
+            <LogOut size={16} />
+            <span>Logout</span>
+          </button>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+/* ─── Top header bar: global quick-search + notifications + account ─── */
+
+function AdminTopbar({ search, setSearch, section, setSection, adminName, adminRole, onOpenSettings, onLogout }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  return (
+    <div className="admin-topbar">
+      <label className="admin-topbar-search">
+        <Search size={16} />
+        <input
+          type="text"
+          placeholder="Search by student name, email or phone…"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            if (e.target.value && section !== "students") setSection("students");
+          }}
+        />
+        {!search && <kbd className="admin-topbar-kbd">/</kbd>}
+        {search && (
+          <button type="button" className="admin-topbar-search-clear" onClick={() => setSearch("")} aria-label="Clear search">
+            <X size={13} />
+          </button>
+        )}
+      </label>
+
+      <div className="admin-topbar-actions">
+        <button type="button" className="admin-topbar-icon-btn" title="Notifications" aria-label="Notifications">
+          <Bell size={18} />
+        </button>
+        <div className="admin-topbar-divider" />
+        <div className="admin-topbar-user-wrap">
+          <button type="button" className="admin-topbar-user" onClick={() => setMenuOpen((o) => !o)}>
+            <div className="admin-topbar-avatar">{(adminName || "?")[0].toUpperCase()}</div>
+            <div className="admin-topbar-user-text">
+              <span className="admin-topbar-user-name">{adminName}</span>
+              <span className="admin-topbar-user-role">{adminRole === "superadmin" ? "Super Admin" : "Advisor"}</span>
+            </div>
+            <ChevronDown size={14} />
+          </button>
+          {menuOpen && (
+            <>
+              <div className="admin-topbar-menu-scrim" onClick={() => setMenuOpen(false)} />
+              <div className="admin-topbar-menu">
+                <button onClick={() => { onOpenSettings(); setMenuOpen(false); }}>
+                  <Settings size={14} /> Settings
+                </button>
+                <button className="danger" onClick={() => { onLogout(); setMenuOpen(false); }}>
+                  <LogOut size={14} /> Logout
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Advisors section ────────────────────────────────────────────── */
+
+function AdvisorsSection({ students, allAdvisors }) {
+  const rows = allAdvisors
+    .map((name) => {
+      const list = students.filter((s) => s.advisor === name);
+      const complete = list.filter((s) => getOverallProgress(s) === 100).length;
+      return { name, total: list.length, complete };
+    })
+    .sort((a, b) => b.total - a.total);
+
+  if (allAdvisors.length === 0) {
+    return (
+      <div className="admin-empty animate-fade-in">
+        <div className="admin-empty-icon"><UserCheck size={28} /></div>
+        <h3>No advisors registered</h3>
+        <p>Add an advisor account from Settings → Add New Member.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="advisor-grid animate-fade-in">
+      {rows.map((r) => {
+        const pct = r.total ? Math.round((r.complete / r.total) * 100) : 0;
+        return (
+          <div key={r.name} className="advisor-card">
+            <div className="advisor-card-top">
+              <div className="advisor-card-avatar">{r.name[0].toUpperCase()}</div>
+              <div className="advisor-card-body">
+                <h3>{r.name}</h3>
+                <p>{r.total} student{r.total === 1 ? "" : "s"} assigned</p>
+              </div>
+            </div>
+            <div className="advisor-card-stat-row">
+              <span>{r.complete} complete</span>
+              <span>{pct}%</span>
+            </div>
+            <div className="advisor-card-bar">
+              <div className="advisor-card-bar-fill" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── Audit log section ───────────────────────────────────────────── */
+
+const AUDIT_ACTION_LABELS = {
+  "auth.login": "Signed in",
+  "admin.create": "Created account",
+  "admin.delete": "Removed account",
+  "admin.reset_password": "Reset a password",
+  "admin.change_own_password": "Changed own password",
+  "student.delete": "Deleted student",
+  "loan_status.update": "Updated loan status",
+  "banker_access.grant": "Granted bank access",
+  "banker_access.revoke": "Revoked bank access",
+};
+
+function auditActionLabel(action) {
+  return AUDIT_ACTION_LABELS[action] || action;
+}
+
+// Action prefix -> a real icon (not just a dot) and the tone token that
+// already exists for KPI cards / loan-status cards, so this feed borrows
+// the same color language instead of inventing a new one.
+const AUDIT_ACTION_ICON = {
+  auth: LogIn,
+  admin: Shield,
+  student: Trash2,
+  loan_status: Banknote,
+  banker_access: Landmark,
+};
+const AUDIT_ACTION_TONE = {
+  auth: "blue",
+  admin: "violet",
+  student: "rose",
+  loan_status: "orange",
+  banker_access: "teal",
+};
+
+// "2m ago" / "Just now" — recomputed on a slow tick (see the second effect
+// below) so labels stay accurate without re-fetching data every minute.
+function timeAgo(ts) {
+  const diffSec = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 1000));
+  if (diffSec < 45) return "Just now";
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  return `${Math.round(diffHr / 24)}d ago`;
+}
+
+// Right-rail companion to the dashboard's KPI cards — a running feed of the
+// same audit log the full Audit Log screen shows, trimmed to the most
+// recent entries and polished for a glance rather than an investigation.
+// Polls quietly in the background so it reads as "live" without a socket;
+// entries that weren't in the previous poll get a brief highlight so a
+// genuinely new event is visible, without replaying that animation on
+// every 30s poll for rows that were already there.
+function LiveActivityFeed() {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [newIds, setNewIds] = useState(() => new Set());
+  const [, setClock] = useState(0);
+  const seenIds = useRef(null);
+
+  const load = useCallback(async () => {
+    try {
+      const { entries: fetched } = await getAuditLog({ limit: 25 });
+      if (seenIds.current) {
+        const arrived = fetched.filter((e) => !seenIds.current.has(e.id)).map((e) => e.id);
+        if (arrived.length) {
+          setNewIds(new Set(arrived));
+          setTimeout(() => setNewIds(new Set()), 1800);
+        }
+      }
+      seenIds.current = new Set(fetched.map((e) => e.id));
+      setEntries(fetched);
+    } catch {
+      // Best-effort companion widget — the full Audit Log screen is the
+      // place to surface a real fetch failure, not this glance panel.
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  // Keeps "3m ago" honest between polls without touching the network.
+  useEffect(() => {
+    const id = setInterval(() => setClock((c) => c + 1), 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <aside className="live-feed animate-fade-in">
+      <div className="live-feed-head">
+        <p className="live-feed-title">
+          <span className="live-feed-pulse" />
+          Live Activity
+        </p>
+        <span className="live-feed-tag">Audit log</span>
+      </div>
+
+      <div className="live-feed-list">
+        {loading ? (
+          <div className="live-feed-loading">
+            <div className="loading-dots"><span /><span /><span /></div>
+          </div>
+        ) : entries.length === 0 ? (
+          <p className="live-feed-empty">No recent activity yet.</p>
+        ) : (
+          entries.map((e, i) => {
+            const prefix = e.action.split(".")[0];
+            const Icon = AUDIT_ACTION_ICON[prefix] || History;
+            const tone = AUDIT_ACTION_TONE[prefix] || "slate";
+            return (
+              <div
+                key={e.id}
+                className={`live-feed-row tone-${tone}${newIds.has(e.id) ? " is-new" : ""}${i === entries.length - 1 ? " is-last" : ""}`}
+              >
+                <span className="live-feed-row-rail">
+                  <span className="live-feed-row-marker"><Icon size={13} /></span>
+                  <span className="live-feed-row-line" />
+                </span>
+                <div className="live-feed-row-body">
+                  <p className="live-feed-row-action">{auditActionLabel(e.action)}</p>
+                  <p className="live-feed-row-meta">
+                    {e.actor}
+                    <span className="live-feed-row-dot">·</span>
+                    {timeAgo(e.ts)}
+                  </p>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function AuditLogSection() {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [logErr, setLogErr] = useState("");
+  const [actionFilter, setActionFilter] = useState("all");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLogErr("");
+    try {
+      const { entries: fetched } = await getAuditLog({ limit: 300 });
+      setEntries(fetched);
+    } catch (e) {
+      setLogErr("Could not load audit log: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
+
+  const actionOptions = Array.from(new Set(entries.map((e) => e.action))).sort();
+  const filtered = actionFilter === "all" ? entries : entries.filter((e) => e.action === actionFilter);
+
+  return (
+    <div className="audit-panel animate-fade-in">
+      <div className="audit-toolbar">
+        <div className="audit-toolbar-filter">
+          <Filter size={13} />
+          <select className="advisor-filter-select" value={actionFilter} onChange={(e) => setActionFilter(e.target.value)}>
+            <option value="all">All actions</option>
+            {actionOptions.map((a) => <option key={a} value={a}>{auditActionLabel(a)}</option>)}
+          </select>
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={load} disabled={loading}>
+          <RefreshCw size={13} className={loading ? "spin" : ""} />
+          <span className="btn-label">Refresh</span>
+        </button>
+      </div>
+
+      {logErr && (
+        <div className="admin-error animate-fade-in">
+          <AlertCircle size={15} />{logErr}
+          <button className="close-err" onClick={() => setLogErr("")}><X size={13} /></button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="admin-loading">
+          <div className="loading-dots"><span /><span /><span /></div>
+          Loading audit trail…
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="admin-empty">
+          <div className="admin-empty-icon"><History size={28} /></div>
+          <h3>No activity recorded yet</h3>
+          <p>Logins, loan status changes, and account management actions will show up here.</p>
+        </div>
+      ) : (
+        <div className="audit-table">
+          <div className="audit-row audit-row--head">
+            <span>Action</span>
+            <span>Actor</span>
+            <span>Target</span>
+            <span>When</span>
+          </div>
+          {filtered.map((e) => (
+            <div className="audit-row" key={e.id}>
+              <span className="audit-action">
+                <span className={`audit-dot audit-dot--${e.action.split(".")[0]}`} />
+                {auditActionLabel(e.action)}
+              </span>
+              <span className="audit-actor">
+                {e.actor}
+                {e.role && <span className="audit-role-pill">{e.role}</span>}
+              </span>
+              <span className="audit-target" title={e.target}>{e.target || "—"}</span>
+              <span className="audit-time">
+                {new Date(e.ts).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Admin() {
-  const { isAdmin, adminRole, adminAdvisorName, adminName } = useStudent();
+  const { isAdmin, adminRole, adminAdvisorName, adminName, logoutAdmin, clearStudent } = useStudent();
   const navigate = useNavigate();
+
+  const [section, setSection] = useState("dashboard");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Frozen at mount rather than read fresh on every render — a "this week"
+  // stat doesn't need millisecond accuracy, and calling Date.now() directly
+  // in the render body is an impure call React's hook rules flag. A useState
+  // lazy initializer is the documented escape valve: React only invokes it
+  // once, on mount, never during a normal render pass.
+  const [nowRef] = useState(() => Date.now());
 
   const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
@@ -2723,9 +3258,12 @@ export default function Admin() {
   const [showSettings, setShowSettings] = useState(false);
   const [reportStudent, setReportStudent] = useState(null);
   const [bankStudent, setBankStudent] = useState(null);
-  const [showAccessManager, setShowAccessManager] = useState(false);
   const [loanStatusStudent, setLoanStatusStudent] = useState(null);
   const [recoverStudent, setRecoverStudent] = useState(null);
+  const [selectedKeys, setSelectedKeys] = useState(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     if (!isAdmin) navigate("/admin-login");
@@ -2865,6 +3403,12 @@ export default function Admin() {
     if (url) window.open(url, "_blank");
   };
 
+  const handleLogout = () => {
+    clearStudent();
+    logoutAdmin();
+    navigate("/");
+  };
+
   // Flags students sharing a non-empty email or phone with another student —
   // a sign of a duplicate Drive folder (most commonly from a double-submit
   // race during registration/upload, before getOrCreate serialized those
@@ -2903,6 +3447,13 @@ export default function Admin() {
     complete: scopedStudents.filter((s) => getOverallProgress(s) === 100).length,
     inProgress: scopedStudents.filter((s) => { const p = getOverallProgress(s); return p > 0 && p < 100; }).length,
     notStarted: scopedStudents.filter((s) => getOverallProgress(s) === 0).length,
+    // Real, not fabricated — a genuine count of students created in the last
+    // 7 days, used as the KPI card's trend line instead of a fake "vs last
+    // month" percentage we have no historical snapshots to actually compute.
+    newThisWeek: scopedStudents.filter((s) => {
+      const t = s.createdAt ? Date.parse(s.createdAt) : NaN;
+      return !Number.isNaN(t) && nowRef - t <= 7 * 24 * 60 * 60 * 1000;
+    }).length,
   };
 
   const loanStats = {
@@ -2958,83 +3509,247 @@ export default function Admin() {
     return matchesSearch && matchesFilter && matchesLoanStatus && matchesConsultancy;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginated = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  // Any filter/search change can shrink the result set below the current
+  // page — snap back to page 1 rather than showing an empty page.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(1);
+  }, [search, filter, loanStatusFilter, consultancyFilter, advisorFilter, bankerFilter]);
+
+  const visibleKeys = paginated.map(studentKey);
+  const allVisibleSelected = visibleKeys.length > 0 && visibleKeys.every((k) => selectedKeys.has(k));
+  const toggleSelectAll = () => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) visibleKeys.forEach((k) => next.delete(k));
+      else visibleKeys.forEach((k) => next.add(k));
+      return next;
+    });
+  };
+  const toggleSelectOne = (key) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+  const selectedStudents = students.filter((s) => selectedKeys.has(studentKey(s)));
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Delete ${selectedStudents.length} selected student${selectedStudents.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
+    setBulkBusy(true);
+    try {
+      for (const s of selectedStudents) {
+        const identifier = s.email || s.phone || "";
+        await deleteStudent(s.name, identifier, s.driveUrl || "").catch((e) => {
+          console.error(`Bulk delete failed for ${s.name}:`, e.message);
+        });
+      }
+      setSelectedKeys(new Set());
+      await loadStudents();
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkDownload = () => {
+    for (const s of selectedStudents) {
+      const identifier = s.email || s.phone || "";
+      const url = getDownloadAllUrl(s.name, identifier);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  };
+
+  // Exports exactly what's currently on screen — respects search + every
+  // active filter, not the full unfiltered roster.
+  const handleExportCsv = () => {
+    const header = ["Student", "Email", "Phone", "Consultancy", "Advisor", "Loan Status", "Document Progress", "Updated On"];
+    const rows = filtered.map((s) => [
+      s.name || "",
+      s.email || "",
+      s.phone || "",
+      s.personalInfo?.consultantNameLoc || "",
+      s.advisor || "",
+      LOAN_STATUS_CONFIG[s.loanStatus || "pending"]?.label || "Pending",
+      `${getOverallProgress(s)}%`,
+      s.updatedAt ? new Date(s.updatedAt).toLocaleString("en-IN") : "",
+    ]);
+    const csv = [header, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `students-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const rootUrl = import.meta.env.VITE_GOOGLE_DRIVE_FOLDER_ID
     ? `https://drive.google.com/drive/folders/${import.meta.env.VITE_GOOGLE_DRIVE_FOLDER_ID}`
     : null;
 
   if (!isAdmin) return null;
 
+  const roleEyebrow = adminRole === "advisor" ? `Advisor — ${adminAdvisorName}` : "Super Admin";
+  const SECTION_META = {
+    dashboard: {
+      title: "Admin Dashboard",
+      sub: adminRole === "advisor"
+        ? `Showing students assigned to ${adminAdvisorName} only.`
+        : "Manage all students, applications and documents from one place.",
+    },
+    students: {
+      eyebrow: roleEyebrow,
+      title: "Students",
+      sub: adminRole === "advisor" ? `Advisor: ${adminAdvisorName} — showing your students only` : "Search, filter, and manage every student file",
+    },
+    advisors: { eyebrow: roleEyebrow, title: "Advisors", sub: "Workload and progress by advisor" },
+    banks:    { eyebrow: roleEyebrow, title: "Banks & Lenders", sub: "Manage loan officers and control which students each one can see" },
+    audit:    { eyebrow: roleEyebrow, title: "Audit Log", sub: "Who did what, and when" },
+  };
+  const activeMeta = SECTION_META[section] || SECTION_META.dashboard;
+
   return (
-    <div className="admin-page">
+    <div className="admin-shell">
+      <AdminSidebar
+        section={section}
+        setSection={setSection}
+        adminRole={adminRole}
+        adminName={adminName}
+        onOpenSettings={() => setShowSettings(true)}
+        onLogout={handleLogout}
+        mobileOpen={mobileNavOpen}
+        onCloseMobile={() => setMobileNavOpen(false)}
+        setLoanStatusFilter={setLoanStatusFilter}
+        setDocFilter={setFilter}
+      />
+
+    <div className="admin-page admin-page--shell">
+      {/* Same ambient background stack as the Home page (art + color fields +
+          grid + veil) — fixed rather than absolute since this page actually
+          scrolls, unlike Home's hero. */}
+      <div className="admin-bg" aria-hidden="true">
+        <span className="admin-bg__art" style={{ backgroundImage: `url(${heroImg})` }} />
+        <span className="admin-bg__field admin-bg__field--indigo" />
+        <span className="admin-bg__field admin-bg__field--amber" />
+        <span className="admin-bg__grid" />
+        <span className="admin-bg__veil" />
+      </div>
+
+      <AdminTopbar
+        search={search}
+        setSearch={setSearch}
+        section={section}
+        setSection={setSection}
+        adminName={adminName}
+        adminRole={adminRole}
+        onOpenSettings={() => setShowSettings(true)}
+        onLogout={handleLogout}
+      />
       <div className="admin-container">
         {/* Header */}
         <div className="admin-header animate-fade-in">
           <div className="admin-header-left">
-            <h1 className="admin-title">
-              <div className="admin-title-icon"><Shield size={18} /></div>
-              Admin Dashboard
-            </h1>
-            <p className="admin-sub">
-              {adminRole === "advisor"
-                ? `Advisor: ${adminAdvisorName} — showing your students only`
-                : "Super Admin — all students"}
-            </p>
+            <div className="admin-title-row">
+              <button className="admin-mobile-nav-toggle" onClick={() => setMobileNavOpen(true)} aria-label="Open menu">
+                <Menu size={18} />
+              </button>
+              <div>
+                <p className="admin-eyebrow">
+                  {section === "dashboard" ? `Welcome back${adminName ? `, ${adminName.split(" ")[0]}` : ""}` : activeMeta.eyebrow}
+                </p>
+                <h1 className="admin-title">{activeMeta.title}</h1>
+                <p className="admin-sub">{activeMeta.sub}</p>
+              </div>
+            </div>
           </div>
 
           <div className="header-actions">
-            <button className="btn btn-secondary btn-sm" onClick={loadStudents} disabled={loading}>
-              <RefreshCw size={13} className={loading ? "spin" : ""} />
-              <span className="btn-label">Refresh</span>
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => navigate("/")}>
-              <UserPlus size={13} />
-              <span className="btn-label">Add Student</span>
-            </button>
-            {rootUrl && (
-              <a className="btn btn-primary btn-sm" href={rootUrl} target="_blank" rel="noreferrer">
-                <FolderOpen size={13} />
-                <span className="btn-label">Root Drive</span>
-              </a>
+            {(section === "dashboard" || section === "students") && (
+              <>
+                <button className="btn btn-secondary btn-sm" onClick={loadStudents} disabled={loading}>
+                  <RefreshCw size={16} className={loading ? "spin" : ""} />
+                  <span className="btn-label">Refresh</span>
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={() => navigate("/")}>
+                  <UserPlus size={16} />
+                  <span className="btn-label">Add Student</span>
+                </button>
+                {rootUrl && (
+                  <a className="btn btn-primary btn-sm" href={rootUrl} target="_blank" rel="noreferrer">
+                    <FolderOpen size={16} />
+                    <span className="btn-label">Root Drive</span>
+                  </a>
+                )}
+                <button className="btn btn-secondary btn-sm" onClick={() => setSection("banks")}>
+                  <Send size={16} />
+                  <span className="btn-label">Banker Access</span>
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={() => setShowSettings(true)}>
+                  <Settings size={16} />
+                  <span className="btn-label">Settings</span>
+                </button>
+              </>
             )}
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowAccessManager(true)} title="Manage bankers and student access">
-              <Send size={13} />
-              <span className="btn-label">Banker Access</span>
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowSettings(true)} title="Settings">
-              <Settings size={13} />
-              <span className="btn-label">Settings</span>
-            </button>
           </div>
         </div>
 
-        {/* Financing partner banks — inline strip on most screens, side rails on very wide ones */}
-        <PartnerBanksShowcase />
+        {section === "dashboard" && (
+          <>
+            {/* Financing partner banks — full width, scrolling strip */}
+            <PartnerBanksShowcase />
 
-        {/* Compact Stats Panel */}
-        <StatsPanel
-          stats={stats}
-          loanStats={loanStats}
-          filter={filter}
-          setFilter={setFilter}
-          loanStatusFilter={loanStatusFilter}
-          setLoanStatusFilter={setLoanStatusFilter}
-        />
+            <div className="dashboard-grid">
+              {/* 3/4: Document Progress on top, Loan Application Status below */}
+              <div className="dashboard-grid-main">
+                <StatsPanel
+                  stats={stats}
+                  loanStats={loanStats}
+                  filter={filter}
+                  setFilter={setFilter}
+                  loanStatusFilter={loanStatusFilter}
+                  setLoanStatusFilter={setLoanStatusFilter}
+                />
+              </div>
 
+              {/* Remaining 1/4: the live activity log, running the full height */}
+              {adminRole === "superadmin" && <LiveActivityFeed />}
+            </div>
+          </>
+        )}
+
+        {section === "advisors" && adminRole === "superadmin" && (
+          <AdvisorsSection students={students} allAdvisors={allAdvisors} />
+        )}
+
+        {section === "audit" && adminRole === "superadmin" && <AuditLogSection />}
+
+        {section === "banks" && (
+          <BankerAccessSection
+            students={scopedStudents}
+            onAccessChanged={handleAccessChanged}
+            onBankersChanged={loadBankers}
+          />
+        )}
+
+        {(section === "dashboard" || section === "students") && (
+        <>
         {/* Toolbar */}
         <div className="admin-toolbar">
-          <div className="admin-search">
-            <Search size={15} />
-            <input
-              className="search-input"
-              placeholder="Search by name, email, or phone…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            {search && (
-              <button className="search-clear" onClick={() => setSearch("")}><X size={14} /></button>
-            )}
-          </div>
-
           <div className="toolbar-filter">
             {[
               { id: "all", label: "All" },
@@ -3052,59 +3767,61 @@ export default function Admin() {
             ))}
           </div>
 
-          {/* Consultancy filter — visible to both advisor and superadmin */}
-          <select
-            className={`advisor-filter-select consultancy-filter-select${consultancyFilter ? " has-value" : ""}`}
-            value={consultancyFilter}
-            onChange={(e) => setConsultancyFilter(e.target.value)}
-            aria-label="Filter students by consultancy"
-          >
-            <option value="">All Consultancies</option>
-            {consultancyList.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-            <option value="__none__">— No consultancy set —</option>
-          </select>
-
-          {adminRole !== "advisor" && advisorList.length > 0 && (
+          <div className="toolbar-dropdowns">
+            {/* Consultancy filter — visible to both advisor and superadmin */}
             <select
-              className="advisor-filter-select"
-              value={advisorFilter}
-              onChange={(e) => setAdvisorFilter(e.target.value)}
+              className={`advisor-filter-select consultancy-filter-select${consultancyFilter ? " has-value" : ""}`}
+              value={consultancyFilter}
+              onChange={(e) => setConsultancyFilter(e.target.value)}
+              aria-label="Filter students by consultancy"
             >
-              <option value="all">All Advisors</option>
-              {advisorList.map((a) => (
-                <option key={a} value={a}>{a}</option>
+              <option value="">All Consultancies</option>
+              {consultancyList.map((c) => (
+                <option key={c} value={c}>{c}</option>
               ))}
+              <option value="__none__">— No consultancy set —</option>
             </select>
-          )}
 
-          {bankers.length > 0 && (
+            {adminRole !== "advisor" && advisorList.length > 0 && (
+              <select
+                className="advisor-filter-select"
+                value={advisorFilter}
+                onChange={(e) => setAdvisorFilter(e.target.value)}
+              >
+                <option value="all">All Advisors</option>
+                {advisorList.map((a) => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
+            )}
+
+            {bankers.length > 0 && (
+              <select
+                className="advisor-filter-select banker-filter-select"
+                value={bankerFilter}
+                onChange={(e) => setBankerFilter(e.target.value)}
+              >
+                <option value="all">All Bankers</option>
+                {bankers.map((b) => (
+                  <option key={b.name} value={b.name}>{b.name}</option>
+                ))}
+              </select>
+            )}
+
             <select
-              className="advisor-filter-select banker-filter-select"
-              value={bankerFilter}
-              onChange={(e) => setBankerFilter(e.target.value)}
+              className="advisor-filter-select loan-status-filter-select"
+              value={loanStatusFilter}
+              onChange={(e) => setLoanStatusFilter(e.target.value)}
             >
-              <option value="all">All Bankers</option>
-              {bankers.map((b) => (
-                <option key={b.name} value={b.name}>{b.name}</option>
-              ))}
+              <option value="all">All Loan Status</option>
+              <option value="pending">Pending</option>
+              <option value="inprocess">In Process</option>
+              <option value="sanctioned">Sanctioned</option>
+              <option value="disbursed">Disbursed</option>
+              <option value="rejected">Rejected</option>
+              <option value="dropped">Dropped</option>
             </select>
-          )}
-
-          <select
-            className="advisor-filter-select loan-status-filter-select"
-            value={loanStatusFilter}
-            onChange={(e) => setLoanStatusFilter(e.target.value)}
-          >
-            <option value="all">All Loan Status</option>
-            <option value="pending">Pending</option>
-            <option value="inprocess">In Process</option>
-            <option value="sanctioned">Sanctioned</option>
-            <option value="disbursed">Disbursed</option>
-            <option value="rejected">Rejected</option>
-            <option value="dropped">Dropped</option>
-          </select>
+          </div>
         </div>
 
         {/* Error banner */}
@@ -3117,12 +3834,44 @@ export default function Admin() {
         )}
 
         {/* Table */}
+        {selectedKeys.size > 0 && (
+          <div className="bulk-toolbar animate-fade-in">
+            <span className="bulk-toolbar-count">Selected: {selectedKeys.size}</span>
+            <div className="bulk-toolbar-actions">
+              <button className="btn btn-secondary btn-sm" onClick={handleBulkDownload} disabled={bulkBusy}>
+                <Download size={13} /> <span className="btn-label">Download</span>
+              </button>
+              <button className="btn btn-danger btn-sm" onClick={handleBulkDelete} disabled={bulkBusy}>
+                <Trash2 size={13} /> <span className="btn-label">{bulkBusy ? "Working…" : "Delete"}</span>
+              </button>
+            </div>
+            <button className="bulk-toolbar-clear" onClick={() => setSelectedKeys(new Set())}>
+              <X size={14} />
+            </button>
+          </div>
+        )}
+
+        <div className="table-section-head">
+          <p className="table-section-title">
+            Students <span className="table-section-count">{filtered.length}</span>
+          </p>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={handleExportCsv} disabled={filtered.length === 0}>
+            <Download size={14} /> <span className="btn-label">Export</span>
+          </button>
+        </div>
+
         <div className="admin-table-wrap animate-fade-in">
           <div className="table-head">
+            <div className="th th-check">
+              <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} aria-label="Select all students on this page" />
+            </div>
             <div className="th th-name">Student</div>
-            <div className="th th-meta">Metadata</div>
-            <div className="th th-progress">Progress</div>
-            <div className="th th-status">Status</div>
+            <div className="th th-consultancy">Consultancy</div>
+            <div className="th th-advisor">Advisor</div>
+            <div className="th th-status">Loan Status</div>
+            <div className="th th-progress">Document Progress</div>
+            <div className="th th-files">Files</div>
+            <div className="th th-updated">Updated On</div>
             <div className="th th-actions">Actions</div>
           </div>
 
@@ -3164,7 +3913,7 @@ export default function Admin() {
             </div>
           ) : (
             <div className="student-list">
-              {filtered.map((s) => {
+              {paginated.map((s) => {
                 const k = studentKey(s);
                 return (
                   <StudentRow
@@ -3172,6 +3921,8 @@ export default function Admin() {
                     student={s}
                     isOpen={expandedKey === k}
                     onToggle={() => setExpandedKey((cur) => (cur === k ? null : k))}
+                    selected={selectedKeys.has(k)}
+                    onToggleSelect={() => toggleSelectOne(k)}
                     onDelete={(e) => { if (e) e.stopPropagation(); setConfirmDelete(s); }}
                     onOpenDrive={(e) => { if (e) e.stopPropagation(); openDriveFolder(s); }}
                     onViewReport={(e) => { if (e) e.stopPropagation(); setReportStudent(s); }}
@@ -3190,8 +3941,45 @@ export default function Admin() {
               })}
             </div>
           )}
+
+          {!loading && filtered.length > 0 && (
+            <div className="table-pagination">
+              <span className="table-pagination-summary">
+                Showing {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)} of {filtered.length} students
+              </span>
+              <div className="table-pagination-controls">
+                <button className="pg-btn" aria-label="Previous page" disabled={safePage === 1} onClick={() => setPage(safePage - 1)}>
+                  <ChevronLeft size={16} />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((n) => n === 1 || n === totalPages || Math.abs(n - safePage) <= 1)
+                  .map((n, i, arr) => (
+                    <span key={n} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      {i > 0 && arr[i - 1] !== n - 1 && <span className="pg-ellipsis">…</span>}
+                      <button className={`pg-btn pg-num${n === safePage ? " active" : ""}`} onClick={() => setPage(n)}>{n}</button>
+                    </span>
+                  ))}
+                <button className="pg-btn" aria-label="Next page" disabled={safePage === totalPages} onClick={() => setPage(safePage + 1)}>
+                  <ChevronRight size={16} />
+                </button>
+                <select
+                  className="pg-size-select"
+                  aria-label="Students per page"
+                  value={pageSize}
+                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                >
+                  <option value={10}>10 / page</option>
+                  <option value={20}>20 / page</option>
+                  <option value={50}>50 / page</option>
+                </select>
+              </div>
+            </div>
+          )}
         </div>
+        </>
+        )}
       </div>
+    </div>
 
       {/* Loan Status Modal */}
       {loanStatusStudent && (
@@ -3227,16 +4015,6 @@ export default function Admin() {
           student={bankStudent}
           onClose={() => setBankStudent(null)}
           onAccessChanged={handleAccessChanged}
-        />
-      )}
-
-      {/* Banker Access — manage loan officers, bank filters, and per-student access */}
-      {showAccessManager && (
-        <BankerAccessManagerModal
-          students={scopedStudents}
-          onClose={() => setShowAccessManager(false)}
-          onAccessChanged={handleAccessChanged}
-          onBankersChanged={loadBankers}
         />
       )}
 

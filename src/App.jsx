@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { StudentProvider, useStudent } from "./context/StudentContext";
 import Navbar from "./components/Navbar/Navbar";
 import Home from "./pages/Home/Home";
@@ -39,9 +39,14 @@ function ProtectedBankerPortal() {
 }
 
 function AppRoutes() {
+  const location = useLocation();
+  // The admin dashboard has its own topbar (search, notifications, account
+  // menu) — stacking the global site navbar above it duplicates chrome the
+  // admin layout already owns, so it's suppressed on that one route.
+  const hideGlobalNavbar = location.pathname === "/admin";
   return (
     <>
-      <Navbar />
+      {!hideGlobalNavbar && <Navbar />}
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/"              element={<Home />} />

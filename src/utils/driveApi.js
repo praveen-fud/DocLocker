@@ -279,3 +279,13 @@ export function getDownloadAllUrl(studentName, studentIdentifier = '') {
   const params = new URLSearchParams({ token });
   return `${API_URL}/api/students/${encodeURIComponent(folderKey)}/files/zip?${params.toString()}`;
 }
+
+// ── Audit log (superadmin only) ────────────────────────────────────────────────
+export async function getAuditLog({ action, actor, limit } = {}) {
+  const params = {};
+  if (action) params.action = action;
+  if (actor) params.actor = actor;
+  if (limit) params.limit = limit;
+  const data = await apiGet('/api/audit', params);
+  return { entries: data.entries || [], total: data.total || 0 };
+}
