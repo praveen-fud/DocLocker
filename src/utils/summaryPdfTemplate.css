@@ -1,0 +1,289 @@
+/* Student Loan Application Summary — PDF template stylesheet.
+   This is the ONLY thing controlling how the generated summary PDF looks
+   (hero band, readiness ring, sections, document checklist, sign-off).
+   Rendered off-screen and captured by html2canvas (see summaryGenerator.js's
+   generateAndUploadSummaryPDF), then sliced into A4 pages by jsPDF — NOT
+   sent to any server-side HTML-to-PDF converter, so full CSS (gradients,
+   flexbox, grid, custom properties) is safe here. Every custom property is
+   prefixed --sumpdf-* and every selector is scoped under ".pdf-render" (this
+   template's own root) so it can never leak into, or be leaked into by, any
+   other stylesheet in this app. */
+:root{
+  --sumpdf-navy:      #0A2E68;
+  --sumpdf-navy-deep: #071F47;
+  --sumpdf-navy-mid:  #16478F;
+  --sumpdf-green:     #17855E;
+  --sumpdf-sky:       #2E86DE;
+  --sumpdf-cyan:      #38BDF8;
+  --sumpdf-amber:     #E08A00;
+  --sumpdf-coral:     #DC4C4C;
+  --sumpdf-ink:       #12203A;
+  --sumpdf-ink-60:    #566179;
+  --sumpdf-ink-40:    #8A93A6;
+  --sumpdf-line:      #E2E8F2;
+  --sumpdf-tint:      #F4F7FC;
+  --sumpdf-paper:     #FFFFFF;
+  --sumpdf-display: "Poppins", "Segoe UI", Arial, sans-serif;
+  --sumpdf-body:    "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --sumpdf-sheet-w: 210mm;
+  --sumpdf-pad-x:   14mm;
+  --sumpdf-pad-t:   24mm;
+  --sumpdf-pad-b:   15mm;
+}
+.pdf-render, .pdf-render *{ box-sizing:border-box; margin:0; padding:0; }
+.pdf-render, .pdf-render *{ font-family:var(--sumpdf-body); }
+.pdf-render{
+  font-size:9.2pt; line-height:1.45; color:var(--sumpdf-ink);
+  font-variant-numeric:tabular-nums;
+}
+.pdf-render.sheet{
+  position:relative; width:var(--sumpdf-sheet-w);
+  background:var(--sumpdf-paper);
+  padding:var(--sumpdf-pad-t) var(--sumpdf-pad-x) var(--sumpdf-pad-b);
+}
+
+/* ── Hero band ──────────────────────────────────────────────────────────── */
+.pdf-render .hero{
+  position:relative; z-index:2;
+  margin:calc(var(--sumpdf-pad-t) * -1) calc(var(--sumpdf-pad-x) * -1) 0;
+  padding:8mm var(--sumpdf-pad-x) 6mm;
+  background:
+    radial-gradient(120% 150% at 88% -30%, rgba(56,189,248,.55), transparent 58%),
+    radial-gradient(90% 130% at 10% 120%, rgba(23,133,94,.55), transparent 60%),
+    linear-gradient(115deg, var(--sumpdf-navy-deep), var(--sumpdf-navy) 48%, var(--sumpdf-navy-mid));
+  color:#fff; overflow:hidden;
+}
+.pdf-render .hero:after{
+  content:""; position:absolute; left:0; right:0; bottom:0; height:1.6mm;
+  background:linear-gradient(90deg,var(--sumpdf-sky),var(--sumpdf-cyan) 40%,var(--sumpdf-green));
+}
+.pdf-render .hero-top{ display:flex; justify-content:space-between; align-items:center; gap:6mm; }
+.pdf-render .logo-card{
+  background:#fff; border-radius:3mm; padding:2.4mm 4.4mm; min-height:9mm;
+  box-shadow:0 3px 12px rgba(3,16,40,.28); display:flex; align-items:center;
+}
+.pdf-render .logo-card .logo-fallback{
+  font-family:var(--sumpdf-display); font-weight:700; font-size:10pt; color:var(--sumpdf-navy); letter-spacing:.02em;
+}
+.pdf-render .track-badge{
+  text-align:right; max-width:70mm; align-self:center;
+  background:#fff; border-radius:2.6mm; padding:2.2mm 4mm;
+  box-shadow:0 3px 10px rgba(3,16,40,.25);
+}
+.pdf-render .track-badge .l{
+  font-family:var(--sumpdf-display); font-weight:700; font-size:6.2pt; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--sumpdf-sky);
+}
+.pdf-render .track-badge .v{
+  font-family:var(--sumpdf-display); font-weight:700; font-size:9.4pt; color:var(--sumpdf-navy);
+  margin-top:.6mm; line-height:1.25;
+}
+.pdf-render .hero-name{ display:flex; justify-content:space-between; align-items:center; gap:6mm; margin-top:4.5mm; }
+.pdf-render .hero-name h1{
+  font-family:var(--sumpdf-display); font-weight:700; font-size:20pt; line-height:1;
+  letter-spacing:-.01em; text-transform:capitalize;
+  display:inline-block; color:#fff;
+}
+.pdf-render .refcard{ text-align:right; flex-shrink:0; }
+.pdf-render .refcard .l{ font-size:6.4pt; letter-spacing:.18em; text-transform:uppercase; opacity:.7; }
+.pdf-render .refcard .v{
+  font-family:var(--sumpdf-display); font-weight:700; font-size:11pt; letter-spacing:.04em; margin-top:.6mm;
+}
+.pdf-render .stats{ display:grid; grid-template-columns:repeat(4,1fr); gap:3mm; margin-top:5mm; }
+.pdf-render .stat{
+  background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.26);
+  border-radius:3mm; padding:3.4mm 3.6mm; position:relative; overflow:hidden;
+}
+.pdf-render .stat:before{ content:""; position:absolute; left:0; top:0; bottom:0; width:1.2mm; background:var(--c,var(--sumpdf-cyan)); }
+.pdf-render .stat .n{ font-family:var(--sumpdf-display); font-weight:700; font-size:12.5pt; line-height:1.15; letter-spacing:-.01em; word-break:break-word; }
+.pdf-render .stat .k{ font-size:6.4pt; letter-spacing:.13em; text-transform:uppercase; opacity:.78; margin-top:1.6mm; }
+
+/* ── Readiness ring card ────────────────────────────────────────────────── */
+.pdf-render .readiness{
+  display:flex; gap:7mm; align-items:center;
+  margin-top:5mm; padding:4.4mm 5.4mm; border-radius:3.4mm;
+  background:var(--sumpdf-tint); border:1px solid var(--sumpdf-line);
+}
+.pdf-render .ring{ flex-shrink:0; width:26mm; height:26mm; }
+.pdf-render .ring img{ width:100%; height:100%; display:block; }
+.pdf-render .rd-body{ flex:1; }
+.pdf-render .rd-title{
+  font-family:var(--sumpdf-display); font-weight:600; font-size:8.6pt;
+  letter-spacing:.13em; text-transform:uppercase; color:var(--sumpdf-navy);
+}
+.pdf-render .rd-sub{ font-size:7.8pt; color:var(--sumpdf-ink-60); margin-top:1mm; }
+.pdf-render .rd-bar{ display:flex; gap:1.4mm; margin-top:3.4mm; }
+.pdf-render .rd-seg{ flex:1; }
+.pdf-render .rd-track{ height:4.6mm; border-radius:99px; background:#E7EDF7; overflow:hidden; }
+.pdf-render .rd-fill{ height:100%; border-radius:99px; background:var(--c); }
+.pdf-render .rd-seg .l{
+  font-family:var(--sumpdf-display); font-weight:600; font-size:5.6pt; color:var(--sumpdf-ink-40);
+  text-align:center; margin-top:1.2mm;
+}
+
+/* ── Needs-attention flags ──────────────────────────────────────────────── */
+.pdf-render .flags{
+  margin-top:4.4mm; border-radius:3.4mm; overflow:hidden;
+  border:1px solid #F6DFB8; background:#FFF9EE;
+}
+.pdf-render .flags h3{
+  background:linear-gradient(90deg,#E08A00,#F0A828); color:#fff;
+  font-family:var(--sumpdf-display); font-weight:600; font-size:7.4pt;
+  letter-spacing:.14em; text-transform:uppercase; padding:2mm 4.4mm;
+}
+.pdf-render .flags ul{ list-style:none; padding:2.6mm 4.4mm 3.2mm; }
+.pdf-render .flags li{ font-size:8.2pt; line-height:1.42; padding-left:5mm; position:relative; margin-top:1.6mm; }
+.pdf-render .flags li:first-child{ margin-top:0; }
+.pdf-render .flags li:before{
+  content:"!"; position:absolute; left:0; top:.15mm;
+  width:3.4mm; height:3.4mm; border-radius:50%; background:var(--sumpdf-amber); color:#fff;
+  font-family:var(--sumpdf-display); font-weight:700; font-size:6pt; text-align:center; line-height:3.4mm;
+}
+.pdf-render .flags li b{ font-weight:600; color:var(--sumpdf-navy); }
+.pdf-render .flags li.muted{ font-style:italic; color:var(--sumpdf-ink-60); }
+.pdf-render .flags li.muted:before{ content:""; background:transparent; }
+
+/* ── Sections ───────────────────────────────────────────────────────────── */
+.pdf-render .section{ margin-top:5mm; display:block; }
+.pdf-render .sec-head{
+  display:flex; align-items:center; gap:3mm;
+  background:var(--sumpdf-tint); border-left:1.6mm solid var(--c);
+  border-radius:0 2.4mm 2.4mm 0; padding:2.2mm 3.4mm;
+}
+/* .sec-num is a pre-rendered canvas bitmap (renderSectionBadgeImage in
+   summaryGenerator.js), not centered CSS text — a font swap mid-capture
+   can't shift a bitmap's own baked-in pixels the way it can shift text
+   layout, so html2canvas only ever has to copy the <img> through unchanged. */
+.pdf-render .sec-num{ width:7mm; height:7mm; flex-shrink:0; display:block; }
+.pdf-render .sec-title{
+  flex:1; font-family:var(--sumpdf-display); font-weight:600; font-size:11.5pt;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--sumpdf-navy);
+}
+.pdf-render .grid{ display:grid; grid-template-columns:1fr 1fr; column-gap:5mm; margin-top:2.4mm; }
+.pdf-render .grid.one{ grid-template-columns:1fr; }
+.pdf-render .row{
+  display:flex; align-items:center; gap:3mm; padding:1.5mm 2.6mm;
+  border-bottom:1px solid var(--sumpdf-line); min-height:6mm;
+}
+.pdf-render .row .k{
+  font-size:6.5pt; letter-spacing:.1em; text-transform:uppercase; color:var(--sumpdf-ink-40);
+  width:31mm; flex-shrink:0; line-height:1.25;
+}
+.pdf-render .row .v{ font-size:9pt; font-weight:500; word-break:break-word; }
+.pdf-render .row .v.long{ font-size:8.2pt; font-weight:400; line-height:1.3; }
+.pdf-render .subs{ display:grid; grid-template-columns:1fr 1fr; gap:4mm; margin-top:2.6mm; }
+.pdf-render .sub{ border:1px solid var(--sumpdf-line); border-radius:2.6mm; overflow:hidden; }
+.pdf-render .sub-head{
+  display:flex; justify-content:space-between; align-items:center;
+  background:var(--c); color:#fff; padding:1.8mm 3mm;
+  font-family:var(--sumpdf-display); font-weight:600; font-size:6.8pt;
+  letter-spacing:.12em; text-transform:uppercase;
+}
+.pdf-render .sub-head em{ font-style:normal; font-weight:500; opacity:.85; letter-spacing:.06em; }
+.pdf-render .sub .grid{ margin-top:0; }
+.pdf-render .sub .row:last-child{ border-bottom:0; }
+.pdf-render .empty-state{ padding:3.4mm; background:#FCFDFF; }
+.pdf-render .empty-state b{
+  display:block; font-family:var(--sumpdf-display); font-weight:600; font-size:8.4pt;
+  color:var(--sumpdf-navy); margin-bottom:1.2mm;
+}
+.pdf-render .empty-state p{ font-size:8pt; color:var(--sumpdf-ink-60); line-height:1.4; }
+.pdf-render .section > .empty-state{ border:1px solid var(--sumpdf-line); border-radius:2.6mm; margin-top:2.6mm; }
+
+/* ── Document checklist ─────────────────────────────────────────────────── */
+.pdf-render .dgroup{ border:1px solid var(--sumpdf-line); border-radius:2.8mm; overflow:hidden; margin-top:2.2mm; }
+.pdf-render .dgroup-head{
+  display:flex; align-items:center; gap:3mm; padding:2.2mm 3.4mm;
+  background:linear-gradient(90deg, var(--c), var(--c-light));
+  color:#fff;
+}
+.pdf-render .dgroup-head .t{
+  flex:1; font-family:var(--sumpdf-display); font-weight:600; font-size:7.2pt;
+  letter-spacing:.12em; text-transform:uppercase;
+}
+.pdf-render .dgroup-head .c{ font-family:var(--sumpdf-display); font-weight:600; font-size:6.8pt; letter-spacing:.05em; }
+.pdf-render .dmeter{ width:20mm; height:2mm; border-radius:99px; background:rgba(255,255,255,.32); overflow:hidden; }
+.pdf-render .dmeter i{ display:block; height:100%; background:#fff; }
+/* A real 2-column grid places item N at row ceil(N/2), col N%2 regardless of
+   any item's own height — unlike column-count, row pairing can't drift when
+   one label wraps to two lines. */
+.pdf-render .dlist{ list-style:none; display:grid; grid-template-columns:1fr 1fr; column-gap:0; }
+.pdf-render .dlist li{
+  display:flex; align-items:center; gap:2.6mm; padding:1.4mm 3.4mm;
+  border-bottom:1px solid var(--sumpdf-line);
+}
+.pdf-render .dlist li:nth-child(4n+1),
+.pdf-render .dlist li:nth-child(4n+2){ background:#FAFCFF; }
+.pdf-render .box{ width:3.2mm; height:3.2mm; border-radius:.8mm; border:1.2px solid #C3CDDE; flex-shrink:0; position:relative; }
+.pdf-render .box.done{ background:var(--sumpdf-green); border-color:var(--sumpdf-green); }
+.pdf-render .box.done:after{
+  content:""; position:absolute; left:1mm; top:.35mm; width:.85mm; height:1.7mm;
+  border:solid #fff; border-width:0 .5mm .5mm 0; transform:rotate(42deg);
+}
+.pdf-render .dlist .nm{ flex:1; font-size:7.8pt; line-height:1.25; }
+.pdf-render .dlist li.is-opt .nm{ color:var(--sumpdf-ink-60); }
+.pdf-render .tag{
+  font-family:var(--sumpdf-display); font-weight:600; font-size:5.8pt; letter-spacing:.1em;
+  text-transform:uppercase; padding:.6mm 2mm; border-radius:99px; flex-shrink:0;
+}
+.pdf-render .tag.rec{ background:#E4F5EE; color:var(--sumpdf-green); }
+.pdf-render .tag.awa{ background:#FFF3DF; color:var(--sumpdf-amber); }
+.pdf-render .tag.opt{ background:#EEF2F8; color:var(--sumpdf-ink-40); }
+
+/* ── Outstanding items ──────────────────────────────────────────────────── */
+.pdf-render .outstanding{ margin-top:6mm; border-radius:3mm; overflow:hidden; border:1px solid var(--sumpdf-line); }
+.pdf-render .out-head{
+  display:flex; justify-content:space-between; align-items:center;
+  background:linear-gradient(100deg,var(--sumpdf-navy),var(--sumpdf-navy-mid)); color:#fff; padding:2.6mm 4mm;
+}
+.pdf-render .out-head .t{
+  font-family:var(--sumpdf-display); font-weight:600; font-size:7.6pt;
+  letter-spacing:.13em; text-transform:uppercase;
+}
+.pdf-render .out-head .c{
+  background:var(--sumpdf-coral); border-radius:99px; padding:1mm 3mm;
+  font-family:var(--sumpdf-display); font-weight:700; font-size:7pt;
+}
+.pdf-render .out-row{ display:flex; align-items:center; gap:3mm; padding:1.5mm 4mm; border-bottom:1px solid var(--sumpdf-line); }
+.pdf-render .out-row:nth-child(odd){ background:#FAFCFF; }
+.pdf-render .out-row:last-child{ border-bottom:0; }
+.pdf-render .out-n{
+  width:5.4mm; height:5.4mm; border-radius:1.4mm; background:var(--c); color:#fff;
+  font-family:var(--sumpdf-display); font-weight:700; font-size:6.4pt;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.pdf-render .out-sec{
+  width:42mm; flex-shrink:0; font-size:6.6pt; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--sumpdf-ink-40); line-height:1.25;
+}
+.pdf-render .out-items{ font-size:8.2pt; font-weight:500; }
+
+/* ── Sign-off ───────────────────────────────────────────────────────────── */
+.pdf-render .signoff{ margin-top:4mm; }
+.pdf-render .declaration{
+  background:var(--sumpdf-tint); border:1px solid var(--sumpdf-line); border-radius:3mm;
+  padding:2.4mm 3.4mm; font-size:7.8pt; color:var(--sumpdf-ink-60); line-height:1.35;
+}
+.pdf-render .declaration b{ color:var(--sumpdf-navy); }
+.pdf-render .sign-grid{ display:grid; grid-template-columns:1fr 1fr; gap:6mm; margin-top:3.6mm; }
+.pdf-render .sign-line{ border-top:1.4px solid var(--sumpdf-navy); padding-top:1.6mm; }
+.pdf-render .sign-line span{
+  font-family:var(--sumpdf-display); font-weight:600; font-size:6.2pt;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--sumpdf-ink-60);
+}
+.pdf-render .office{ margin-top:3.4mm; border:1px dashed #C3CDDE; border-radius:3mm; padding:2.4mm 4mm; background:#FCFDFF; }
+.pdf-render .office .t{
+  font-family:var(--sumpdf-display); font-weight:600; font-size:6.6pt;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--sumpdf-navy);
+}
+.pdf-render .office-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:5mm; margin-top:2.6mm; }
+.pdf-render .office .sign-line{ border-top:1px solid #C3CDDE; }
+.pdf-render .office .sign-line span{ font-size:5.6pt; }
+
+/* Turns the fixed A4-width sheet into a naturally-growing container — real
+   pagination happens afterward when the rendered canvas is sliced into
+   A4-height pages (see generateAndUploadSummaryPDF's pagination step). */
+.pdf-render{
+  height:auto !important; overflow:visible !important;
+  box-shadow:none !important; margin:0 !important;
+}
