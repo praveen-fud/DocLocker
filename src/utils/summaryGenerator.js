@@ -33,22 +33,41 @@ export function generateAndUploadSummaryPDF(
 }
 
 async function _doGeneratePdf(studentName, studentData, studentIdentifier, uploadedDocuments) {
+  // Each stage is tagged separately in its own console.error (with the full
+  // error object, not just .message) — this whole pipeline runs unattended
+  // after a debounced auto-save, so a bare "it failed" with no stack is
+  // useless after the fact. Anyone can now open devtools and see exactly
+  // which stage broke instead of just "the PDF never showed up".
+  let model, rendered;
   try {
-    const model = buildModel(studentName, studentData);
-    const { blob, fname } = await renderSummaryPdf(model);
-
+    model = buildModel(studentName, studentData);
+  } catch (e) {
+    console.error("[SummaryPDF] buildModel failed — bad/unexpected student data shape:", e);
+    return;
+  }
+  try {
+    rendered = await renderSummaryPdf(model);
+  } catch (e) {
+    console.error("[SummaryPDF] renderSummaryPdf failed — html2canvas/jsPDF error:", e);
+    return;
+  }
+  try {
     const fd = new FormData();
     fd.append("studentName", studentName);
     fd.append("studentIdentifier", studentIdentifier);
     fd.append("documents", JSON.stringify(uploadedDocuments || []));
-    fd.append("summaryPdf", blob, fname);
+    fd.append("summaryPdf", rendered.blob, rendered.fname);
 
     const res = await fetch(`${API_URL}/api/student-summary`, { method: "POST", body: fd });
+    if (!res.ok) {
+      console.error(`[SummaryPDF] upload request failed — HTTP ${res.status} ${res.statusText}`);
+      return;
+    }
     const d = await res.json();
     if (d.success) console.log("[SummaryPDF] saved:", d.webViewLink);
-    else console.warn("[SummaryPDF] failed:", d.error);
+    else console.error("[SummaryPDF] backend rejected it:", d.error);
   } catch (e) {
-    console.warn("[generateAndUploadSummaryPDF] error:", e.message);
+    console.error("[SummaryPDF] network/upload error — request may never have reached the backend:", e);
   }
 }
 
