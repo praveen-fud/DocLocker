@@ -2986,6 +2986,243 @@
   }
 }
 
+/* â”€â”€ Bank Activity Report â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.bar-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.bar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-dim);
+  flex-wrap: wrap;
+}
+.bar-toolbar-filters {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* -- Bank selector rail: larger tiles than the Banks & Lenders chip row,
+   since this is a report's own primary filter, not a secondary control. -- */
+.bar-bank-rail {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding: 16px 20px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border-dim);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.bar-bank-rail::-webkit-scrollbar { height: 6px; }
+
+.bar-bank-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 92px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease, background 0.16s ease;
+}
+.bar-bank-tile:hover {
+  border-color: var(--border-accent);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(15, 27, 61, 0.08);
+}
+.bar-bank-tile.active {
+  background: var(--primary-tint);
+  border-color: var(--primary);
+  box-shadow: 0 6px 18px rgba(20, 104, 199, 0.16);
+}
+.bar-bank-tile-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  border: 1px solid var(--border-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.bar-bank-tile-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 4px;
+}
+.bar-bank-tile-logo--all {
+  color: var(--primary);
+  background: var(--primary-tint-strong);
+  border-color: var(--border-accent);
+}
+.bar-bank-tile-name {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--text-primary);
+  text-align: center;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bar-bank-tile-count {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-dim);
+  border-radius: 100px;
+  padding: 1px 8px;
+}
+.bar-bank-tile.active .bar-bank-tile-count {
+  color: var(--primary);
+  background: #fff;
+  border-color: var(--border-accent);
+}
+
+/* -- Activity timeline: same rail+marker idea as .live-feed-row, but a
+   full report row gets more room and a second line (bank tags). -- */
+.bar-feed {
+  padding: 8px 12px;
+}
+.bar-row {
+  display: flex;
+  align-items: stretch;
+  gap: 13px;
+  padding: 10px 10px 22px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+}
+.bar-row:last-child {
+  padding-bottom: 10px;
+}
+.bar-row:hover {
+  background: var(--bg-raised);
+}
+.bar-row-rail {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+.bar-row-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(135deg, var(--tone), var(--tone-dark));
+  box-shadow: 0 0 0 3px #fff, 0 2px 6px var(--tone-soft);
+  z-index: 1;
+}
+.bar-row-line {
+  width: 2px;
+  flex: 1;
+  min-height: 12px;
+  margin-top: 2px;
+  background: linear-gradient(#cbd5e1, rgba(203, 213, 225, 0));
+}
+.bar-row:last-child .bar-row-line {
+  display: none;
+}
+.bar-row-body {
+  flex: 1;
+  min-width: 0;
+  padding-top: 3px;
+}
+.bar-row-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.bar-row-action {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+.bar-row-banks {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bar-row-bank-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 100px;
+  padding: 2px 9px 2px 4px;
+}
+.bar-row-bank-tag img {
+  width: 15px;
+  height: 15px;
+  border-radius: 3px;
+  object-fit: contain;
+  background: #fff;
+  flex-shrink: 0;
+}
+.bar-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 5px;
+  flex-wrap: wrap;
+}
+.bar-row-actor {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.bar-row-dot {
+  flex-shrink: 0;
+}
+.bar-role-pill {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 100px;
+  flex-shrink: 0;
+}
+.bar-role-pill.role-student    { color: var(--blue);   background: rgba(25,118,210,0.12); }
+.bar-role-pill.role-advisor    { color: var(--purple); background: rgba(124,58,237,0.12); }
+.bar-role-pill.role-banker     { color: #0b7a6e;       background: rgba(15,159,143,0.12); }
+.bar-role-pill.role-superadmin { color: #c2410c;       background: rgba(234,88,12,0.12); }
+
+@media (max-width: 720px) {
+  .bar-bank-tile { min-width: 76px; padding: 10px; }
+  .bar-bank-tile-name { max-width: 76px; }
+  .bar-row-top { flex-direction: column; }
+}
+
 /* -- Student rows -------------------------------------------------- */
 .student-block {
   border-bottom: 1px solid var(--border-dim);
@@ -3482,6 +3719,11 @@
   justify-content: center;
   color: var(--teal);
   flex-shrink: 0;
+}
+.file-icon-generated {
+  background: var(--primary-tint);
+  border-color: var(--primary-tint-strong);
+  color: var(--primary);
 }
 .file-meta {
   flex: 1;

@@ -1321,7 +1321,17 @@ function DocumentsTab({ student }) {
 
 function FilesTab({ student }) {
   const files = getAllUploadedFiles(student.uploads);
-  if (!files.length) {
+  // Student_Summary.pdf / Eligibility_Report.pdf aren't part of student.uploads
+  // at all — they're auto-generated server-side into the student's "Others"
+  // Drive folder on every save, never recorded into the upload-field state
+  // getAllUploadedFiles reads. Listed separately here so staff can actually
+  // find them without leaving the app to browse Drive by hand.
+  const generated = [
+    student.summaryPdf && { key: "summary", name: "Application Summary", tag: "Auto-generated", ...student.summaryPdf },
+    student.eligibilityPdf && { key: "eligibility", name: "Eligibility Report", tag: "Auto-generated", ...student.eligibilityPdf },
+  ].filter(Boolean);
+
+  if (!files.length && !generated.length) {
     return (
       <div className="detail-body">
         <div className="admin-empty" style={{ padding: "40px 20px" }}>
@@ -1335,31 +1345,65 @@ function FilesTab({ student }) {
 
   return (
     <div className="detail-body">
-      <p className="section-heading">
-        <FileText size={13} /> {files.length} Uploaded File{files.length !== 1 ? "s" : ""}
-      </p>
-      <div className="files-list">
-        {files.map((file, idx) => (
-          <div key={idx} className="file-item">
-            <div className="file-icon"><FileText size={14} /></div>
-            <div className="file-meta">
-              <div className="file-name">{file.name}</div>
-              <div className="file-section-tag">{file.section}</div>
-            </div>
-            {file.webViewLink && (
-              <a
-                href={file.webViewLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="file-link"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <ExternalLink size={12} /> View
-              </a>
-            )}
+      {generated.length > 0 && (
+        <>
+          <p className="section-heading">
+            <ScanText size={13} /> Generated Reports
+          </p>
+          <div className="files-list" style={{ marginBottom: 18 }}>
+            {generated.map((file) => (
+              <div key={file.key} className="file-item">
+                <div className="file-icon file-icon-generated"><ScanText size={14} /></div>
+                <div className="file-meta">
+                  <div className="file-name">{file.name}</div>
+                  <div className="file-section-tag">{file.tag}</div>
+                </div>
+                {file.webViewLink && (
+                  <a
+                    href={file.webViewLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="file-link"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink size={12} /> View
+                  </a>
+                )}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      )}
+
+      {files.length > 0 && (
+        <>
+          <p className="section-heading">
+            <FileText size={13} /> {files.length} Uploaded File{files.length !== 1 ? "s" : ""}
+          </p>
+          <div className="files-list">
+            {files.map((file, idx) => (
+              <div key={idx} className="file-item">
+                <div className="file-icon"><FileText size={14} /></div>
+                <div className="file-meta">
+                  <div className="file-name">{file.name}</div>
+                  <div className="file-section-tag">{file.section}</div>
+                </div>
+                {file.webViewLink && (
+                  <a
+                    href={file.webViewLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="file-link"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink size={12} /> View
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -2792,7 +2836,10 @@ function AdminSidebar({
     { id: "banks", label: "Banks & Lenders", icon: Landmark, roles: ["superadmin", "advisor"] },
     {
       id: "reports", label: "Reports", icon: BarChart3, roles: ["superadmin"],
-      subItems: [{ label: "Audit Log", onSelect: () => { setSection("audit"); onCloseMobile?.(); } }],
+      subItems: [
+        { label: "Audit Log", onSelect: () => { setSection("audit"); onCloseMobile?.(); } },
+        { label: "Bank Activity", onSelect: () => { setSection("bankActivity"); onCloseMobile?.(); } },
+      ],
     },
   ];
   const visibleNav = NAV_ITEMS.filter((n) => n.roles.includes(adminRole));
@@ -2812,7 +2859,7 @@ function AdminSidebar({
         <nav className="admin-sidebar-nav">
           <p className="admin-sidebar-nav-label">Workspace</p>
           {visibleNav.map(({ id, label, icon: Icon, subItems }) => {
-            const isActiveSection = id === "reports" ? section === "audit" : section === id;
+            const isActiveSection = id === "reports" ? (section === "audit" || section === "bankActivity") : section === id;
             const isExpanded = expanded === id;
             return (
               <div key={id}>
@@ -3205,6 +3252,229 @@ function AuditLogSection() {
               </span>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Bank Activity Report ────────────────────────────────────────────────
+// Every audited action that can be tied to a bank/lender — a student's own
+// saves/uploads/summary generation, an advisor's loan-status update, a
+// banker's own access grant/revoke — grouped and filterable by that bank.
+// Audit entries only ever carry a student folder-key string, never a bank,
+// so the bank is derived per entry rather than read directly:
+//   - banker_access.grant/revoke already names the banker in its own
+//     details, so its bank is exact even after a later revoke changes the
+//     student's CURRENT sharedBankers state.
+//   - everything else (saves, uploads, summaries, loan-status updates) is
+//     resolved via the target student's current sharedBankers -> banker ->
+//     bank chain — the only association DocLocker actually records.
+// An entry with no resolvable bank (e.g. a deleted student, or a student
+// never yet shared with any banker) is simply left out of this report; the
+// full unfiltered trail is still on the Audit Log page.
+const BANK_ACTIVITY_ACTION_LABELS = {
+  ...AUDIT_ACTION_LABELS,
+  "document.upload": "Uploaded a document",
+  "student.save": "Saved application details",
+  "summary.generate": "Generated application summary",
+};
+function bankActivityActionLabel(action) {
+  return BANK_ACTIVITY_ACTION_LABELS[action] || action;
+}
+const BANK_ACTIVITY_ACTION_ICON = {
+  ...AUDIT_ACTION_ICON,
+  document: Upload,
+  summary: FileText,
+};
+// Color-coded by WHO acted rather than by action — a single bank's feed
+// mixes student/advisor/banker/superadmin activity, and telling those
+// apart at a glance is this report's whole point.
+const ACTOR_ROLE_TONE = { student: "blue", advisor: "violet", banker: "teal", superadmin: "orange" };
+
+// Mirrors Backend/src/services/drive.js's sanitize() exactly — this is the
+// only way to reconstruct the same folder-key string the backend computed
+// for entry.target, since the frontend never receives that key directly.
+function sanitizeFolderKeyPart(str) {
+  return String(str || "Unknown").replace(/[^a-zA-Z0-9 _\-.]/g, "_").trim() || "Unknown";
+}
+function studentAuditTarget(s) {
+  return sanitizeFolderKeyPart(buildFolderKey(s.name, s.email || s.phone || ""));
+}
+
+function BankActivityReportSection({ students, bankers }) {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
+  const [selectedBank, setSelectedBank] = useState("all");
+  const [actionFilter, setActionFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState("all");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErr("");
+    try {
+      const { entries: fetched } = await getAuditLog({ limit: 500 });
+      setEntries(fetched);
+    } catch (e) {
+      setErr("Could not load activity: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
+
+  const bankersByName = new Map(bankers.map((b) => [b.name, b]));
+  const studentByTarget = new Map(students.map((s) => [studentAuditTarget(s), s]));
+
+  const classified = entries
+    .map((e) => {
+      let banks = [];
+      if (e.action === "banker_access.grant" || e.action === "banker_access.revoke") {
+        const bank = bankersByName.get(e.details?.banker || "")?.bank;
+        if (bank) banks = [bank];
+      } else {
+        const student = studentByTarget.get(e.target);
+        if (student) {
+          const set = new Set();
+          (student.sharedBankers || []).forEach((name) => {
+            const bank = bankersByName.get(name)?.bank;
+            if (bank) set.add(bank);
+          });
+          banks = Array.from(set);
+        }
+      }
+      if (!banks.length) return null;
+      return { ...e, banks, studentName: studentByTarget.get(e.target)?.name || null };
+    })
+    .filter(Boolean);
+
+  const bankCounts = new Map();
+  classified.forEach((e) => e.banks.forEach((b) => bankCounts.set(b, (bankCounts.get(b) || 0) + 1)));
+  const uniqueBanks = Array.from(bankCounts.keys()).sort();
+
+  const roleOptions = Array.from(new Set(classified.map((e) => e.role).filter(Boolean))).sort();
+  const actionOptions = Array.from(new Set(classified.map((e) => e.action))).sort();
+
+  const visible = classified.filter((e) =>
+    (selectedBank === "all" || e.banks.includes(selectedBank)) &&
+    (actionFilter === "all" || e.action === actionFilter) &&
+    (roleFilter === "all" || e.role === roleFilter)
+  );
+
+  return (
+    <div className="bar-panel animate-fade-in">
+      <div className="bar-toolbar">
+        <div className="bar-toolbar-filters">
+          <div className="audit-toolbar-filter">
+            <Filter size={13} />
+            <select className="advisor-filter-select" value={actionFilter} onChange={(e) => setActionFilter(e.target.value)}>
+              <option value="all">All actions</option>
+              {actionOptions.map((a) => <option key={a} value={a}>{bankActivityActionLabel(a)}</option>)}
+            </select>
+          </div>
+          <div className="audit-toolbar-filter">
+            <UsersIcon size={13} />
+            <select className="advisor-filter-select" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+              <option value="all">Everyone</option>
+              {roleOptions.map((r) => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+            </select>
+          </div>
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={load} disabled={loading}>
+          <RefreshCw size={13} className={loading ? "spin" : ""} />
+          <span className="btn-label">Refresh</span>
+        </button>
+      </div>
+
+      {err && (
+        <div className="admin-error animate-fade-in">
+          <AlertCircle size={15} />{err}
+          <button className="close-err" onClick={() => setErr("")}><X size={13} /></button>
+        </div>
+      )}
+
+      <div className="bar-bank-rail">
+        <button
+          type="button"
+          className={`bar-bank-tile${selectedBank === "all" ? " active" : ""}`}
+          onClick={() => setSelectedBank("all")}
+        >
+          <span className="bar-bank-tile-logo bar-bank-tile-logo--all"><Building2 size={18} /></span>
+          <span className="bar-bank-tile-name">All Banks</span>
+          <span className="bar-bank-tile-count">{classified.length}</span>
+        </button>
+        {uniqueBanks.map((bank) => (
+          <button
+            type="button"
+            key={bank}
+            className={`bar-bank-tile${selectedBank === bank ? " active" : ""}`}
+            onClick={() => setSelectedBank(bank)}
+          >
+            <span className="bar-bank-tile-logo">
+              <img src={getBankLogo(bank)} alt="" onError={(e) => { e.target.style.display = "none"; }} />
+            </span>
+            <span className="bar-bank-tile-name">{bank}</span>
+            <span className="bar-bank-tile-count">{bankCounts.get(bank)}</span>
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="admin-loading">
+          <div className="loading-dots"><span /><span /><span /></div>
+          Loading bank activity…
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="admin-empty">
+          <div className="admin-empty-icon"><Landmark size={28} /></div>
+          <h3>No bank-linked activity yet</h3>
+          <p>Once a student is shared with a bank's officer, their saves, uploads, and status changes will show up here.</p>
+        </div>
+      ) : (
+        <div className="bar-feed">
+          {visible.map((e) => {
+            const prefix = e.action.split(".")[0];
+            const Icon = BANK_ACTIVITY_ACTION_ICON[prefix] || History;
+            const tone = ACTOR_ROLE_TONE[e.role] || "slate";
+            return (
+              <div key={e.id} className={`bar-row tone-${tone}`}>
+                <span className="bar-row-rail">
+                  <span className="bar-row-marker"><Icon size={13} /></span>
+                  <span className="bar-row-line" />
+                </span>
+                <div className="bar-row-body">
+                  <div className="bar-row-top">
+                    <p className="bar-row-action">{bankActivityActionLabel(e.action)}</p>
+                    <div className="bar-row-banks">
+                      {e.banks.map((b) => (
+                        <span key={b} className="bar-row-bank-tag">
+                          <img src={getBankLogo(b)} alt="" onError={(ev) => { ev.target.style.display = "none"; }} />
+                          {b}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="bar-row-meta">
+                    <span className={`bar-role-pill role-${e.role}`}>{e.role}</span>
+                    <span className="bar-row-actor">{e.actor}</span>
+                    {e.studentName && (
+                      <>
+                        <span className="bar-row-dot">·</span>
+                        {e.studentName}
+                      </>
+                    )}
+                    <span className="bar-row-dot">·</span>
+                    {new Date(e.ts).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -3610,6 +3880,7 @@ export default function Admin() {
     advisors: { eyebrow: roleEyebrow, title: "Advisors", sub: "Workload and progress by advisor" },
     banks:    { eyebrow: roleEyebrow, title: "Banks & Lenders", sub: "Manage loan officers and control which students each one can see" },
     audit:    { eyebrow: roleEyebrow, title: "Audit Log", sub: "Who did what, and when" },
+    bankActivity: { eyebrow: roleEyebrow, title: "Bank Activity", sub: "Student, advisor, and banker actions, grouped by lender" },
   };
   const activeMeta = SECTION_META[section] || SECTION_META.dashboard;
 
@@ -3727,6 +3998,10 @@ export default function Admin() {
         )}
 
         {section === "audit" && adminRole === "superadmin" && <AuditLogSection />}
+
+        {section === "bankActivity" && adminRole === "superadmin" && (
+          <BankActivityReportSection students={students} bankers={bankers} />
+        )}
 
         {section === "banks" && (
           <BankerAccessSection
