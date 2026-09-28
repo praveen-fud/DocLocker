@@ -576,7 +576,7 @@
 .admin-sidebar-link svg:first-child {
   flex-shrink: 0;
 }
-.admin-sidebar-link span:not(.admin-sidebar-link-dot) {
+.admin-sidebar-link-label {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -587,6 +587,21 @@
   height: 5px;
   border-radius: 50%;
   background: var(--primary);
+  flex-shrink: 0;
+}
+.admin-sidebar-link-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--warning);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
   flex-shrink: 0;
 }
 .admin-sidebar-link-ext {
@@ -1090,6 +1105,72 @@
 }
 @media (max-width: 480px) {
   .loan-stat-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* -- Banker-access-requests notification banner, top of the dashboard -- */
+.requests-notice {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  background: var(--warning-bg);
+  border: 1px solid rgba(234, 138, 0, 0.28);
+  border-radius: var(--radius-lg);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.requests-notice:hover {
+  box-shadow: var(--shadow-lift);
+  transform: translateY(-1px);
+}
+.requests-notice-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: rgba(234, 138, 0, 0.16);
+  color: var(--warning);
+}
+.requests-notice-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.requests-notice-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.requests-notice-sub {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+.requests-notice-cta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--warning);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .requests-notice { align-items: flex-start; }
+  .requests-notice-cta { display: none; }
 }
 
 /* -- Dashboard grid: 3/4 stats column + 1/4 activity log column ----- */
@@ -1673,7 +1754,8 @@
   align-items: center;
   gap: 14px;
   padding: 18px 22px;
-  background: linear-gradient(135deg, #1a6eb5 0%, #0f4c8a 100%);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-dim);
   flex-shrink: 0;
 }
 .bam-header-left {
@@ -1685,23 +1767,23 @@
 .bam-header-icon {
   width: 40px;
   height: 40px;
-  background: rgba(255,255,255,0.18);
+  background: var(--primary-tint);
   border-radius: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--primary);
   flex-shrink: 0;
 }
 .bam-title {
   font-size: 16px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-primary);
   margin: 0 0 2px;
 }
 .bam-subtitle {
   font-size: 12px;
-  color: rgba(255,255,255,0.72);
+  color: var(--text-muted);
   margin: 0;
 }
 .bam-header-actions {
@@ -1710,22 +1792,29 @@
   gap: 8px;
   flex-shrink: 0;
 }
-.bam-add-btn {
-  background: rgba(255,255,255,0.20) !important;
-  border: 1px solid rgba(255,255,255,0.30) !important;
-  color: #fff !important;
-  backdrop-filter: blur(4px);
-  transition: background 0.15s !important;
+.bam-header .icon-btn:hover { background: var(--bg-hover); }
+
+/* Access-requests header button + its pending-count badge */
+.bam-requests-btn { position: relative; }
+.bam-requests-btn.active {
+  background: var(--primary-tint);
+  border-color: var(--border-accent);
+  color: var(--primary);
 }
-.bam-add-btn:hover {
-  background: rgba(255,255,255,0.32) !important;
-}
-.bam-header .icon-btn {
-  background: rgba(255,255,255,0.15);
-  color: #fff;
+.bam-requests-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
   border-radius: 9px;
+  background: var(--warning);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
 }
-.bam-header .icon-btn:hover { background: rgba(255,255,255,0.28); }
 
 /* â”€â”€ Bank filter chips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .bam-bank-filters {
@@ -2212,6 +2301,23 @@
 .bam-grant-btn:hover:not(:disabled) { background: #bfdbfe; }
 .bam-grant-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
+/* Already requested for this banker, awaiting a superadmin's decision —
+   sits where the Grant button normally would, but isn't clickable. */
+.bam-pending-tag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid rgba(234, 138, 0, 0.28);
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .bam-search-wrap {
   position: relative;
   display: flex;
@@ -2291,6 +2397,7 @@
   flex-shrink: 0;
 }
 .bam-form-titlebar-icon.add { background: #dbeafe; color: #1d4ed8; }
+.bam-form-titlebar-icon.requests { background: var(--warning-bg); color: var(--warning); }
 .bam-edit-logo-wrap {
   width: 44px;
   height: 44px;
@@ -2435,6 +2542,228 @@
 }
 .bam-cancel-btn:hover { background: #e2e8f0; }
 
+/* â”€â”€ Access Requests panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.bam-requests-panel {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.bam-requests-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 16px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  width: fit-content;
+}
+.bam-requests-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.bam-requests-tab:hover { color: var(--text-primary); }
+.bam-requests-tab.active {
+  background: var(--bg-surface);
+  color: var(--primary);
+  box-shadow: var(--shadow-card);
+}
+.bam-requests-tab-count {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.bam-requests-tab.active .bam-requests-tab-count { color: var(--primary); }
+
+.bam-requests-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 20px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+.bam-requests-empty svg { opacity: 0.4; }
+
+.bam-requests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bam-request-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--border-dim);
+  transition: border-color 0.15s;
+}
+.bam-request-card.status-pending { border-left-color: var(--warning); }
+.bam-request-card.status-approved { border-left-color: var(--success); }
+.bam-request-card.status-rejected { border-left-color: var(--danger); }
+
+.bam-request-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bam-request-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.bam-request-top .bam-student-name {
+  display: inline;
+  font-size: 13.5px;
+}
+.bam-request-arrow {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.bam-request-banker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.bam-request-bank-logo {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  object-fit: contain;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-dim);
+  flex-shrink: 0;
+}
+.bam-request-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.bam-request-status-badge.status-pending {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.bam-request-status-badge.status-approved {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.bam-request-status-badge.status-rejected {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.bam-request-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.bam-request-meta strong { color: var(--text-secondary); font-weight: 600; }
+.bam-request-note {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  font-style: italic;
+  background: var(--bg-raised);
+  border-radius: 7px;
+  padding: 6px 10px;
+  margin: 0;
+}
+
+.bam-request-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.bam-approve-btn,
+.bam-reject-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 13px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+}
+.bam-approve-btn {
+  background: var(--success-bg);
+  color: var(--success);
+  border-color: rgba(22, 163, 74, 0.28);
+}
+.bam-approve-btn:hover:not(:disabled) { background: rgba(22, 163, 74, 0.18); }
+.bam-reject-btn {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-color: rgba(220, 38, 38, 0.24);
+}
+.bam-reject-btn:hover:not(:disabled) { background: rgba(220, 38, 38, 0.16); }
+.bam-approve-btn:disabled, .bam-reject-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.bam-reject-draft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.bam-reject-input {
+  flex: 1;
+  min-width: 160px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  outline: none;
+}
+.bam-reject-input:focus { border-color: var(--danger); }
+.bam-reject-draft-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 560px) {
+  .bam-request-status-badge { margin-left: 0; }
+}
+
 /* Bank logo mini in GrantBankAccessModal checklist */
 .bank-check-row {
   display: flex;
@@ -2454,6 +2783,26 @@
   justify-content: center;
 }
 .bank-logo-mini { width: 100%; height: 100%; object-fit: contain; }
+
+/* A banker row an advisor has already requested — awaiting superadmin
+   review, so the checkbox is locked and the row reads as "in flight"
+   rather than either granted or ungranted. */
+.bank-check-row.is-pending {
+  opacity: 0.85;
+}
+.bank-check-row.is-pending .bank-checkbox {
+  cursor: not-allowed;
+}
+.team-role-badge.pending-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  border: 1px solid rgba(234, 138, 0, 0.28);
+  text-transform: none;
+  letter-spacing: 0;
+}
 
 /* Responsive */
 @media (max-width: 680px) {

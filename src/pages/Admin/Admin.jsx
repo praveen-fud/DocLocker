@@ -315,6 +315,35 @@ function PartnerBanksShowcase() {
   );
 }
 
+// Dashboard-top notification for banker-access requests — renders nothing
+// once the queue is empty, so it never sits around as a permanent, ignorable
+// fixture. Superadmin gets an actionable "go review these" framing; an
+// advisor gets a quieter "here's where things stand" one, since they can't
+// decide their own requests.
+function BankerRequestsNotice({ count, adminRole, onOpen }) {
+  if (!count) return null;
+  return (
+    <button type="button" className="requests-notice animate-fade-in" onClick={onOpen}>
+      <span className="requests-notice-icon"><Hourglass size={18} /></span>
+      <span className="requests-notice-body">
+        <span className="requests-notice-title">
+          {adminRole === "superadmin"
+            ? `${count} banker access request${count === 1 ? "" : "s"} awaiting your review`
+            : `${count} of your banker access request${count === 1 ? "" : "s"} still pending approval`}
+        </span>
+        <span className="requests-notice-sub">
+          {adminRole === "superadmin"
+            ? "An advisor asked to share a student's documents with a banker — approve or reject before it takes effect."
+            : "A superadmin needs to approve these before the banker gets access."}
+        </span>
+      </span>
+      <span className="requests-notice-cta">
+        {adminRole === "superadmin" ? "Review requests" : "View status"} <ArrowUpRight size={14} />
+      </span>
+    </button>
+  );
+}
+
 // A percentage-of-total trend line, not a fabricated "vs last month" figure
 // we have no historical snapshots to actually compute. Returns null (renders
 // nothing) rather than a misleading "0%" when the total itself is zero.
@@ -1858,25 +1887,42 @@ function DeleteModal({ name, deleting, onConfirm, onCancel }) {
 
 /* ─── Grant Bank Access Modal ─────────────────────────────────── */
 
-function GrantBankAccessModal({ student, onClose, onAccessChanged }) {
+function GrantBankAccessModal({ student, onClose, onAccessChanged, adminRole, onRequestSubmitted }) {
   const [bankers, setBankers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [shared, setShared] = useState(new Set(student.sharedBankers || []));
+  // Bankers an advisor has already requested for this student, still
+  // awaiting a superadmin's decision — seeded from the pending-requests
+  // queue so the "Pending approval" state survives closing/reopening this
+  // modal, not just the current toggle click.
+  const [pending, setPending] = useState(new Set());
   const [togglingName, setTogglingName] = useState(null);
   const [error, setError] = useState("");
+
+  const identifier = student.email || student.phone || "";
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const r = await callAPI("GET", "/api/admins/bankers");
-        if (!cancelled && r.success) setBankers(r.bankers || []);
+        const [bankersRes, requestsRes] = await Promise.all([
+          callAPI("GET", "/api/admins/bankers"),
+          callAPI("GET", "/api/students/banker-access-requests?status=pending"),
+        ]);
+        if (cancelled) return;
+        if (bankersRes.success) setBankers(bankersRes.bankers || []);
+        if (requestsRes.success) {
+          const mine = (requestsRes.requests || []).filter(
+            (r) => r.studentName === student.name && r.studentIdentifier === identifier,
+          );
+          setPending(new Set(mine.map((r) => r.bankerName)));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [student.name, identifier]);
 
   const p = student.personalInfo || {};
   const excludedBank = p.priorBankApplied === "Yes"
@@ -1888,15 +1934,17 @@ function GrantBankAccessModal({ student, onClose, onAccessChanged }) {
     setTogglingName(bankerName);
     setError("");
     try {
-      const identifier = student.email || student.phone || "";
       const r = await callAPI("PUT", "/api/students/banker-access", {
         studentName: student.name, studentIdentifier: identifier, bankerName, grant,
       });
-      if (r.success) {
+      if (!r.success) {
+        setError(r.error || "Failed to update access.");
+      } else if (r.pending) {
+        setPending((prev) => new Set(prev).add(bankerName));
+        onRequestSubmitted?.();
+      } else {
         setShared(new Set(r.sharedBankers));
         onAccessChanged?.(student.name, r.sharedBankers);
-      } else {
-        setError(r.error || "Failed to update access.");
       }
     } catch (e) {
       setError(e.message || "Network error. Try again.");
@@ -1911,8 +1959,9 @@ function GrantBankAccessModal({ student, onClose, onAccessChanged }) {
         <div className="modal-icon"><Send size={28} /></div>
         <h3 className="bank-modal-title">Grant Bank Access</h3>
         <p className="bank-modal-desc">
-          Choose which banker accounts can log in and view <strong>{student.name}</strong>'s
-          documents. Access can be revoked at any time.
+          {adminRole === "advisor"
+            ? <>Choose which banker accounts should get access to <strong>{student.name}</strong>'s documents. A superadmin reviews each request before it takes effect.</>
+            : <>Choose which banker accounts can log in and view <strong>{student.name}</strong>'s documents. Access can be revoked at any time.</>}
         </p>
 
         {excludedBank && (
@@ -1931,26 +1980,33 @@ function GrantBankAccessModal({ student, onClose, onAccessChanged }) {
           </p>
         ) : (
           <div className="team-list bank-checklist">
-            {bankers.map((b) => (
-              <label key={b.name} className="team-row bank-check-row">
-                <input
-                  type="checkbox"
-                  className="bank-checkbox"
-                  checked={shared.has(b.name)}
-                  disabled={togglingName === b.name}
-                  onChange={() => toggleAccess(b.name)}
-                />
-                <div className="bank-logo-mini-wrap">
-                  <img src={getBankLogo(b.bank)} alt={b.bank || b.name} className="bank-logo-mini" onError={(e) => { e.target.style.display = "none"; }} />
-                </div>
-                <div className="team-info">
-                  <span className="team-name">{b.name}</span>
-                  <span className="team-role-badge banker">
-                    {togglingName === b.name ? "Updating…" : shared.has(b.name) ? "Access granted" : "No access"}
-                  </span>
-                </div>
-              </label>
-            ))}
+            {bankers.map((b) => {
+              const isPending = pending.has(b.name);
+              return (
+                <label key={b.name} className={`team-row bank-check-row${isPending ? " is-pending" : ""}`}>
+                  <input
+                    type="checkbox"
+                    className="bank-checkbox"
+                    checked={shared.has(b.name)}
+                    disabled={togglingName === b.name || isPending}
+                    onChange={() => toggleAccess(b.name)}
+                  />
+                  <div className="bank-logo-mini-wrap">
+                    <img src={getBankLogo(b.bank)} alt={b.bank || b.name} className="bank-logo-mini" onError={(e) => { e.target.style.display = "none"; }} />
+                  </div>
+                  <div className="team-info">
+                    <span className="team-name">{b.name}</span>
+                    <span className={`team-role-badge banker${isPending ? " pending-badge" : ""}`}>
+                      {togglingName === b.name
+                        ? "Updating…"
+                        : isPending
+                          ? <><Hourglass size={11} /> Pending approval</>
+                          : shared.has(b.name) ? "Access granted" : "No access"}
+                    </span>
+                  </div>
+                </label>
+              );
+            })}
           </div>
         )}
 
@@ -1966,7 +2022,7 @@ function GrantBankAccessModal({ student, onClose, onAccessChanged }) {
 
 /* ─── Banker Access + Management (unified) ─────────────────────── */
 
-function BankerAccessSection({ students, onAccessChanged, onBankersChanged }) {
+function BankerAccessSection({ students, onAccessChanged, onBankersChanged, adminRole, adminName, onRequestsChanged, panel, setPanel }) {
   // Bankers — fetched internally so add/edit/delete stays live
   const [allBankers, setAllBankers] = useState([]);
   const [bankersLoading, setBankersLoading] = useState(true);
@@ -1975,8 +2031,21 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged }) {
   const [bankFilter, setBankFilter] = useState("all");
   const [selectedName, setSelectedName] = useState(null);
 
-  // Panel: "access" | "add" | "edit"
-  const [panel, setPanel] = useState("access");
+  // Panel ("access" | "add" | "edit" | "requests") is lifted to Admin() so
+  // the dashboard's "N requests awaiting review" notification can deep-link
+  // straight into the Requests tab instead of just landing on the default
+  // access-management view.
+
+  // Access requests — advisor-initiated grants awaiting superadmin review.
+  // Superadmin sees every request; the backend scopes an advisor down to
+  // just their own, so this component doesn't need to filter by requester.
+  const [requests, setRequests] = useState([]);
+  const [requestsLoading, setRequestsLoading] = useState(true);
+  const [requestStatusFilter, setRequestStatusFilter] = useState("pending");
+  const [decidingId, setDecidingId] = useState(null);
+  const [rejectDraftId, setRejectDraftId] = useState(null);
+  const [rejectNote, setRejectNote] = useState("");
+  const [requestsError, setRequestsError] = useState("");
 
   // Add form
   const [addBank, setAddBank] = useState("");
@@ -2022,6 +2091,18 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged }) {
 
   useEffect(() => { fetchBankers(); }, [fetchBankers]);
 
+  const fetchRequests = useCallback(async () => {
+    setRequestsLoading(true);
+    try {
+      const r = await callAPI("GET", "/api/students/banker-access-requests");
+      if (r.success) setRequests(r.requests || []);
+    } catch { /* silent — the requests panel just shows nothing to review */ }
+    finally { setRequestsLoading(false); }
+  }, []);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { fetchRequests(); }, [fetchRequests]);
+
   // Derived: unique banks that have registered officers
   const uniqueBanks = Array.from(new Set(allBankers.map((b) => b.bank).filter(Boolean))).sort();
 
@@ -2053,6 +2134,16 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged }) {
   });
   const visibleAvailable = availableStudents.slice(0, 40);
 
+  // Requests data
+  const pendingRequests = requests.filter((r) => r.status === "pending");
+  const visibleRequests = requestStatusFilter === "all" ? requests : requests.filter((r) => r.status === requestStatusFilter);
+  // Students already requested (still pending) for the currently-selected
+  // banker — so the "Grant" list can show "Pending approval" instead of a
+  // clickable Grant button for them.
+  const pendingForSelected = new Set(
+    pendingRequests.filter((r) => r.bankerName === selectedName).map((r) => r.studentName),
+  );
+
   // Handlers
   const toggleAccess = async (student, grant) => {
     setTogglingName(student.name);
@@ -2062,15 +2153,59 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged }) {
       const r = await callAPI("PUT", "/api/students/banker-access", {
         studentName: student.name, studentIdentifier: identifier, bankerName: selectedName, grant,
       });
-      if (r.success) {
-        onAccessChanged?.(student.name, r.sharedBankers);
-      } else {
+      if (!r.success) {
         setAccessError(r.error || "Failed to update access.");
+      } else if (r.pending) {
+        await fetchRequests();
+        onRequestsChanged?.();
+      } else {
+        onAccessChanged?.(student.name, r.sharedBankers);
       }
     } catch (e) {
       setAccessError(e.message || "Network error.");
     } finally {
       setTogglingName(null);
+    }
+  };
+
+  const handleApprove = async (request) => {
+    setDecidingId(request.id);
+    setRequestsError("");
+    try {
+      const r = await callAPI("POST", `/api/students/banker-access-requests/${encodeURIComponent(request.id)}/approve`);
+      if (r.success) {
+        setRequests((prev) => prev.map((x) => (x.id === request.id ? r.request : x)));
+        onAccessChanged?.(request.studentName, r.sharedBankers);
+        onRequestsChanged?.();
+      } else {
+        setRequestsError(r.error || "Failed to approve request.");
+      }
+    } catch (e) {
+      setRequestsError(e.message || "Network error.");
+    } finally {
+      setDecidingId(null);
+    }
+  };
+
+  const handleReject = async (request) => {
+    setDecidingId(request.id);
+    setRequestsError("");
+    try {
+      const r = await callAPI("POST", `/api/students/banker-access-requests/${encodeURIComponent(request.id)}/reject`, {
+        note: rejectNote.trim() || undefined,
+      });
+      if (r.success) {
+        setRequests((prev) => prev.map((x) => (x.id === request.id ? r.request : x)));
+        setRejectDraftId(null);
+        setRejectNote("");
+        onRequestsChanged?.();
+      } else {
+        setRequestsError(r.error || "Failed to reject request.");
+      }
+    } catch (e) {
+      setRequestsError(e.message || "Network error.");
+    } finally {
+      setDecidingId(null);
     }
   };
 
@@ -2154,6 +2289,13 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged }) {
           </div>
         </div>
         <div className="bam-header-actions">
+          <button
+            className={`btn btn-secondary btn-sm bam-requests-btn${panel === "requests" ? " active" : ""}`}
+            onClick={() => setPanel(panel === "requests" ? "access" : "requests")}
+          >
+            <Hourglass size={13} /> Access Requests
+            {pendingRequests.length > 0 && <span className="bam-requests-count">{pendingRequests.length}</span>}
+          </button>
           {panel !== "add" && (
             <button className="btn btn-primary btn-sm bam-add-btn" onClick={openAdd}>
               <Plus size={13} /> Add Loan Officer
@@ -2324,18 +2466,25 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged }) {
                           {accessSearch ? "No matching students." : "All students already have access."}
                         </p>
                       ) : (
-                        visibleAvailable.map((s) => (
-                          <div key={s.name} className="bam-student-row">
-                            <div className="bam-student-avatar">{(s.name || "?")[0].toUpperCase()}</div>
-                            <div className="bam-student-info">
-                              <span className="bam-student-name">{s.name}</span>
-                              <span className="bam-student-contact">{s.email || s.phone || "—"}</span>
+                        visibleAvailable.map((s) => {
+                          const isPending = pendingForSelected.has(s.name);
+                          return (
+                            <div key={s.name} className="bam-student-row">
+                              <div className="bam-student-avatar">{(s.name || "?")[0].toUpperCase()}</div>
+                              <div className="bam-student-info">
+                                <span className="bam-student-name">{s.name}</span>
+                                <span className="bam-student-contact">{s.email || s.phone || "—"}</span>
+                              </div>
+                              {isPending ? (
+                                <span className="bam-pending-tag"><Hourglass size={11} /> Pending approval</span>
+                              ) : (
+                                <button className="bam-grant-btn" disabled={togglingName === s.name} onClick={() => toggleAccess(s, true)}>
+                                  {togglingName === s.name ? <RefreshCw size={11} className="spin" /> : "Grant"}
+                                </button>
+                              )}
                             </div>
-                            <button className="bam-grant-btn" disabled={togglingName === s.name} onClick={() => toggleAccess(s, true)}>
-                              {togglingName === s.name ? <RefreshCw size={11} className="spin" /> : "Grant"}
-                            </button>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                       {availableStudents.length > visibleAvailable.length && (
                         <p className="bam-more-hint">+{availableStudents.length - visibleAvailable.length} more — type to search</p>
@@ -2442,6 +2591,121 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged }) {
                     <button type="button" className="bam-cancel-btn" onClick={() => { setPanel("access"); setEditBanker(null); }}>Cancel</button>
                   </div>
                 </form>
+              </div>
+            )}
+
+            {/* ── Access Requests panel ── */}
+            {panel === "requests" && (
+              <div className="bam-requests-panel animate-fade-in">
+                <div className="bam-form-titlebar">
+                  <div className="bam-form-titlebar-icon requests"><Hourglass size={16} /></div>
+                  <div>
+                    <h3 className="bam-form-h">Access Requests</h3>
+                    <p className="bam-form-sub">
+                      {adminRole === "superadmin"
+                        ? "Review banker-access requests submitted by advisors before they take effect."
+                        : "Requests you've submitted, and whether they're still waiting on a superadmin."}
+                    </p>
+                  </div>
+                  <button className="icon-btn" onClick={() => setPanel("access")}><X size={16} /></button>
+                </div>
+
+                <div className="bam-requests-tabs">
+                  {[
+                    { id: "pending", label: "Pending", count: requests.filter((r) => r.status === "pending").length },
+                    { id: "approved", label: "Approved", count: requests.filter((r) => r.status === "approved").length },
+                    { id: "rejected", label: "Rejected", count: requests.filter((r) => r.status === "rejected").length },
+                    { id: "all", label: "All", count: requests.length },
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      className={`bam-requests-tab${requestStatusFilter === t.id ? " active" : ""}`}
+                      onClick={() => setRequestStatusFilter(t.id)}
+                    >
+                      {t.label} <span className="bam-requests-tab-count">{t.count}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {requestsError && <p className="bam-error-inline">{requestsError}</p>}
+
+                {requestsLoading ? (
+                  <div className="admin-loading bank-modal-loading">
+                    <div className="loading-dots"><span /><span /><span /></div>
+                  </div>
+                ) : visibleRequests.length === 0 ? (
+                  <div className="bam-requests-empty">
+                    <Hourglass size={28} />
+                    <p>{requestStatusFilter === "pending" ? "Nothing waiting on review." : "No requests here yet."}</p>
+                  </div>
+                ) : (
+                  <div className="bam-requests-list">
+                    {visibleRequests.map((r) => (
+                      <div key={r.id} className={`bam-request-card status-${r.status}`}>
+                        <div className="bam-student-avatar">{(r.studentName || "?")[0].toUpperCase()}</div>
+                        <div className="bam-request-body">
+                          <div className="bam-request-top">
+                            <span className="bam-student-name">{r.studentName}</span>
+                            <span className="bam-request-arrow">→</span>
+                            <span className="bam-request-banker">
+                              <img
+                                src={getBankLogo(allBankers.find((b) => b.name === r.bankerName)?.bank)}
+                                alt=""
+                                className="bam-request-bank-logo"
+                                onError={(e) => { e.target.style.display = "none"; }}
+                              />
+                              {r.bankerName}
+                            </span>
+                            <span className={`bam-request-status-badge status-${r.status}`}>
+                              {r.status === "pending" && <Hourglass size={11} />}
+                              {r.status === "approved" && <CheckCircle size={11} />}
+                              {r.status === "rejected" && <XCircle size={11} />}
+                              {r.status === "pending" ? "Pending" : r.status === "approved" ? "Approved" : "Rejected"}
+                            </span>
+                          </div>
+                          <p className="bam-request-meta">
+                            Requested by <strong>{r.requestedBy === adminName ? "you" : r.requestedBy}</strong> · {timeAgo(r.requestedAt)}
+                            {r.status !== "pending" && r.decidedBy && (
+                              <> · {r.status === "approved" ? "Approved" : "Rejected"} by <strong>{r.decidedBy}</strong> · {timeAgo(r.decidedAt)}</>
+                            )}
+                          </p>
+                          {r.note && <p className="bam-request-note">"{r.note}"</p>}
+
+                          {r.status === "pending" && adminRole === "superadmin" && (
+                            rejectDraftId === r.id ? (
+                              <div className="bam-reject-draft">
+                                <input
+                                  className="bam-reject-input"
+                                  placeholder="Reason (optional)"
+                                  value={rejectNote}
+                                  onChange={(e) => setRejectNote(e.target.value)}
+                                  autoFocus
+                                />
+                                <div className="bam-reject-draft-actions">
+                                  <button className="bam-del-yes" disabled={decidingId === r.id} onClick={() => handleReject(r)}>
+                                    {decidingId === r.id ? <RefreshCw size={10} className="spin" /> : "Confirm"}
+                                  </button>
+                                  <button className="bam-del-no" disabled={decidingId === r.id} onClick={() => { setRejectDraftId(null); setRejectNote(""); }}>
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="bam-request-actions">
+                                <button className="bam-approve-btn" disabled={decidingId === r.id} onClick={() => handleApprove(r)}>
+                                  {decidingId === r.id ? <RefreshCw size={11} className="spin" /> : <><CheckCircle size={12} /> Approve</>}
+                                </button>
+                                <button className="bam-reject-btn" disabled={decidingId === r.id} onClick={() => { setRejectDraftId(r.id); setRejectNote(""); }}>
+                                  <XCircle size={12} /> Reject
+                                </button>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -2806,6 +3070,7 @@ function AdminSidebar({
   onOpenSettings, onLogout,
   mobileOpen, onCloseMobile,
   setLoanStatusFilter, setDocFilter,
+  pendingBankerRequests = 0,
 }) {
   const [expanded, setExpanded] = useState(null);
 
@@ -2871,7 +3136,12 @@ function AdminSidebar({
                   }}
                 >
                   <Icon size={18} />
-                  <span>{label}</span>
+                  <span className="admin-sidebar-link-label">{label}</span>
+                  {id === "banks" && pendingBankerRequests > 0 && (
+                    <span className="admin-sidebar-link-badge" title={`${pendingBankerRequests} banker access request${pendingBankerRequests === 1 ? "" : "s"} awaiting review`}>
+                      {pendingBankerRequests > 99 ? "99+" : pendingBankerRequests}
+                    </span>
+                  )}
                   {subItems ? (
                     <ChevronRight size={14} className={`admin-sidebar-link-chevron${isExpanded ? " is-expanded" : ""}`} />
                   ) : (
@@ -3037,6 +3307,9 @@ const AUDIT_ACTION_LABELS = {
   "loan_status.update": "Updated loan status",
   "banker_access.grant": "Granted bank access",
   "banker_access.revoke": "Revoked bank access",
+  "banker_access.request": "Requested bank access",
+  "banker_access.approve": "Approved bank access request",
+  "banker_access.reject": "Rejected bank access request",
 };
 
 function auditActionLabel(action) {
@@ -3504,6 +3777,14 @@ export default function Admin() {
   const [consultancyFilter, setConsultancyFilter] = useState("");
   const [bankers, setBankers] = useState([]);
   const [allAdvisors, setAllAdvisors] = useState([]);
+  // Superadmin: count of ALL requests awaiting their review. Advisor: count
+  // of their OWN still-pending requests — the backend scopes the response by
+  // role, this just reads its length either way.
+  const [pendingBankerRequests, setPendingBankerRequests] = useState(0);
+  // Which sub-panel the Banks & Lenders page opens on. Lifted out of
+  // BankerAccessSection so the dashboard notification can jump straight to
+  // "requests" instead of the default access-management view.
+  const [bankPanel, setBankPanel] = useState("access");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   // Tracks the expanded row by a stable per-student key (driveUrl, falling
@@ -3560,13 +3841,25 @@ export default function Admin() {
     } catch { /* silent — advisor reassignment dropdown just won't show options */ }
   }, []);
 
+  const loadPendingBankerRequests = useCallback(async () => {
+    try {
+      const r = await callAPI("GET", "/api/students/banker-access-requests?status=pending");
+      if (r.success) setPendingBankerRequests((r.requests || []).length);
+    } catch { /* silent — sidebar badge just won't show a count */ }
+  }, []);
+
   useEffect(() => {
     if (!isAdmin) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadStudents();
     void loadBankers();
     void loadAdvisors();
-  }, [isAdmin, loadStudents, loadBankers, loadAdvisors]);
+    void loadPendingBankerRequests();
+    // Light polling so the sidebar badge reflects requests decided (or filed)
+    // from another admin's session too, same cadence as LiveActivityFeed.
+    const id = setInterval(loadPendingBankerRequests, 30000);
+    return () => clearInterval(id);
+  }, [isAdmin, loadStudents, loadBankers, loadAdvisors, loadPendingBankerRequests]);
 
   // Deletes by the actual student object (not by name — display names are
   // not unique, e.g. two students can share a name, or a corrupted meta
@@ -3897,6 +4190,7 @@ export default function Admin() {
         onCloseMobile={() => setMobileNavOpen(false)}
         setLoanStatusFilter={setLoanStatusFilter}
         setDocFilter={setFilter}
+        pendingBankerRequests={pendingBankerRequests}
       />
 
     <div className="admin-page admin-page--shell">
@@ -3971,6 +4265,12 @@ export default function Admin() {
 
         {section === "dashboard" && (
           <>
+            <BankerRequestsNotice
+              count={pendingBankerRequests}
+              adminRole={adminRole}
+              onOpen={() => { setSection("banks"); setBankPanel("requests"); }}
+            />
+
             {/* Financing partner banks — full width, scrolling strip */}
             <PartnerBanksShowcase />
 
@@ -4008,6 +4308,11 @@ export default function Admin() {
             students={scopedStudents}
             onAccessChanged={handleAccessChanged}
             onBankersChanged={loadBankers}
+            adminRole={adminRole}
+            adminName={adminName}
+            onRequestsChanged={loadPendingBankerRequests}
+            panel={bankPanel}
+            setPanel={setBankPanel}
           />
         )}
 
@@ -4282,6 +4587,8 @@ export default function Admin() {
           student={bankStudent}
           onClose={() => setBankStudent(null)}
           onAccessChanged={handleAccessChanged}
+          adminRole={adminRole}
+          onRequestSubmitted={loadPendingBankerRequests}
         />
       )}
 
