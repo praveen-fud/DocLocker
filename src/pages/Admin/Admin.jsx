@@ -53,6 +53,7 @@ import {
   Hourglass,
   Wallet,
   MinusCircle,
+  ScanSearch,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter, recoverMetaFromPdf, restoreMeta, buildFolderKey, getAuditLog, getDownloadAllUrl, getFileProxyUrl } from "../../utils/driveApi";
@@ -61,6 +62,7 @@ import { BANK_OPTIONS, getBankLogo } from "../../utils/bankOptions";
 import logoImg from "../../assets/logo.jpeg";
 import heroImg from "../../assets/bg.png";
 import "./Admin.css";
+import DocumentReader from "./DocumentReader";
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
 
@@ -3099,6 +3101,7 @@ function AdminSidebar({
       })),
     },
     { id: "banks", label: "Banks & Lenders", icon: Landmark, roles: ["superadmin", "advisor"] },
+    { id: "docReader", label: "Document Reader", icon: ScanSearch, roles: ["superadmin", "advisor"] },
     {
       id: "reports", label: "Reports", icon: BarChart3, roles: ["superadmin"],
       subItems: [
@@ -4172,6 +4175,7 @@ export default function Admin() {
     },
     advisors: { eyebrow: roleEyebrow, title: "Advisors", sub: "Workload and progress by advisor" },
     banks:    { eyebrow: roleEyebrow, title: "Banks & Lenders", sub: "Manage loan officers and control which students each one can see" },
+    docReader: { eyebrow: roleEyebrow, title: "Document Reader", sub: "Extract structured data from a certificate, passport, Aadhaar or PAN card in seconds" },
     audit:    { eyebrow: roleEyebrow, title: "Audit Log", sub: "Who did what, and when" },
     bankActivity: { eyebrow: roleEyebrow, title: "Bank Activity", sub: "Student, advisor, and banker actions, grouped by lender" },
   };
@@ -4315,6 +4319,8 @@ export default function Admin() {
             setPanel={setBankPanel}
           />
         )}
+
+        {section === "docReader" && <DocumentReader />}
 
         {(section === "dashboard" || section === "students") && (
         <>

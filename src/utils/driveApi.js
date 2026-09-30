@@ -280,6 +280,29 @@ export function getDownloadAllUrl(studentName, studentIdentifier = '') {
   return `${API_URL}/api/students/${encodeURIComponent(folderKey)}/files/zip?${params.toString()}`;
 }
 
+// ── Document reader — certificate / passport / Aadhaar / PAN extraction ───────
+// Proxies through our backend (not called directly from the browser) so the
+// third-party service URL, timeout and rate limiting all live server-side.
+// Pure verification tool: nothing here is saved to Drive or attached to a
+// student record — the caller decides what, if anything, to do with the result.
+export async function extractDocument(docType, files, { consent } = {}) {
+  const formData = new FormData();
+  formData.append('doc_type', docType);
+  if (consent) formData.append('consent', 'yes');
+  files.forEach((f) => formData.append('files', f));
+
+  const res = await fetch(`${API_URL}/api/document-reader/extract`, {
+    method: 'POST',
+    headers: getAuthHeaders(), // no Content-Type — the browser sets the multipart boundary
+    body: formData,
+    signal: AbortSignal.timeout(125000),
+  });
+  let data;
+  try { data = await res.json(); } catch { throw new Error('Bad JSON response from document reader'); }
+  if (!data.success) throw new Error(data.error || 'Extraction failed');
+  return data.result;
+}
+
 // ── Audit log (superadmin only) ────────────────────────────────────────────────
 export async function getAuditLog({ action, actor, limit } = {}) {
   const params = {};
