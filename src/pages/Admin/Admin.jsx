@@ -59,7 +59,7 @@ import { useStudent } from "../../context/StudentContext";
 import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter, recoverMetaFromPdf, restoreMeta, buildFolderKey, getAuditLog, getDownloadAllUrl, getFileProxyUrl } from "../../utils/driveApi";
 import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields } from "../../context/schemas";
 import { BANK_OPTIONS, getBankLogo } from "../../utils/bankOptions";
-import logoImg from "../../assets/logo.png";
+import logoImg from "../../assets/logo.jpeg";
 import heroImg from "../../assets/bg.png";
 import "./Admin.css";
 import DocumentReader from "./DocumentReader";
