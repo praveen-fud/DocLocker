@@ -1,7 +1,7 @@
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { LogOut, LayoutDashboard, GraduationCap, Shield, Building2 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
-import logoImg from "../../assets/logo.jpeg";
+import logoImg from "../../assets/logo.png";
 import "./Navbar.css";
 
 export default function Navbar() {
