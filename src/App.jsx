@@ -41,9 +41,10 @@ function ProtectedBankerPortal() {
 function AppRoutes() {
   const location = useLocation();
   // The admin dashboard has its own topbar (search, notifications, account
-  // menu) — stacking the global site navbar above it duplicates chrome the
-  // admin layout already owns, so it's suppressed on that one route.
-  const hideGlobalNavbar = location.pathname === "/admin";
+  // menu), and the sign-in page is a full-bleed split layout with its own
+  // brand panel and "Back to home" link — the global navbar would duplicate
+  // chrome both already own.
+  const hideGlobalNavbar = location.pathname === "/admin" || location.pathname === "/admin-login";
   return (
     <>
       {!hideGlobalNavbar && <Navbar />}

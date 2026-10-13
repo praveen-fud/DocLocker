@@ -26,10 +26,9 @@ export default function Navbar() {
         {/* Brand Lockup System */}
         <Link to="/" className="navbar-brand-anchor">
           <div className="navbar-logo-lens-capsule">
-            <div className="navbar-lens-flare" />
             <img
               src={logoImg}
-              alt="FlyUrDream Premium Branding Logo"
+              alt="DocLocker"
               className="navbar-lens-image"
             />
           </div>

@@ -12,6 +12,7 @@
 import jsPDF from "jspdf";
 import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields } from "../context/schemas";
 import "./summaryPdfTemplate.css";
+import logoIcon from "../assets/logo.png";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "";
 
@@ -394,7 +395,7 @@ function renderHero(model) {
   return `
     <div class="hero">
       <div class="hero-top">
-        <div class="logo-card"><span class="logo-fallback">${esc(model.companyName)}</span></div>
+        <div class="logo-card"><img class="logo-icon" src="${logoIcon}" alt="" /><span class="logo-fallback">${esc(model.companyName)}</span></div>
         ${model.student.loanTrack ? `
         <div class="track-badge">
           <div class="l">Loan Track For</div>
@@ -800,6 +801,8 @@ async function renderSummaryPdf(model) {
   if (document.fonts?.ready) {
     await document.fonts.ready;
   }
+  // Same for the logo — a capture taken before it decodes prints a blank box.
+  await Promise.all([...container.querySelectorAll("img")].map((img) => img.decode().catch(() => {})));
 
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const PW = doc.internal.pageSize.getWidth();

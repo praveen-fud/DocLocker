@@ -1,6 +1,22 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Shield, Eye, EyeOff, LogIn, Sparkles, RefreshCw } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  Eye,
+  EyeOff,
+  LogIn,
+  Sparkles,
+  RefreshCw,
+  User,
+  Lock,
+  AlertCircle,
+  ArrowLeft,
+  ScanText,
+  ShieldCheck,
+  Landmark,
+  History,
+} from "lucide-react";
+import logoMark from "../../assets/logo-mark.webp";
+import { BANK_OPTIONS } from "../../utils/bankOptions";
 import { useStudent } from "../../context/StudentContext";
 import "./AdminLogin.css";
 
@@ -13,6 +29,51 @@ async function apiPost(path, body) {
     body: JSON.stringify(body),
   });
   return res.json();
+}
+
+// What DocLocker actually does, in the order a student's file moves through
+// it — shown on the brand panel instead of generic marketing copy.
+const FLOW = [
+  { icon: ScanText,    title: "Documents read for you",       text: "Passport, Aadhaar, PAN and marksheets fill the application automatically." },
+  { icon: ShieldCheck, title: "Names checked across every ID", text: "Mismatches are flagged before a bank ever sees the file." },
+  { icon: Landmark,    title: "Shared with the right lender",  text: "Bank officers see only the students they're given access to." },
+];
+
+const LENDERS = BANK_OPTIONS.filter((b) => b.value !== "Others").slice(0, 6);
+
+function Field({ id, label, icon: Icon, type = "text", value, onChange, placeholder, autoComplete, autoFocus, trailing }) {
+  return (
+    <div className="al-field">
+      <label htmlFor={id}>{label}</label>
+      <div className="al-input-wrap">
+        <Icon size={17} className="al-input-icon" aria-hidden="true" />
+        <input
+          id={id}
+          className="al-input"
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          autoComplete={autoComplete}
+          autoFocus={autoFocus}
+        />
+        {trailing}
+      </div>
+    </div>
+  );
+}
+
+function PasswordToggle({ shown, onToggle }) {
+  return (
+    <button
+      type="button"
+      className="al-reveal"
+      onClick={onToggle}
+      aria-label={shown ? "Hide password" : "Show password"}
+    >
+      {shown ? <EyeOff size={17} /> : <Eye size={17} />}
+    </button>
+  );
 }
 
 export default function AdminLogin() {
@@ -94,168 +155,173 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="admin-login-page page-bg">
-      <div className="admin-login-container animate-fade-in">
-
-        {view === "login" && (
-          <>
-            <div className="admin-login-icon">
-              <Shield size={32} />
+    <div className="al-page">
+      {/* ── Brand panel ───────────────────────────────────────────── */}
+      <aside className="al-brand" aria-label="About DocLocker">
+        <div className="al-brand-inner">
+          <div className="al-hero">
+            <div className="al-mark-wrap">
+              <span className="al-mark-halo" aria-hidden="true" />
+              <img src={logoMark} alt="" className="al-mark" width="168" height="168" />
             </div>
-            <h1>Admin Access</h1>
-            <p>
-              Enter your name and password to access the dashboard.
-              <br />
-              Advisors and bankers see only their own students.
+            <h2 className="al-wordmark">
+              <span className="al-wordmark-doc">Doc</span><span className="al-wordmark-locker">Locker</span>
+            </h2>
+            <p className="al-tagline">
+              Study abroad. <em>Funded</em>, not delayed.
             </p>
+          </div>
 
-            <form onSubmit={handleLogin} className="admin-login-form card">
-              <div className="input-group">
-                <label>Name</label>
-                <input
-                  className="input-field"
-                  type="text"
-                  placeholder="Your admin name"
-                  value={loginName}
-                  onChange={(e) => setLoginName(e.target.value)}
-                  autoFocus
-                  autoComplete="username"
-                />
-              </div>
-
-              <div className="input-group">
-                <label>Password</label>
-                <div className="password-wrap">
-                  <input
-                    className="input-field"
-                    type={showLoginPass ? "text" : "password"}
-                    placeholder="Enter your password"
-                    value={loginPass}
-                    onChange={(e) => setLoginPass(e.target.value)}
-                    autoComplete="current-password"
-                  />
-                  <button
-                    type="button"
-                    className="show-pass"
-                    onClick={() => setShowLoginPass(!showLoginPass)}
-                  >
-                    {showLoginPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+          <ol className="al-flow">
+            {FLOW.map(({ icon: Icon, title, text }, i) => (
+              <li key={title} className="al-flow-step" style={{ "--i": i }}>
+                <span className="al-flow-icon"><Icon size={18} /></span>
+                <div>
+                  <p className="al-flow-title">{title}</p>
+                  <p className="al-flow-text">{text}</p>
                 </div>
-              </div>
+              </li>
+            ))}
+          </ol>
+
+          <div className="al-lenders">
+            <p className="al-lenders-label">Lenders on DocLocker</p>
+            <div className="al-lenders-row">
+              {LENDERS.map((b) => (
+                <span key={b.value} className="al-lender" title={b.label}>
+                  <img src={b.logo} alt={b.label} loading="lazy" />
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* ── Form panel ────────────────────────────────────────────── */}
+      <main className="al-main">
+        <Link to="/" className="al-back">
+          <ArrowLeft size={15} /> Back to home
+        </Link>
+
+        <div className="al-form-wrap">
+          {/* Compact brand shown only when the brand panel is hidden (mobile) */}
+          <div className="al-mobile-brand" aria-hidden="true">
+            <img src={logoMark} alt="" />
+            <span><span className="al-wordmark-doc-dark">Doc</span><span className="al-wordmark-locker">Locker</span></span>
+          </div>
+
+          {view === "login" && (
+            <form onSubmit={handleLogin} className="al-form" noValidate>
+              <h1 className="al-title">Welcome back</h1>
+              <p className="al-sub">Sign in to manage students, documents and loan applications.</p>
+
+              <Field
+                id="al-name"
+                label="Name"
+                icon={User}
+                value={loginName}
+                onChange={setLoginName}
+                placeholder="Your account name"
+                autoComplete="username"
+                autoFocus
+              />
+              <Field
+                id="al-password"
+                label="Password"
+                icon={Lock}
+                type={showLoginPass ? "text" : "password"}
+                value={loginPass}
+                onChange={setLoginPass}
+                placeholder="Enter your password"
+                autoComplete="current-password"
+                trailing={<PasswordToggle shown={showLoginPass} onToggle={() => setShowLoginPass((s) => !s)} />}
+              />
 
               {error && (
-                <p className="form-error" style={{ color: "#ef4444", fontSize: 13, marginBottom: 12 }}>
-                  {error}
-                </p>
+                <div className="al-error" role="alert">
+                  <AlertCircle size={16} />
+                  <span>{error}</span>
+                </div>
               )}
 
-              <button
-                type="submit"
-                className="btn btn-primary"
-                style={{ width: "100%" }}
-                disabled={loading}
-              >
+              <button type="submit" className="al-submit" disabled={loading}>
                 {loading
-                  ? <><RefreshCw size={15} className="spin" /> Verifying…</>
-                  : <><LogIn size={16} /> Access Dashboard</>
-                }
+                  ? <><RefreshCw size={17} className="spin" /> Signing in…</>
+                  : <><LogIn size={17} /> Sign in</>}
               </button>
+
+              <p className="al-help">
+                Advisors and bank officers only see their own students. Need an account? Ask your super admin.
+              </p>
             </form>
+          )}
 
-            <p className="admin-hint">
-              Credentials are managed securely in Google Drive.
-              Contact your super admin if you need access.
-            </p>
-          </>
-        )}
+          {view === "setup" && (
+            <form onSubmit={handleSetup} className="al-form" noValidate>
+              <span className="al-setup-badge"><Sparkles size={14} /> First-time setup</span>
+              <h1 className="al-title">Set up DocLocker</h1>
+              <p className="al-sub">No accounts exist yet. Create the super admin account — you can add advisors and bank officers from Settings afterwards.</p>
 
-        {view === "setup" && (
-          <>
-            <div className="admin-login-icon" style={{ background: "linear-gradient(135deg, #059669, #065f46)" }}>
-              <Sparkles size={32} />
-            </div>
-            <h1>First-time Setup</h1>
-            <p>
-              No admin accounts exist yet. Create your super admin account to get started.
-            </p>
-
-            <form onSubmit={handleSetup} className="admin-login-form card">
-              <div className="input-group">
-                <label>Super Admin Name</label>
-                <input
-                  className="input-field"
-                  type="text"
-                  placeholder="e.g. Admin"
-                  value={setupName}
-                  onChange={(e) => setSetupName(e.target.value)}
-                  autoFocus
-                />
-              </div>
-
-              <div className="input-group">
-                <label>Password</label>
-                <div className="password-wrap">
-                  <input
-                    className="input-field"
-                    type={showSetupPass ? "text" : "password"}
-                    placeholder="Min. 6 characters"
-                    value={setupPass}
-                    onChange={(e) => setSetupPass(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="show-pass"
-                    onClick={() => setShowSetupPass(!showSetupPass)}
-                  >
-                    {showSetupPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="input-group">
-                <label>Confirm Password</label>
-                <div className="password-wrap">
-                  <input
-                    className="input-field"
-                    type={showSetupPass ? "text" : "password"}
-                    placeholder="Repeat password"
-                    value={setupConfirm}
-                    onChange={(e) => setSetupConfirm(e.target.value)}
-                  />
-                </div>
-              </div>
+              <Field
+                id="al-setup-name"
+                label="Super admin name"
+                icon={User}
+                value={setupName}
+                onChange={setSetupName}
+                placeholder="e.g. Admin"
+                autoComplete="username"
+                autoFocus
+              />
+              <Field
+                id="al-setup-password"
+                label="Password"
+                icon={Lock}
+                type={showSetupPass ? "text" : "password"}
+                value={setupPass}
+                onChange={setSetupPass}
+                placeholder="At least 6 characters"
+                autoComplete="new-password"
+                trailing={<PasswordToggle shown={showSetupPass} onToggle={() => setShowSetupPass((s) => !s)} />}
+              />
+              <Field
+                id="al-setup-confirm"
+                label="Confirm password"
+                icon={Lock}
+                type={showSetupPass ? "text" : "password"}
+                value={setupConfirm}
+                onChange={setSetupConfirm}
+                placeholder="Repeat the password"
+                autoComplete="new-password"
+              />
 
               {error && (
-                <p className="form-error" style={{ color: "#ef4444", fontSize: 13, marginBottom: 12 }}>
-                  {error}
-                </p>
+                <div className="al-error" role="alert">
+                  <AlertCircle size={16} />
+                  <span>{error}</span>
+                </div>
               )}
 
-              <button
-                type="submit"
-                className="btn btn-primary"
-                style={{ width: "100%" }}
-                disabled={loading}
-              >
+              <button type="submit" className="al-submit" disabled={loading}>
                 {loading
-                  ? <><RefreshCw size={15} className="spin" /> Creating…</>
-                  : <><Sparkles size={16} /> Create Super Admin</>
-                }
+                  ? <><RefreshCw size={17} className="spin" /> Creating…</>
+                  : <><Sparkles size={17} /> Create super admin</>}
+              </button>
+
+              <button
+                type="button"
+                className="al-link-btn"
+                onClick={() => { setView("login"); setError(""); }}
+              >
+                <ArrowLeft size={14} /> Back to sign in
               </button>
             </form>
+          )}
 
-            <button
-              className="admin-hint"
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b", marginTop: 8 }}
-              onClick={() => { setView("login"); setError(""); }}
-            >
-              ← Back to login
-            </button>
-          </>
-        )}
-
-      </div>
+          <p className="al-foot">
+            <History size={13} /> Every sign-in is recorded in the audit log.
+          </p>
+        </div>
+      </main>
     </div>
   );
 }
