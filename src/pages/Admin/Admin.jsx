@@ -63,6 +63,7 @@ import logoImg from "../../assets/logo.png";
 import heroImg from "../../assets/bg.png";
 import "./Admin.css";
 import DocumentReader from "./DocumentReader";
+import { buildIdentityReport } from "../../utils/identityCheck";
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
 
@@ -826,6 +827,228 @@ function RecoverMetaModal({ student, onClose, onRestored }) {
   );
 }
 
+// ─── Identity check (admin / advisor only) ────────────────────────────────────
+// Name, parents' names, DOB and gender as read from the student's passport /
+// Aadhaar / PAN / 12th certificate, compared against each other and against
+// what the student typed. Recomputed from the stored reads every time the
+// popup opens, so it reflects edits made after the student's last save.
+//
+// Laid out for a 3-second read: one verdict line, one plain sentence per
+// problem, then a details × documents table where only the cells that
+// disagree are coloured.
+
+const BASIC_SCAN = " (basic scan)";
+const ENTRY_SOURCES = new Set(["Student's entry", "Entered name"]);
+
+function splitSource(label) {
+  return label.endsWith(BASIC_SCAN)
+    ? { name: label.slice(0, -BASIC_SCAN.length), basic: true }
+    : { name: label, basic: false };
+}
+
+const idcTitleCase = (s) => String(s).toLowerCase().replace(/(^|[\s\-'./])([a-z])/g, (m, p, c) => p + c.toUpperCase());
+
+// Same value, same look — "METTU SIDDARDHA" and "Mettu Siddardha" shouldn't
+// read as different at a glance when the check already says they match.
+function formatIdcValue(key, value) {
+  const v = String(value ?? "").trim();
+  if (!v) return "";
+  if (key === "dob") {
+    const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const dmy = v.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
+    const d = iso ? new Date(+iso[1], +iso[2] - 1, +iso[3]) : dmy ? new Date(+dmy[3], +dmy[2] - 1, +dmy[1]) : null;
+    return d && !Number.isNaN(d.getTime())
+      ? d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+      : v;
+  }
+  if (key === "gender") {
+    const g = v.toUpperCase();
+    if (g === "M" || g === "MALE") return "Male";
+    if (g === "F" || g === "FEMALE") return "Female";
+  }
+  return idcTitleCase(v);
+}
+
+const IDC_ICON = { match: CheckCircle, partial: AlertTriangle, mismatch: XCircle };
+
+function identityProblems(checks, prefix = "") {
+  const out = [];
+  for (const c of checks) {
+    if (c.status === "match") continue;
+    const ref = c.items[0];
+    for (const it of c.items.slice(1)) {
+      if (it.status === "match") continue;
+      out.push({ key: `${prefix}${c.key}-${it.source}`, status: it.status, label: `${prefix}${c.label}`, check: c, ref, item: it });
+    }
+  }
+  return out;
+}
+
+function IdentityTable({ checks }) {
+  const sources = [];
+  for (const c of checks) for (const it of c.items) if (!sources.includes(it.source)) sources.push(it.source);
+  sources.sort((a, b) => Number(ENTRY_SOURCES.has(a)) - Number(ENTRY_SOURCES.has(b)));
+
+  return (
+    <div className="idc-table-wrap">
+      <table className="idc-table">
+        <thead>
+          <tr>
+            <th scope="col">Detail</th>
+            {sources.map((s) => {
+              const { name, basic } = splitSource(s);
+              return (
+                <th scope="col" key={s}>
+                  {name}
+                  {basic && <span className="idc-basic" title="Read by the older text scanner — less reliable">basic scan</span>}
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {checks.map((c) => {
+            const RowIcon = IDC_ICON[c.status];
+            return (
+              <tr key={c.key}>
+                <th scope="row" className={`idc-detail idc-detail-${c.status}`}>
+                  <RowIcon size={14} /> {c.label}
+                </th>
+                {sources.map((s) => {
+                  const it = c.items.find((i) => i.source === s);
+                  if (!it) return <td key={s} className="idc-cell idc-cell-empty">—</td>;
+                  const problem = it.status === "partial" || it.status === "mismatch";
+                  const CellIcon = IDC_ICON[it.status];
+                  return (
+                    <td key={s} className={`idc-cell idc-cell-${it.status}`} title={it.note || undefined}>
+                      {problem && <CellIcon size={12} />}
+                      {formatIdcValue(c.key, it.value)}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function identityReportFor(student) {
+  return buildIdentityReport({
+    extractions: student.extractions || {},
+    personalInfo: student.personalInfo || {},
+    coCount: student.coApplicants || 0,
+    legacyDocs: student.uploadedDocuments || [],
+  });
+}
+
+function IdentityCheckSection({ student }) {
+  const report = identityReportFor(student);
+  const allChecks = [...report.applicant, ...report.coApplicants.flatMap((co) => co.checks)];
+  const usesBasicScan = allChecks.some((c) => c.items.some((i) => i.source.endsWith(BASIC_SCAN)));
+
+  const problems = [
+    ...identityProblems(report.applicant),
+    ...report.coApplicants.flatMap((co) => identityProblems(co.checks, `${co.label} · `)),
+  ];
+  const mismatches = problems.filter((p) => p.status === "mismatch").length;
+  const toCheck = problems.length - mismatches;
+  const docCount = new Set(
+    report.applicant
+      .flatMap((c) => c.items.map((i) => splitSource(i.source).name))
+      .filter((s) => !ENTRY_SOURCES.has(s)),
+  ).size;
+
+  let verdict;
+  let title;
+  let sub;
+  if (report.overall === "none") {
+    verdict = "none";
+    title = "Not checked yet";
+    sub = "Fills in once the student uploads at least two of Passport, Aadhaar, PAN and 12th certificate.";
+  } else if (!problems.length) {
+    verdict = "match";
+    title = "All details match";
+    sub = `Name, date of birth and parents' names agree across ${docCount} document${docCount === 1 ? "" : "s"} and the student's entries.`;
+  } else {
+    verdict = mismatches ? "mismatch" : "partial";
+    title = [
+      mismatches && `${mismatches} mismatch${mismatches === 1 ? "" : "es"}`,
+      toCheck && `${toCheck} detail${toCheck === 1 ? "" : "s"} to check`,
+    ].filter(Boolean).join(" · ");
+    sub = "Banks reject files when these don't agree — confirm with the student before sending to a lender.";
+  }
+  const VerdictIcon = verdict === "mismatch" ? XCircle : verdict === "partial" ? AlertTriangle : ShieldCheck;
+
+  const relationChecks = (co) => co.checks.filter((c) => c.key === "relation");
+  const tableChecks = (co) => co.checks.filter((c) => c.key !== "relation");
+
+  return (
+    <div className="rpt-section idc-section">
+      <div className="rpt-section-title">
+        <ShieldCheck size={13} /> Identity Check
+      </div>
+
+      <div className={`idc-verdict idc-verdict-${verdict}`}>
+        <span className="idc-verdict-icon"><VerdictIcon size={18} /></span>
+        <div>
+          <p className="idc-verdict-title">{title}</p>
+          <p className="idc-verdict-sub">{sub}</p>
+        </div>
+      </div>
+
+      {problems.length > 0 && (
+        <ul className="idc-problems">
+          {problems.map((p) => {
+            const Icon = IDC_ICON[p.status];
+            const k = p.check.key === "relation" ? "name" : p.check.key;
+            return (
+              <li key={p.key} className={`idc-problem idc-problem-${p.status}`}>
+                <Icon size={14} />
+                <span>
+                  <strong>{p.label}:</strong> {splitSource(p.item.source).name} has{" "}
+                  <em>{formatIdcValue(k, p.item.value)}</em>, {splitSource(p.ref.source).name} has{" "}
+                  <em>{formatIdcValue(k, p.ref.value)}</em>
+                  {p.item.note && <span className="idc-problem-note"> — {p.item.note.toLowerCase()}</span>}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {report.applicant.length > 0 && <IdentityTable checks={report.applicant} />}
+
+      {report.coApplicants.map((co) => (
+        <div key={co.index} className="idc-co">
+          <p className="idc-co-title">{co.label}</p>
+          {tableChecks(co).length > 0 && <IdentityTable checks={tableChecks(co)} />}
+          {relationChecks(co).map((c) => {
+            const Icon = IDC_ICON[c.status];
+            return (
+              <p key={c.key} className={`idc-relation idc-relation-${c.status}`}>
+                <Icon size={13} />
+                <span>
+                  {c.label} on the student's documents: <em>{formatIdcValue("name", c.items[0].value)}</em> · co-applicant's ID:{" "}
+                  <em>{formatIdcValue("name", c.items[1].value)}</em>
+                </span>
+              </p>
+            );
+          })}
+        </div>
+      ))}
+
+      {usesBasicScan && (
+        <p className="idc-footnote">
+          "Basic scan" columns come from the older text reader and can misread names — ask the student to re-upload those documents for an accurate check.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ReportModal({ student, onClose }) {
   const p = student.personalInfo || {};
   const { progress, verdict, verdictClass, verdictReasons } =
@@ -941,6 +1164,8 @@ function ReportModal({ student, onClose }) {
               </div>
             </div>
           </div>
+
+          <IdentityCheckSection student={student} />
 
           {/* CIBIL Scores */}
           {cibilEntries.length > 0 && (
@@ -1666,6 +1891,7 @@ function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDel
   const avatarVariant = getAvatarVariant(student.name);
   const files = getAllUploadedFiles(student.uploads);
   const consultancy = student.personalInfo?.consultantNameLoc || "";
+  const identity = identityReportFor(student);
 
   // The Govt ID / KYC section's "Passport Size Photo" upload — same field
   // the student's own portal collects. Only tried as an <img> when its
@@ -1718,6 +1944,14 @@ function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDel
                 title="Another student record shares this same email or phone number — likely a duplicate Drive folder from a double submission. Check both records before deleting either one."
               >
                 <AlertTriangle size={11} /> Possible duplicate
+              </span>
+            )}
+            {(identity.overall === "mismatch" || identity.overall === "partial") && (
+              <span
+                className={`student-meta-error-badge${identity.overall === "partial" ? " student-duplicate-badge" : ""}`}
+                title={`Details differ between this student's documents:\n• ${identity.issues.join("\n• ")}`}
+              >
+                <AlertTriangle size={11} /> {identity.overall === "mismatch" ? "Name/DOB mismatch" : "Details to check"}
               </span>
             )}
           </div>

@@ -1,5 +1,5 @@
 // Portal.jsx
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, createContext, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   BookOpen,
@@ -14,12 +14,21 @@ import {
   Trash2,
   FolderPlus,
   Sparkles,
+  AlertTriangle,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import { saveStudentMeta } from "../../utils/driveApi";
 import { generateAndUploadSummaryPDF } from "../../utils/summaryGenerator";
-import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields } from "../../context/schemas";
+import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields, countUploadedFields } from "../../context/schemas";
 import { extractPersonalAutoFill, extractCoApplicantAutoFill, getDocSourceLabel } from "../../utils/autoFillMap";
+import {
+  READER_SOURCE_LABEL,
+  applicantFieldsFromReader,
+  coApplicantFieldsFromReader,
+  mergeReaderFields,
+  mergeExtractions,
+} from "../../utils/readerAutoFill";
+import { buildIdentityReport } from "../../utils/identityCheck";
 import FileUploadBox from "../../components/FileUploadBox/FileUploadBox";
 import ProgressBar from "../../components/ProgressBar/ProgressBar";
 import "./Portal.css";
@@ -34,6 +43,11 @@ const SECTIONS = [
   { id: "personalRefs",label: "Personal Info & References", icon: Users     },
   { id: "otherDocs",   label: "Other Documents",            icon: FolderPlus},
 ];
+
+// Fields the document reader filled but wasn't sure about: { formKey: reason }.
+// Provided around the profile form so every input can show "Please check"
+// without threading another prop through each call site.
+const ReviewContext = createContext({});
 
 const CIBIL_HINT = (
   <span className="field-hint">
@@ -65,6 +79,10 @@ export default function Portal() {
   const [coCount, setCoCount]               = useState(student?.coApplicants || 1);
   const [uploadedDocuments, setUploadedDocuments] = useState(student?.uploadedDocuments || []);
   const [autoFilledFields, setAutoFilledFields]   = useState(student?.autoFilledFields || {});
+  // What our document model read, per upload slot ("applicant.passport",
+  // "co_0.aadhar", ...), and which auto-filled fields it flagged as uncertain.
+  const [extractions, setExtractions]             = useState(student?.extractions || {});
+  const [reviewFields, setReviewFields]           = useState(student?.reviewFields || {});
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -76,12 +94,16 @@ export default function Portal() {
   const coCountRef      = useRef(coCount);
   const docsRef         = useRef(uploadedDocuments);
   const autoFilledRef   = useRef(autoFilledFields);
+  const extractionsRef  = useRef(extractions);
+  const reviewRef       = useRef(reviewFields);
 
   useEffect(() => { uploadsRef.current    = uploads;           }, [uploads]);
   useEffect(() => { personalRef.current   = personalInfo;      }, [personalInfo]);
   useEffect(() => { coCountRef.current    = coCount;           }, [coCount]);
   useEffect(() => { docsRef.current       = uploadedDocuments; }, [uploadedDocuments]);
   useEffect(() => { autoFilledRef.current = autoFilledFields;  }, [autoFilledFields]);
+  useEffect(() => { extractionsRef.current = extractions;      }, [extractions]);
+  useEffect(() => { reviewRef.current     = reviewFields;      }, [reviewFields]);
 
   useEffect(() => {
     if (!student) navigate("/");
@@ -89,18 +111,37 @@ export default function Portal() {
 
   if (!student) return null;
 
+  // Everything persisted to student_meta.json, built from the refs so a save
+  // triggered mid-update never writes a half-applied state.
+  const buildStudentRecord = () => ({
+    ...student,
+    uploads: uploadsRef.current,
+    personalInfo: personalRef.current,
+    coApplicants: coCountRef.current,
+    uploadedDocuments: docsRef.current,
+    autoFilledFields: autoFilledRef.current,
+    extractions: extractionsRef.current,
+    reviewFields: reviewRef.current,
+    identityCheck: buildIdentityReport({
+      extractions: extractionsRef.current,
+      personalInfo: personalRef.current,
+      coCount: coCountRef.current,
+      legacyDocs: docsRef.current,
+    }),
+  });
+
   const handleUploaded = (sectionKey, fieldId, result) => {
-    const newUploads = {
-      ...uploadsRef.current,
-      [sectionKey]: {
-        ...(uploadsRef.current[sectionKey] || {}),
-        [fieldId]: result,
-      },
-    };
+    // result === null means a page was removed from a multi-file slot —
+    // drop the key so it stops counting as uploaded.
+    const sectionUploads = { ...(uploadsRef.current[sectionKey] || {}) };
+    if (result) sectionUploads[fieldId] = result;
+    else delete sectionUploads[fieldId];
+    const newUploads = { ...uploadsRef.current, [sectionKey]: sectionUploads };
+    uploadsRef.current = newUploads;
     setUploads(newUploads);
 
     let newDocs = docsRef.current;
-    if (result.parsedData) {
+    if (result?.parsedData) {
       const key = `${result.parsedData.subFolder}__${result.parsedData.sourceFile}`;
       newDocs = [
         ...docsRef.current.filter((d) => `${d.subFolder}__${d.sourceFile}` !== key),
@@ -155,20 +196,84 @@ export default function Portal() {
       }
     }
 
-    const updated = {
-      ...student,
-      uploads: newUploads,
-      personalInfo: personalRef.current,
-      coApplicants: coCountRef.current,
-      uploadedDocuments: newDocs,
-      autoFilledFields: autoFilledRef.current,
-    };
+    docsRef.current = newDocs;
+    const updated = buildStudentRecord();
+    setStudent(updated);
+    saveStudentMeta(student.name, updated, studentIdentifier);
+  };
+
+  // Called when our document model finishes reading a passport / Aadhaar /
+  // PAN / 12th certificate. Stores what it read, feeds the eligibility
+  // report, auto-fills the profile and re-runs the identity check.
+  const handleExtracted = (sectionKey, fieldId, { extraction, parsedData }) => {
+    const extKey = `${sectionKey}.${fieldId}`;
+    const merged = mergeExtractions(extractionsRef.current[extKey], extraction);
+    const newExtractions = { ...extractionsRef.current, [extKey]: merged };
+    extractionsRef.current = newExtractions;
+    setExtractions(newExtractions);
+
+    // A certificate from a board the model doesn't know keeps whatever the
+    // old parser found instead.
+    const usable = !(merged.docType === "certificate" && merged.checks?.supported === false);
+
+    if (usable && parsedData && Object.keys(parsedData.fields || {}).length) {
+      const sameDoc = (d) => d.subFolder === parsedData.subFolder && d.type === parsedData.type;
+      const prev = docsRef.current.find(sameDoc);
+      const doc = {
+        ...parsedData,
+        fields: { ...(prev?.source === "reader" ? prev.fields : {}), ...parsedData.fields },
+      };
+      const newDocs = [...docsRef.current.filter((d) => !sameDoc(d)), doc];
+      docsRef.current = newDocs;
+      setUploadedDocuments(newDocs);
+    }
+
+    if (usable) {
+      const sourceLabel = READER_SOURCE_LABEL[merged.docType];
+      const flagged = merged.review?.fieldsRequiringReview || [];
+      const reasons = merged.review?.reasons || {};
+
+      if (sectionKey === "applicant" || sectionKey === "academics") {
+        const { values, from } = applicantFieldsFromReader(merged.docType, merged.flat, merged.checks);
+        const r = mergeReaderFields({
+          info: personalRef.current,
+          autoFilled: autoFilledRef.current,
+          review: reviewRef.current,
+          values, from, sourceLabel, flagged, reasons,
+        });
+        personalRef.current = r.info;
+        autoFilledRef.current = r.autoFilled;
+        reviewRef.current = r.review;
+        setPersonalInfo(r.info);
+        setAutoFilledFields(r.autoFilled);
+        setReviewFields(r.review);
+      } else if (sectionKey.startsWith("co_")) {
+        // Co-applicant inputs don't track which values were typed, so only
+        // blanks are filled — the first document read wins.
+        const infoKey = `co_info_${sectionKey.split("_")[1]}`;
+        const existing = personalRef.current[infoKey] || {};
+        const { values } = coApplicantFieldsFromReader(merged.docType, merged.flat);
+        const patch = { ...existing };
+        for (const [k, v] of Object.entries(values)) if (!existing[k]) patch[k] = v;
+        const newInfo = { ...personalRef.current, [infoKey]: patch };
+        personalRef.current = newInfo;
+        setPersonalInfo(newInfo);
+      }
+    }
+
+    const updated = buildStudentRecord();
     setStudent(updated);
     saveStudentMeta(student.name, updated, studentIdentifier);
   };
 
   const updatePersonal = (key, value) => {
     setAutoFilledFields((prev) => {
+      if (!prev[key]) return prev;
+      const updated = { ...prev };
+      delete updated[key];
+      return updated;
+    });
+    setReviewFields((prev) => {
       if (!prev[key]) return prev;
       const updated = { ...prev };
       delete updated[key];
@@ -197,14 +302,7 @@ export default function Portal() {
   const handleSave = () => {
     setSaving(true);
     setSaveError("");
-    const updated = {
-      ...student,
-      uploads: uploadsRef.current,
-      personalInfo: personalRef.current,
-      coApplicants: coCountRef.current,
-      uploadedDocuments: docsRef.current,
-      autoFilledFields: autoFilledRef.current,
-    };
+    const updated = buildStudentRecord();
     setStudent(updated);
     saveStudentMeta(student.name, updated, studentIdentifier);
     generateAndUploadSummaryPDF(student.name, updated, studentIdentifier, docsRef.current);
@@ -217,31 +315,42 @@ export default function Portal() {
 
   const dynamicTotal = getTotalRequiredFields(coCount, personalInfo);
 
+  const coFieldsFor = (i) => {
+    const coInfo = personalInfo[`co_info_${i}`] || {};
+    if (coInfo.financialStatus === "non-financial") {
+      return CO_APPLICANT_SCHEMA.other.filter((f) => ["aadhar", "pan", "photo"].includes(f.id));
+    }
+    return CO_APPLICANT_SCHEMA[coInfo.empType || "salaried"] || CO_APPLICANT_SCHEMA.other;
+  };
+  const required = (fields) => fields.filter((f) => !f.optional);
+
+  // Counted per document, not per file — a two-page Aadhaar is one document.
+  const requiredDone =
+    countUploadedFields(getUploadsFor("applicant"), required(DOCUMENT_SCHEMA.applicant.fields)) +
+    countUploadedFields(getUploadsFor("academics"), required(DOCUMENT_SCHEMA.academics.fields)) +
+    Array.from({ length: coCount }, (_, i) => countUploadedFields(getUploadsFor(`co_${i}`), required(coFieldsFor(i))))
+      .reduce((a, b) => a + b, 0);
+
   const progressSections = [
     {
       id: "govtId",
       label: "Govt ID",
-      total: DOCUMENT_SCHEMA.applicant.fields.filter((f) => !f.optional).length,
-      uploaded: Object.keys(getUploadsFor("applicant")).length,
+      total: required(DOCUMENT_SCHEMA.applicant.fields).length,
+      uploaded: countUploadedFields(getUploadsFor("applicant"), required(DOCUMENT_SCHEMA.applicant.fields)),
     },
     {
       id: "academics",
       label: "Academics",
-      total: DOCUMENT_SCHEMA.academics.fields.filter((f) => !f.optional).length,
-      uploaded: Object.keys(getUploadsFor("academics")).length,
+      total: required(DOCUMENT_SCHEMA.academics.fields).length,
+      uploaded: countUploadedFields(getUploadsFor("academics"), required(DOCUMENT_SCHEMA.academics.fields)),
     },
     {
       id: "loan",
       label: "Loan",
-      total: Array.from({ length: coCount }, (_, i) => {
-        const coInfo = personalInfo[`co_info_${i}`] || {};
-        if (coInfo.financialStatus === "non-financial") return 3;
-        const empType = coInfo.empType || "salaried";
-        return (CO_APPLICANT_SCHEMA[empType] || CO_APPLICANT_SCHEMA.other).filter((f) => !f.optional).length;
-      }).reduce((a, b) => a + b, 0),
+      total: Array.from({ length: coCount }, (_, i) => required(coFieldsFor(i)).length).reduce((a, b) => a + b, 0),
       uploaded: Array.from(
         { length: coCount },
-        (_, i) => Object.keys(getUploadsFor(`co_${i}`)).length,
+        (_, i) => countUploadedFields(getUploadsFor(`co_${i}`), required(coFieldsFor(i))),
       ).reduce((a, b) => a + b, 0),
     },
     {
@@ -290,8 +399,7 @@ export default function Portal() {
 
         <div className="portal-progress-info">
           <span className="progress-total-note">
-            {Object.values(uploads).reduce((acc, s) => acc + Object.keys(s).length, 0)}{" "}
-            / {dynamicTotal} required fields completed
+            {requiredDone} / {dynamicTotal} required documents uploaded
           </span>
         </div>
 
@@ -321,13 +429,15 @@ export default function Portal() {
           {activeSection === 0 && (
             <DocsSection
               title="Government ID Documents"
-              subtitle="Upload your identity documents. Aadhar, PAN, and Passport data will auto-fill your personal profile."
+              subtitle="Start here — upload your Passport, Aadhaar and PAN first. We read them and fill in your name, date of birth, parents' names, address and ID numbers for you."
               fields={DOCUMENT_SCHEMA.applicant.fields}
               studentName={student.name}
               studentIdentifier={studentIdentifier}
               subFolder="GOVT ID"
               uploads={getUploadsFor("applicant")}
               onUploaded={(fieldId, result) => handleUploaded("applicant", fieldId, result)}
+              extractionsFor={(fieldId) => extractions[`applicant.${fieldId}`]}
+              onExtracted={(fieldId, payload) => handleExtracted("applicant", fieldId, payload)}
             />
           )}
           {activeSection === 1 && (
@@ -340,6 +450,8 @@ export default function Portal() {
               subFolder="Academics"
               uploads={getUploadsFor("academics")}
               onUploaded={(fieldId, result) => handleUploaded("academics", fieldId, result)}
+              extractionsFor={(fieldId) => extractions[`academics.${fieldId}`]}
+              onExtracted={(fieldId, payload) => handleExtracted("academics", fieldId, payload)}
             />
           )}
           {activeSection === 2 && (
@@ -350,16 +462,20 @@ export default function Portal() {
               setCoCount={handleCoCountChange}
               uploads={uploads}
               onUploaded={handleUploaded}
+              extractions={extractions}
+              onExtracted={handleExtracted}
               personalInfo={personalInfo}
               onInfoChange={updatePersonal}
             />
           )}
           {activeSection === 3 && (
-            <PersonalAndRefsSection
-              info={personalInfo}
-              onChange={updatePersonal}
-              autoFilledFields={autoFilledFields}
-            />
+            <ReviewContext.Provider value={reviewFields}>
+              <PersonalAndRefsSection
+                info={personalInfo}
+                onChange={updatePersonal}
+                autoFilledFields={autoFilledFields}
+              />
+            </ReviewContext.Provider>
           )}
           {activeSection === 4 && (
             <OtherDocumentsSection
@@ -444,16 +560,13 @@ function PersonalField({
   };
 
   const source = autoFilledFields[k];
+  const reviewReason = useContext(ReviewContext)[k];
 
   return (
-    <div className={`input-group${source ? " autofill-group" : ""}`}>
+    <div className={`input-group${source ? " autofill-group" : ""}${reviewReason ? " review-group" : ""}`}>
       <label>
         {label}
-        {source && (
-          <span className="autofill-badge">
-            <Sparkles size={10} /> From {source}
-          </span>
-        )}
+        <FieldBadges source={source} reviewReason={reviewReason} />
       </label>
       <input
         className={`input-field${source ? " autofill-input" : ""}`}
@@ -468,18 +581,32 @@ function PersonalField({
   );
 }
 
+function FieldBadges({ source, reviewReason }) {
+  return (
+    <>
+      {source && (
+        <span className="autofill-badge">
+          <Sparkles size={10} /> From {source}
+        </span>
+      )}
+      {reviewReason && (
+        <span className="review-badge" title={reviewReason}>
+          <AlertTriangle size={10} /> Please check
+        </span>
+      )}
+    </>
+  );
+}
+
 function YearSelect({ label, k, info, onChange, placeholder = "Select Year", autoFilledFields = {} }) {
   const source = autoFilledFields[k];
+  const reviewReason = useContext(ReviewContext)[k];
   return (
-    <div className={`input-group${source ? " autofill-group" : ""}`}>
+    <div className={`input-group${source ? " autofill-group" : ""}${reviewReason ? " review-group" : ""}`}>
       {label && (
         <label>
           {label}
-          {source && (
-            <span className="autofill-badge">
-              <Sparkles size={10} /> From {source}
-            </span>
-          )}
+          <FieldBadges source={source} reviewReason={reviewReason} />
         </label>
       )}
       <select
@@ -493,6 +620,48 @@ function YearSelect({ label, k, info, onChange, placeholder = "Select Year", aut
         ))}
       </select>
     </div>
+  );
+}
+
+function SelectField({ label, k, options, info, onChange, placeholder = "Select", autoFilledFields = {} }) {
+  const source = autoFilledFields[k];
+  const reviewReason = useContext(ReviewContext)[k];
+  return (
+    <div className={`input-group${source ? " autofill-group" : ""}${reviewReason ? " review-group" : ""}`}>
+      <label>
+        {label}
+        <FieldBadges source={source} reviewReason={reviewReason} />
+      </label>
+      <select
+        className={`input-field${source ? " autofill-input" : ""}`}
+        value={info[k] || ""}
+        onChange={(e) => onChange(k, e.target.value)}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((o) => (
+          <option key={o} value={o}>{o}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// Banks and universities generally want a passport valid well past the
+// course start, so warn a year ahead instead of only once it has expired.
+function passportExpiryHint(expiry) {
+  if (!expiry) return null;
+  const d = new Date(expiry);
+  if (Number.isNaN(d.getTime())) return null;
+  const inAYear = new Date();
+  inAYear.setFullYear(inAYear.getFullYear() + 1);
+  if (d > inAYear) return null;
+  const expired = d < new Date();
+  return (
+    <span className="field-hint field-hint-warn">
+      {expired
+        ? "This passport has expired — you'll need to renew it before applying."
+        : "This passport expires within a year — consider renewing it before your course starts."}
+    </span>
   );
 }
 
@@ -653,6 +822,21 @@ function PersonalAndRefsSection({ info, onChange, autoFilledFields }) {
           </div>
 
           <div className="divider" />
+          <h3 className="sub-heading">Identity Details</h3>
+          <p className="sub-heading-note">Read from your Passport, Aadhaar and PAN — check them and correct anything that looks wrong.</p>
+          <div className="grid-2">
+            <PersonalField label="Date of Birth" k="dob" type="date" info={info} onChange={onChange} autoFilledFields={af} />
+            <SelectField label="Gender" k="gender" options={["Male", "Female", "Other"]} info={info} onChange={onChange} autoFilledFields={af} />
+            <PersonalField label="Nationality" k="nationality" placeholder="e.g. Indian" info={info} onChange={onChange} autoFilledFields={af} />
+            <PersonalField label="Place of Birth" k="placeOfBirth" placeholder="e.g. Hyderabad, Telangana" info={info} onChange={onChange} autoFilledFields={af} />
+            <PersonalField label="Passport Number" k="passportNumber" placeholder="e.g. Z1234567" info={info} onChange={onChange} autoFilledFields={af} />
+            <PersonalField label="Passport Date of Issue" k="passportIssueDate" type="date" info={info} onChange={onChange} autoFilledFields={af} />
+            <PersonalField label="Passport Date of Expiry" k="passportExpiry" type="date" info={info} onChange={onChange} autoFilledFields={af} hint={passportExpiryHint(info.passportExpiry)} />
+            <PersonalField label="Aadhaar Number" k="aadhaarNumber" placeholder="XXXX XXXX 1234" info={info} onChange={onChange} autoFilledFields={af} />
+            <PersonalField label="PAN Number" k="panNumber" placeholder="e.g. ABCPR1234K" info={info} onChange={onChange} autoFilledFields={af} />
+          </div>
+
+          <div className="divider" />
           <h3 className="sub-heading">Standardized Test Metrics</h3>
           <div className="grid-2">
             <PersonalField label="GRE Score (260 – 340)" k="greScore" placeholder="e.g. 312" info={info} onChange={onChange} integerOnly maxVal={340} autoFilledFields={af} />
@@ -758,7 +942,7 @@ function PersonalAndRefsSection({ info, onChange, autoFilledFields }) {
             <PersonalField label="Father Name" k="fatherName" info={info} onChange={onChange} autoFilledFields={af} />
             <PersonalField label="Father Mobile No. &amp; Mail Id" k="fatherContact" placeholder="Phone / Email info" info={info} onChange={onChange} />
             <PersonalField label="Father CIBIL Score (300 – 900)" k="fatherCibil" placeholder="e.g. 780" info={info} onChange={onChange} integerOnly maxVal={900} hint={CIBIL_HINT} />
-            <PersonalField label="Mother Name" k="motherName" info={info} onChange={onChange} />
+            <PersonalField label="Mother Name" k="motherName" info={info} onChange={onChange} autoFilledFields={af} />
             <PersonalField label="Mother Mobile No. &amp; Mail Id" k="motherContact" info={info} onChange={onChange} />
             <PersonalField label="Mother CIBIL Score (300 – 900)" k="motherCibil" placeholder="e.g. 760" info={info} onChange={onChange} integerOnly maxVal={900} hint={CIBIL_HINT} />
           </div>
@@ -970,8 +1154,8 @@ function ReferencesContent({ info, onChange }) {
 
 // ─── Docs Section ──────────────────────────────────────────────────────────────
 
-function DocsSection({ title, subtitle, fields, studentName, studentIdentifier, subFolder, uploads, onUploaded }) {
-  const uploaded = Object.keys(uploads).length;
+function DocsSection({ title, subtitle, fields, studentName, studentIdentifier, subFolder, uploads, onUploaded, extractionsFor, onExtracted }) {
+  const uploaded = countUploadedFields(uploads, fields);
   return (
     <div className="section-panel">
       <div className="section-intro">
@@ -991,6 +1175,8 @@ function DocsSection({ title, subtitle, fields, studentName, studentIdentifier, 
             subFolder={subFolder}
             uploadedFiles={uploads}
             onUploaded={(fieldId, result) => onUploaded(fieldId, result)}
+            extraction={extractionsFor?.(field.id)}
+            onExtracted={onExtracted}
           />
         ))}
       </div>
@@ -1000,7 +1186,7 @@ function DocsSection({ title, subtitle, fields, studentName, studentIdentifier, 
 
 // ─── Loan Section ──────────────────────────────────────────────────────────────
 
-function LoanSection({ studentName, studentIdentifier, coCount, setCoCount, uploads, onUploaded, personalInfo, onInfoChange }) {
+function LoanSection({ studentName, studentIdentifier, coCount, setCoCount, uploads, onUploaded, extractions = {}, onExtracted, personalInfo, onInfoChange }) {
   const [expandedCo, setExpandedCo] = useState(0);
   const coRelations = ["Father", "Mother", "Sibling", "Spouse", "Other"];
 
@@ -1057,7 +1243,7 @@ function LoanSection({ studentName, studentIdentifier, coCount, setCoCount, uplo
                 {coDisplayName && <span className="co-name">{coDisplayName}</span>}
               </div>
               <div className="co-header-right">
-                <span className="badge badge-info">{Object.keys(coUploads).length}/{fields.length} files</span>
+                <span className="badge badge-info">{countUploadedFields(coUploads, fields)}/{fields.length} files</span>
                 {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               </div>
             </button>
@@ -1117,6 +1303,8 @@ function LoanSection({ studentName, studentIdentifier, coCount, setCoCount, uplo
                         subFolder={`Loan/Co_Applicant_${i + 1}`}
                         uploadedFiles={coUploads}
                         onUploaded={(fieldId, result) => onUploaded(key, fieldId, result)}
+                        extraction={extractions[`${key}.${field.id}`]}
+                        onExtracted={(fieldId, payload) => onExtracted?.(key, fieldId, payload)}
                       />
                     );
                   })}
@@ -1141,6 +1329,33 @@ function LoanSection({ studentName, studentIdentifier, coCount, setCoCount, uplo
                       placeholder="Co-applicant last name"
                       value={coInfo.lastName || ""}
                       onChange={(e) => onInfoChange(infoKey, { ...coInfo, lastName: e.target.value })}
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label>Date of Birth</label>
+                    <input
+                      className="input-field"
+                      type="date"
+                      value={coInfo.dob || ""}
+                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, dob: e.target.value })}
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label>PAN Number</label>
+                    <input
+                      className="input-field"
+                      placeholder="e.g. ABCPR1234K"
+                      value={coInfo.panNumber || ""}
+                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, panNumber: e.target.value.toUpperCase() })}
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label>Aadhaar Number</label>
+                    <input
+                      className="input-field"
+                      placeholder="XXXX XXXX 1234"
+                      value={coInfo.aadhaarNumber || ""}
+                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, aadhaarNumber: e.target.value })}
                     />
                   </div>
                   <div className="input-group">

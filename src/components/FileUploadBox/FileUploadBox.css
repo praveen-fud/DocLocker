@@ -405,3 +405,44 @@
     font-size: 12px;
   }
 }
+
+/* ── Document model reading: tag, page hint and status line ─────────────── */
+.reader-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #0b63ce;
+  background: #eaf4ff;
+  padding: 2px 7px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.page-hint {
+  margin: -4px 0 8px;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.reader-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 500;
+}
+.reader-status svg { flex-shrink: 0; margin-top: 1px; }
+
+.reader-reading     { background: #eaf4ff; color: #0b63ce; }
+.reader-read        { background: #ecfdf3; color: #15803d; }
+.reader-review,
+.reader-unsupported { background: #fff7e8; color: #b45f00; }
+.reader-manual,
+.reader-failed      { background: #fef2f2; color: #b91c1c; }

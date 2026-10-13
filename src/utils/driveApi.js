@@ -105,7 +105,9 @@ export function clearStudentFromLocalStorage() {
 // ── Upload a file (multipart — no base64 overhead) ───────────────────────────
 // When no admin JWT exists (student self-service), uses /api/student-upload
 // which validates via the student's email/phone identifier instead.
-export async function uploadDocument({ studentName, studentIdentifier, subFolder, fileName, file, onProgress }) {
+// skipOcr: set when the file will be read by our own document model
+// (extractStudentDocument), so the backend skips its Drive OCR + regex parse.
+export async function uploadDocument({ studentName, studentIdentifier, subFolder, fileName, file, onProgress, skipOcr = false }) {
   const ext = file.name.split('.').pop().toLowerCase();
   const finalName = `${fileName}.${ext}`;
   const authHeaders = getAuthHeaders();
@@ -117,6 +119,7 @@ export async function uploadDocument({ studentName, studentIdentifier, subFolder
   formData.append('file', file);
   formData.append('subFolder', subFolder.trim());
   formData.append('fileName', finalName);
+  if (skipOcr) formData.append('skipOcr', '1');
 
   let endpoint;
   if (hasAdminToken) {
@@ -301,6 +304,32 @@ export async function extractDocument(docType, files, { consent } = {}) {
   try { data = await res.json(); } catch { throw new Error('Bad JSON response from document reader'); }
   if (!data.success) throw new Error(data.error || 'Extraction failed');
   return data.result;
+}
+
+// ── Student-side document reading (our own model) ─────────────────────────────
+// Reads passport / Aadhaar / PAN / 12th certificate pages for auto-fill and
+// identity checks. Returns { extraction, parsedData } — extraction is the
+// slim per-field result kept in student meta, parsedData is the legacy
+// { type, fields } shape the eligibility report already understands.
+export async function extractStudentDocument({ studentName, studentIdentifier, docType, files, subFolder, sourceFile }) {
+  const formData = new FormData();
+  formData.append('docType', docType);
+  formData.append('studentName', (studentName || '').trim());
+  formData.append('studentIdentifier', (studentIdentifier || '').trim());
+  formData.append('subFolder', subFolder || '');
+  formData.append('sourceFile', sourceFile || '');
+  files.forEach((f) => formData.append('files', f));
+
+  const res = await fetch(`${API_URL}/api/student-extract`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: formData,
+    signal: AbortSignal.timeout(125000),
+  });
+  let data;
+  try { data = await res.json(); } catch { throw new Error('Bad JSON response from document reader'); }
+  if (!data.success) throw new Error(data.error || 'Could not read this document');
+  return { extraction: data.extraction, parsedData: data.parsedData };
 }
 
 // ── Audit log (superadmin only) ────────────────────────────────────────────────

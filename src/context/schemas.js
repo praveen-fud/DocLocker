@@ -1,5 +1,25 @@
 // Document schemas
 
+// `reader` = this slot is read by our own document model (certificate /
+// passport / aadhaar / pan) instead of the old Drive OCR + regex parser.
+// `keepOcr` = also run the old parser, as a fallback for documents the
+// model can't handle (its certificate reader only knows TS/AP Intermediate).
+// Passport and Aadhaar take two pages because the parents' names and the
+// address are only printed on the second one.
+const PASSPORT_READER = {
+  reader: "passport",
+  multiple: true,
+  maxFiles: 2,
+  pageHint: "Photo page + last page (the last page has your parents' names and address)",
+};
+const AADHAAR_READER = {
+  reader: "aadhaar",
+  multiple: true,
+  maxFiles: 2,
+  pageHint: "Front + back (the back has the address)",
+};
+const PAN_READER = { reader: "pan" };
+
 export const DOCUMENT_SCHEMA = {
   applicant: {
     label: "GOVT ID",
@@ -10,18 +30,21 @@ export const DOCUMENT_SCHEMA = {
         label: "Passport",
         rename: "Passport",
         accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
+        ...PASSPORT_READER,
       },
       {
         id: "pan",
         label: "PAN Card",
         rename: "PAN_Card",
         accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
+        ...PAN_READER,
       },
       {
         id: "aadhar",
         label: "Aadhar Card",
         rename: "Aadhar_Card",
         accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
+        ...AADHAAR_READER,
       },
       {
         id: "photo",
@@ -84,6 +107,8 @@ export const DOCUMENT_SCHEMA = {
         rename: "12th_Marksheet",
         // FIX: same missing dot issue
         accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
+        reader: "certificate",
+        keepOcr: true,
       },
       {
         id: "Diploma_marksheet",
@@ -208,12 +233,14 @@ export const CO_APPLICANT_SCHEMA = {
       label: "Aadhar Card",
       rename: "Aadhar",
       accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
+      ...AADHAAR_READER,
     },
     {
       id: "pan",
       label: "PAN Card",
       rename: "PAN",
       accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
+      ...PAN_READER,
     },
     {
       id: "photo",
@@ -259,12 +286,14 @@ export const CO_APPLICANT_SCHEMA = {
       label: "Aadhar Card",
       rename: "Aadhar",
       accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
+      ...AADHAAR_READER,
     },
     {
       id: "pan",
       label: "PAN Card",
       rename: "PAN",
       accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
+      ...PAN_READER,
     },
     {
       id: "photo",
@@ -310,12 +339,14 @@ export const CO_APPLICANT_SCHEMA = {
       label: "Aadhar Card",
       rename: "Aadhar",
       accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
+      ...AADHAAR_READER,
     },
     {
       id: "pan",
       label: "PAN Card",
       rename: "PAN",
       accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
+      ...PAN_READER,
     },
     {
       id: "photo",
@@ -355,4 +386,14 @@ export function getTotalRequiredFields(coCount = 1, coApplicantsInfo = {}) {
   }
 
   return applicantRequired + academicsRequired + coRequired;
+}
+
+// Counts how many of `fields` have at least one file uploaded. Multi-file
+// fields store extra pages as `<id>_1`, `<id>_2`..., so counting raw upload
+// keys would count a two-page Aadhaar as two documents.
+export function countUploadedFields(uploads = {}, fields = []) {
+  const keys = Object.keys(uploads).filter((k) => uploads[k]);
+  return fields.filter((f) =>
+    keys.some((k) => k === f.id || (f.multiple && k.startsWith(`${f.id}_`) && /^\d+$/.test(k.slice(f.id.length + 1)))),
+  ).length;
 }

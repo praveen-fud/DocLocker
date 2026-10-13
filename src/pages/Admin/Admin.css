@@ -473,23 +473,19 @@
   box-sizing: border-box;
 }
 
+/* Transparent logo artwork — shown bare, no tile or border around it. */
 .admin-sidebar-brand-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
-  background: var(--primary-tint);
-  border: 1px solid rgba(20, 104, 199, 0.18);
-  color: var(--primary);
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  overflow: hidden;
 }
 .admin-sidebar-brand-icon img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .admin-sidebar-brand-text {
@@ -5969,4 +5965,163 @@
 .btn-recover:hover {
   background: rgba(99,102,241,0.18);
   border-color: rgba(99,102,241,0.35);
+}
+
+/* -- Identity Check section in the Analytics popup (admin / advisor) -- */
+.idc-section { gap: 12px; }
+
+/* Verdict: the one line you read first */
+.idc-verdict {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+}
+.idc-verdict p { margin: 0; }
+.idc-verdict-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--bg-surface);
+}
+.idc-verdict-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+.idc-verdict-sub {
+  margin-top: 2px !important;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.idc-verdict-match    { background: var(--success-bg); border-color: rgba(22, 163, 74, 0.22); }
+.idc-verdict-match .idc-verdict-icon    { color: var(--success); }
+.idc-verdict-partial  { background: var(--warning-bg); border-color: rgba(234, 138, 0, 0.25); }
+.idc-verdict-partial .idc-verdict-icon  { color: var(--warning); }
+.idc-verdict-mismatch { background: var(--danger-bg); border-color: rgba(220, 38, 38, 0.22); }
+.idc-verdict-mismatch .idc-verdict-icon { color: var(--danger); }
+.idc-verdict-none     { background: var(--bg-surface); border-color: var(--border-dim); }
+.idc-verdict-none .idc-verdict-icon     { color: var(--text-muted); background: var(--bg-raised); }
+
+/* One plain sentence per problem */
+.idc-problems {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.idc-problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+.idc-problem svg { flex-shrink: 0; margin-top: 2px; }
+.idc-problem-partial svg  { color: var(--warning); }
+.idc-problem-mismatch svg { color: var(--danger); }
+.idc-problem em { font-style: normal; font-weight: 600; }
+.idc-problem-note { color: var(--text-secondary); }
+
+/* Details × documents table — only disagreeing cells are coloured */
+.idc-table-wrap {
+  overflow-x: auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-md);
+}
+.idc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.idc-table thead th {
+  padding: 8px 12px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border-dim);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  text-align: left;
+  white-space: nowrap;
+}
+.idc-table tbody tr + tr > * { border-top: 1px solid var(--border-dim); }
+.idc-table td,
+.idc-table tbody th {
+  padding: 9px 12px;
+  text-align: left;
+  vertical-align: middle;
+}
+.idc-detail {
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.idc-detail svg { vertical-align: -2px; margin-right: 6px; }
+.idc-detail-match svg    { color: var(--success); }
+.idc-detail-partial svg  { color: var(--warning); }
+.idc-detail-mismatch svg { color: var(--danger); }
+
+.idc-cell { color: var(--text-primary); min-width: 110px; }
+.idc-cell svg { vertical-align: -2px; margin-right: 5px; }
+.idc-cell-empty { color: var(--text-muted); }
+.idc-cell-partial  { background: var(--warning-bg); color: #b45f00; font-weight: 600; }
+.idc-cell-mismatch { background: var(--danger-bg); color: var(--danger); font-weight: 600; }
+
+.idc-basic {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--warning-bg);
+  color: #b45f00;
+  font-size: 9.5px;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: help;
+}
+
+/* Co-applicants */
+.idc-co { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; }
+.idc-co-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.idc-relation {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+.idc-relation svg { flex-shrink: 0; margin-top: 3px; }
+.idc-relation em { font-style: normal; font-weight: 600; }
+.idc-relation-match svg    { color: var(--success); }
+.idc-relation-partial svg  { color: var(--warning); }
+.idc-relation-mismatch svg { color: var(--danger); }
+
+.idc-footnote {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
