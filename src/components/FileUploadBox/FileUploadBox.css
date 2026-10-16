@@ -225,6 +225,34 @@
   word-break: break-word;
 }
 
+/* Wrong document for this slot: nothing was saved. Stands out more than a
+   plain upload error because the student has to act on it. */
+.upload-error.upload-rejected {
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.upload-error.upload-rejected svg { flex-shrink: 0; margin-top: 1px; }
+.upload-error.upload-rejected .error-dismiss { margin-left: auto; }
+
+.queue-item.queue-rejected {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.06);
+}
+.queue-waiting {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--gray-600, #64748b);
+  flex-shrink: 0;
+}
+
 .rename-hint {
   margin-top: 8px;
   font-size: 11px;
@@ -445,4 +473,5 @@
 .reader-review,
 .reader-unsupported { background: #fff7e8; color: #b45f00; }
 .reader-manual,
+.reader-unverified,
 .reader-failed      { background: #fef2f2; color: #b91c1c; }

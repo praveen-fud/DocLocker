@@ -105,8 +105,9 @@ export function clearStudentFromLocalStorage() {
 // ── Upload a file (multipart — no base64 overhead) ───────────────────────────
 // When no admin JWT exists (student self-service), uses /api/student-upload
 // which validates via the student's email/phone identifier instead.
-// skipOcr: set when the file will be read by our own document model
-// (extractStudentDocument), so the backend skips its Drive OCR + regex parse.
+// skipOcr: set when the file will be read by our own document model, so
+// the backend skips its Drive OCR + regex parse. ID and certificate slots
+// are checked and read by the server before saving (see `reader` below).
 export async function uploadDocument({ studentName, studentIdentifier, subFolder, fileName, file, onProgress, skipOcr = false }) {
   const ext = file.name.split('.').pop().toLowerCase();
   const finalName = `${fileName}.${ext}`;
@@ -139,16 +140,28 @@ export async function uploadDocument({ studentName, studentIdentifier, subFolder
     method: 'POST',
     headers: hasAdminToken ? authHeaders : {},
     body: formData,
-    signal: AbortSignal.timeout(90000),
+    // ID and certificate slots are read by our document model before
+    // they're saved, which can take a while for large scans.
+    signal: AbortSignal.timeout(150000),
   });
 
   let data;
   try { data = await res.json(); } catch { throw new Error('Bad JSON from upload API'); }
-  if (!data.success) throw new Error(data.error || 'Upload failed');
+  if (!data.success) {
+    const err = new Error(data.error || 'Upload failed');
+    // The wrong document for this slot — nothing was saved.
+    err.rejected = Boolean(data.rejected);
+    throw err;
+  }
 
   if (onProgress) onProgress(100);
 
-  return { id: data.fileId, name: data.fileName, webViewLink: data.webViewLink, parsedData: data.parsedData || null };
+  // `reader` (ID / certificate slots only): { gate, extraction, parsedData }
+  // from the check done before saving. Not part of the stored upload record.
+  return {
+    id: data.fileId, name: data.fileName, webViewLink: data.webViewLink, parsedData: data.parsedData || null,
+    reader: data.reader || null,
+  };
 }
 
 // ── Save student metadata ─────────────────────────────────────────────────────
@@ -338,32 +351,6 @@ export async function extractDocument(docType, files, { consent } = {}) {
   try { data = await res.json(); } catch { throw new Error('Bad JSON response from document reader'); }
   if (!data.success) throw new Error(data.error || 'Extraction failed');
   return data.result;
-}
-
-// ── Student-side document reading (our own model) ─────────────────────────────
-// Reads passport / Aadhaar / PAN / 12th certificate pages for auto-fill and
-// identity checks. Returns { extraction, parsedData } — extraction is the
-// slim per-field result kept in student meta, parsedData is the legacy
-// { type, fields } shape the eligibility report already understands.
-export async function extractStudentDocument({ studentName, studentIdentifier, docType, files, subFolder, sourceFile }) {
-  const formData = new FormData();
-  formData.append('docType', docType);
-  formData.append('studentName', (studentName || '').trim());
-  formData.append('studentIdentifier', (studentIdentifier || '').trim());
-  formData.append('subFolder', subFolder || '');
-  formData.append('sourceFile', sourceFile || '');
-  files.forEach((f) => formData.append('files', f));
-
-  const res = await fetch(`${API_URL}/api/student-extract`, {
-    method: 'POST',
-    headers: getAuthHeaders(),
-    body: formData,
-    signal: AbortSignal.timeout(125000),
-  });
-  let data;
-  try { data = await res.json(); } catch { throw new Error('Bad JSON response from document reader'); }
-  if (!data.success) throw new Error(data.error || 'Could not read this document');
-  return { extraction: data.extraction, parsedData: data.parsedData };
 }
 
 // ── Audit log (superadmin only) ────────────────────────────────────────────────

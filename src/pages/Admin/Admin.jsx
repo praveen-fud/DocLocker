@@ -66,6 +66,7 @@ import heroImg from "../../assets/bg.png";
 import "./Admin.css";
 import DocumentReader from "./DocumentReader";
 import { buildIdentityReport } from "../../utils/identityCheck";
+import { buildDocumentChecks } from "../../utils/documentChecks";
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
 
@@ -1052,6 +1053,79 @@ function IdentityCheckSection({ student }) {
   );
 }
 
+// ─── Document checks (admin / advisor only) ───────────────────────────────────
+// Whether each ID / certificate passed the checks built into it (passport
+// check digits, Aadhaar checksum, PAN letter rule, memo totals). Failures
+// first; a passing document is one line.
+const DCK_ICON = { true: CheckCircle, false: XCircle, null: MinusCircle };
+
+function DocumentChecksSection({ student }) {
+  const { documents, failed, passed } = buildDocumentChecks({
+    extractions: student.extractions || {},
+    coCount: student.coApplicants || 0,
+  });
+
+  let verdict;
+  let title;
+  let sub;
+  if (!documents.length) {
+    verdict = "none";
+    title = "No documents checked yet";
+    sub = "Passport, Aadhaar, PAN, 10th and 12th are checked automatically when the student uploads them.";
+  } else if (failed) {
+    verdict = "mismatch";
+    title = `${failed} document${failed === 1 ? "" : "s"} failed a check`;
+    sub = "Often just a blurred or cropped scan, but it can mean an edited document — ask for a clearer copy or see the original.";
+  } else if (passed) {
+    verdict = "match";
+    title = passed === documents.length ? "All document checks passed" : `${passed} of ${documents.length} documents passed their checks`;
+    sub = "These checks catch edits and typing errors in the document itself. They don't replace seeing the original.";
+  } else {
+    verdict = "partial";
+    title = "Documents couldn't be checked";
+    sub = "The details couldn't be read well enough to test — check these documents by hand.";
+  }
+  const VerdictIcon = verdict === "mismatch" ? XCircle : verdict === "partial" ? AlertTriangle : ShieldCheck;
+  const order = { fail: 0, unknown: 1, pass: 2 };
+  const sorted = [...documents].sort((a, b) => order[a.status] - order[b.status]);
+
+  return (
+    <div className="rpt-section idc-section">
+      <div className="rpt-section-title">
+        <ScanText size={13} /> Document Checks
+      </div>
+
+      <div className={`idc-verdict idc-verdict-${verdict}`}>
+        <span className="idc-verdict-icon"><VerdictIcon size={18} /></span>
+        <div>
+          <p className="idc-verdict-title">{title}</p>
+          <p className="idc-verdict-sub">{sub}</p>
+        </div>
+      </div>
+
+      {sorted.length > 0 && (
+        <ul className="dck-list">
+          {sorted.map((doc) => (
+            <li key={doc.label} className={`dck-doc dck-doc-${doc.status}`}>
+              <span className="dck-doc-name">{doc.label}</span>
+              <ul className="dck-checks">
+                {doc.checks.map((c) => {
+                  const Icon = DCK_ICON[String(c.ok)];
+                  return (
+                    <li key={c.text} className={`dck-check dck-check-${String(c.ok)}`}>
+                      <Icon size={13} /> <span>{c.text}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function ReportModal({ student, onClose }) {
   const p = student.personalInfo || {};
   const { progress, verdict, verdictClass, verdictReasons } =
@@ -1169,6 +1243,7 @@ function ReportModal({ student, onClose }) {
           </div>
 
           <IdentityCheckSection student={student} />
+          <DocumentChecksSection student={student} />
 
           {/* CIBIL Scores */}
           {cibilEntries.length > 0 && (

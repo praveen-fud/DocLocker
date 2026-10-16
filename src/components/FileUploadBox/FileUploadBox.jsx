@@ -9,8 +9,9 @@ import {
   Eye,
   X,
   Sparkles,
+  ShieldAlert,
 } from "lucide-react";
-import { uploadDocument, extractStudentDocument } from "../../utils/driveApi";
+import { uploadDocument } from "../../utils/driveApi";
 import "./FileUploadBox.css";
 
 const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
@@ -20,6 +21,28 @@ const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
 const READABLE_TYPES = new Set(["application/pdf", "image/jpeg", "image/jpg", "image/png"]);
 
 const canRead = (field, file) => Boolean(field.reader) && READABLE_TYPES.has(file.type);
+
+// ID and certificate slots are checked by the server BEFORE the file is
+// saved: a wrong document (say, a PAN card in the passport slot) is
+// rejected and never stored. The same check reads the details, so the
+// result comes back with the upload — no second request.
+function applyReaderResult(field, result, onExtracted) {
+  const reader = result?.reader;
+  if (!reader) return { status: null, error: "" };
+  if (reader.extraction) {
+    onExtracted?.(field.id, { extraction: reader.extraction, parsedData: reader.parsedData || null });
+    return { status: statusFromExtraction(reader.extraction), error: "" };
+  }
+  if (reader.gate?.status === "unverified") return { status: "unverified", error: "" };
+  return { status: null, error: "" };
+}
+
+// The stored upload record never carries the reader result.
+const uploadRecord = (result) => {
+  const record = { ...result };
+  delete record.reader;
+  return record;
+};
 
 // ── Compress image files before upload (canvas, no dependency) ─────────────────
 async function compressImage(file) {
@@ -79,6 +102,7 @@ const READ_MESSAGES = {
   manual:      { icon: AlertCircle,   text: "Some details couldn't be read — please check your profile" },
   unsupported: { icon: AlertTriangle, text: "This board's format isn't supported yet — used basic text reading instead" },
   failed:      { icon: AlertCircle,   text: "Couldn't read this automatically — please fill your details manually" },
+  unverified:  { icon: AlertTriangle, text: "Uploaded — we couldn't check it automatically, so please fill in your details" },
 };
 
 function ReadStatus({ status, error }) {
@@ -93,25 +117,6 @@ function ReadStatus({ status, error }) {
   );
 }
 
-// Shared read call: reports the result to the parent and returns the status
-// to show on the card.
-async function readWithModel({ field, files, studentName, studentIdentifier, subFolder, onExtracted }) {
-  try {
-    const result = await extractStudentDocument({
-      studentName,
-      studentIdentifier,
-      docType: field.reader,
-      files,
-      subFolder,
-      sourceFile: field.label,
-    });
-    onExtracted?.(field.id, result);
-    return { status: statusFromExtraction(result.extraction), error: "" };
-  } catch (e) {
-    return { status: "failed", error: e.message || "" };
-  }
-}
-
 // ── Single-file upload box (original behaviour) ────────────────────────────────
 function SingleUploadBox({ field, studentName, studentIdentifier, subFolder, onUploaded, uploadedFiles, extraction, onExtracted }) {
   const [dragging, setDragging]       = useState(false);
@@ -121,6 +126,7 @@ function SingleUploadBox({ field, studentName, studentIdentifier, subFolder, onU
   const [localResult, setLocalResult] = useState(null);
   const [reUploading, setReUploading] = useState(false);
   const [read, setRead]               = useState({ status: null, error: "" });
+  const [rejected, setRejected]       = useState(false);
   const inputRef = useRef(null);
 
   // reUploading overrides the prop so the drop-zone (with progress bar) is shown
@@ -131,6 +137,7 @@ function SingleUploadBox({ field, studentName, studentIdentifier, subFolder, onU
   const handleFile = async (file) => {
     if (!file) return;
     setError("");
+    setRejected(false);
     setUploading(true);
     setProgress(0);
     setRead({ status: null, error: "" });
@@ -165,20 +172,18 @@ function SingleUploadBox({ field, studentName, studentIdentifier, subFolder, onU
       });
     } catch (e) {
       setError(e.message || "Upload failed. Please try again.");
+      setRejected(Boolean(e.rejected));
       setUploading(false);
       setReUploading(false);
       return;
     }
 
+    const record = uploadRecord(result);
     setUploading(false);
     setReUploading(false);
-    setLocalResult(result);
-    onUploaded(field.id, result);
-
-    if (willRead) {
-      setRead({ status: "reading", error: "" });
-      setRead(await readWithModel({ field, files: [compressed], studentName, studentIdentifier, subFolder, onExtracted }));
-    }
+    setLocalResult(record);
+    onUploaded(field.id, record);
+    setRead(applyReaderResult(field, result, onExtracted));
   };
 
   return (
@@ -226,7 +231,7 @@ function SingleUploadBox({ field, studentName, studentIdentifier, subFolder, onU
           {uploading ? (
             <div className="upload-progress">
               <Loader size={20} className="spin" />
-              <span>Uploading… {progress}%</span>
+              <span>{field.reader ? "Checking your document…" : `Uploading… ${progress}%`}</span>
               <div className="progress-bar"><div className="progress-fill" style={{ width: `${progress}%` }} /></div>
             </div>
           ) : (
@@ -243,14 +248,17 @@ function SingleUploadBox({ field, studentName, studentIdentifier, subFolder, onU
       <ReadStatus status={readStatus} error={read.error} />
 
       {error && (
-        <div className="upload-error">
-          <AlertCircle size={13} />
-          <span>{error}</span>
-          <button className="error-dismiss" onClick={() => setError("")}>×</button>
+        <div className={`upload-error${rejected ? " upload-rejected" : ""}`} role="alert">
+          {rejected ? <ShieldAlert size={14} /> : <AlertCircle size={13} />}
+          <span>
+            {rejected && <strong>Not uploaded. </strong>}
+            {error}
+          </span>
+          <button className="error-dismiss" onClick={() => { setError(""); setRejected(false); }} aria-label="Dismiss">×</button>
         </div>
       )}
 
-      <input ref={inputRef} type="file" accept={field.accept} style={{ display: "none" }} onChange={(e) => handleFile(e.target.files[0])} />
+      <input ref={inputRef} type="file" accept={field.accept} style={{ display: "none" }} onChange={(e) => { handleFile(e.target.files[0]); e.target.value = ""; }} />
       <div className="rename-hint">Will be saved as: <strong>{field.rename}.ext</strong></div>
     </div>
   );
@@ -268,33 +276,22 @@ function MultiUploadBox({ field, studentName, studentIdentifier, subFolder, onUp
   const [read, setRead]   = useState({ status: null, error: "" });
   const [limitMsg, setLimitMsg] = useState("");
   const inputRef = useRef(null);
-  // Pages uploaded in this session, kept so both sides of a two-page
-  // document can be read together once the last one finishes uploading.
-  const filesRef = useRef({});
   const queueRef = useRef(queue);
   useEffect(() => { queueRef.current = queue; }, [queue]);
 
   const maxFiles = field.maxFiles || Infinity;
   const readStatus = read.status || (queue.some((q) => q.status === "done") ? statusFromExtraction(extraction) : null);
 
-  const readIfSettled = async () => {
-    const q = queueRef.current;
-    if (q.some((item) => item.status === "uploading" || item.status === "pending")) return;
-    const files = q.filter((item) => item.status === "done" && filesRef.current[item.key]).map((item) => filesRef.current[item.key]);
-    if (!files.length) return;
-    setRead({ status: "reading", error: "" });
-    setRead(await readWithModel({ field, files: files.slice(0, 4), studentName, studentIdentifier, subFolder, onExtracted }));
-  };
-
+  // Returns "done" | "rejected" | "error".
   const uploadFile = async (file, slotKey) => {
     const ext = file.name.split(".").pop().toLowerCase();
     if (!getAllowedExts(field).includes(ext)) {
       setQueue((q) => q.map((item) => item.key === slotKey ? { ...item, status: "error", error: `Invalid type. Allowed: ${field.accept}` } : item));
-      return;
+      return "error";
     }
     if (file.size > MAX_BYTES) {
       setQueue((q) => q.map((item) => item.key === slotKey ? { ...item, status: "error", error: "File too large. Max 25 MB." } : item));
-      return;
+      return "error";
     }
 
     setQueue((q) => q.map((item) => item.key === slotKey ? { ...item, status: "uploading", progress: 0 } : item));
@@ -315,18 +312,33 @@ function MultiUploadBox({ field, studentName, studentIdentifier, subFolder, onUp
         skipOcr: willRead && !field.keepOcr,
       });
     } catch (e) {
-      setQueue((q) => q.map((item) => item.key === slotKey ? { ...item, status: "error", error: e.message || "Upload failed." } : item));
-      return;
+      const status = e.rejected ? "rejected" : "error";
+      setQueue((q) => q.map((item) => item.key === slotKey ? { ...item, status, error: e.message || "Upload failed." } : item));
+      return status;
     }
 
-    if (willRead) filesRef.current[slotKey] = compressed;
-    const markDone = (q) => q.map((item) => item.key === slotKey ? { ...item, status: "done", result, name: result.name } : item);
-    // Update the ref synchronously — readIfSettled() runs before React
-    // re-renders, and must see this page as done.
+    const record = uploadRecord(result);
+    const markDone = (q) => q.map((item) => item.key === slotKey ? { ...item, status: "done", result: record, name: record.name, error: "" } : item);
     queueRef.current = markDone(queueRef.current);
     setQueue(markDone);
-    onUploaded(slotKey, result);
-    if (willRead) readIfSettled();
+    onUploaded(slotKey, record);
+    if (willRead) setRead(applyReaderResult(field, result, onExtracted));
+    return "done";
+  };
+
+  // Pages go up one at a time: the server checks each new page together
+  // with the pages already saved. A page rejected on its own (e.g. a
+  // passport's last page sent before the photo page) gets one more try
+  // once the rest of the batch is saved.
+  const uploadBatch = async (items) => {
+    const retry = [];
+    for (const it of items) {
+      const outcome = await uploadFile(it.file, it.key);
+      if (outcome === "rejected") retry.push(it);
+    }
+    if (retry.length && retry.length < items.length) {
+      for (const it of retry) await uploadFile(it.file, it.key);
+    }
   };
 
   const addFiles = (files) => {
@@ -353,12 +365,15 @@ function MultiUploadBox({ field, studentName, studentIdentifier, subFolder, onUp
     const newItems = arr.map((file, i) => ({ key: keys[i], name: file.name, status: "pending", progress: 0, result: null, error: "" }));
     queueRef.current = [...queueRef.current, ...newItems];
     setQueue((prev) => [...prev, ...newItems]);
-    // start uploads concurrently
-    arr.forEach((file, i) => uploadFile(file, keys[i]));
+    if (field.reader) {
+      uploadBatch(arr.map((file, i) => ({ file, key: keys[i] })));
+    } else {
+      // Plain slots: upload concurrently, as before.
+      arr.forEach((file, i) => uploadFile(file, keys[i]));
+    }
   };
 
   const removeItem = (key) => {
-    delete filesRef.current[key];
     setLimitMsg("");
     setQueue((q) => q.filter((item) => item.key !== key));
     // signal removal to parent by passing null
@@ -394,7 +409,11 @@ function MultiUploadBox({ field, studentName, studentIdentifier, subFolder, onUp
             <div key={item.key} className={`queue-item queue-${item.status}`}>
               <FileText size={13} />
               <span className="queue-name">{item.name}</span>
-              {item.status === "uploading" && (
+              {item.status === "pending" && field.reader && <span className="queue-waiting">Waiting…</span>}
+              {item.status === "uploading" && field.reader && (
+                <span className="queue-waiting"><Loader size={12} className="spin" /> Checking…</span>
+              )}
+              {item.status === "uploading" && !field.reader && (
                 <div className="queue-progress-wrap">
                   <Loader size={12} className="spin" />
                   <div className="queue-bar"><div className="queue-fill" style={{ width: `${item.progress || 0}%` }} /></div>
@@ -411,6 +430,7 @@ function MultiUploadBox({ field, studentName, studentIdentifier, subFolder, onUp
                 </>
               )}
               {item.status === "error" && <AlertCircle size={12} className="queue-err-icon" title={item.error} />}
+              {item.status === "rejected" && <ShieldAlert size={13} className="queue-err-icon" title={item.error} />}
               <button className="queue-remove" onClick={() => removeItem(item.key)} title="Remove">
                 <X size={12} />
               </button>
@@ -442,6 +462,15 @@ function MultiUploadBox({ field, studentName, studentIdentifier, subFolder, onUp
         </div>
       )}
 
+      {queue.filter((item) => item.status === "rejected" || item.status === "error").map((item) => (
+        <div key={`err-${item.key}`} className={`upload-error${item.status === "rejected" ? " upload-rejected" : ""}`} role="alert">
+          {item.status === "rejected" ? <ShieldAlert size={14} /> : <AlertCircle size={13} />}
+          <span>
+            <strong>{item.status === "rejected" ? `${item.name} was not uploaded. ` : `${item.name}: `}</strong>
+            {item.error}
+          </span>
+        </div>
+      ))}
       {limitMsg && <div className="upload-error"><AlertCircle size={13} /><span>{limitMsg}</span></div>}
       <ReadStatus status={readStatus} error={read.error} />
 
