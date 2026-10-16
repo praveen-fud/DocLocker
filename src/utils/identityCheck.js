@@ -148,6 +148,10 @@ function legacySources(legacyDocs, extractions, prefix, coIndex) {
     const d = legacyDoc(legacyDocs, "12th");
     if (d) out.push({ label: `12th Certificate${BASIC}`, name: f(d).Name });
   }
+  if (coIndex === null && !extractions["academics.marksheet_10"]) {
+    const d = legacyDoc(legacyDocs, "10th");
+    if (d) out.push({ label: `10th Certificate${BASIC}`, name: f(d).Name });
+  }
   return out;
 }
 
@@ -181,6 +185,17 @@ function applicantSources(extractions, info, legacyDocs) {
   const pan = extractions["applicant.pan"]?.flat;
   if (pan) {
     sources.push({ label: "PAN Card", name: pan.name, fatherName: pan.father_name, dob: pan.date_of_birth });
+  }
+  // The 10th memo is the one academic document that prints a date of birth.
+  const ssc = extractions["academics.marksheet_10"];
+  if (ssc?.flat && ssc.checks?.supported !== false) {
+    sources.push({
+      label: "10th Certificate",
+      name: ssc.flat.student_name,
+      fatherName: ssc.flat.father_name,
+      motherName: ssc.flat.mother_name,
+      dob: ssc.flat.date_of_birth,
+    });
   }
   const cert = extractions["academics.marksheet_12"];
   if (cert?.flat && cert.checks?.supported !== false) {

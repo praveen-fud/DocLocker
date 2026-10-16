@@ -203,7 +203,7 @@ export default function Portal() {
   };
 
   // Called when our document model finishes reading a passport / Aadhaar /
-  // PAN / 12th certificate. Stores what it read, feeds the eligibility
+  // PAN / 10th or 12th certificate. Stores what it read, feeds the eligibility
   // report, auto-fills the profile and re-runs the identity check.
   const handleExtracted = (sectionKey, fieldId, { extraction, parsedData }) => {
     const extKey = `${sectionKey}.${fieldId}`;
@@ -212,9 +212,9 @@ export default function Portal() {
     extractionsRef.current = newExtractions;
     setExtractions(newExtractions);
 
-    // A certificate from a board the model doesn't know keeps whatever the
-    // old parser found instead.
-    const usable = !(merged.docType === "certificate" && merged.checks?.supported === false);
+    // A 10th/12th certificate from a board the model doesn't know keeps
+    // whatever the old parser found instead.
+    const usable = !(["certificate", "ssc"].includes(merged.docType) && merged.checks?.supported === false);
 
     if (usable && parsedData && Object.keys(parsedData.fields || {}).length) {
       const sameDoc = (d) => d.subFolder === parsedData.subFolder && d.type === parsedData.type;

@@ -65,7 +65,7 @@ function getAllowedExts(field) {
 // reloaded page still says whether the document was read.
 function statusFromExtraction(extraction) {
   if (!extraction) return null;
-  if (extraction.docType === "certificate" && extraction.checks?.supported === false) return "unsupported";
+  if (["certificate", "ssc"].includes(extraction.docType) && extraction.checks?.supported === false) return "unsupported";
   const s = extraction.review?.status;
   if (s === "manual_required") return "manual";
   if (s === "review_recommended") return "review";

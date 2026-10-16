@@ -41,6 +41,14 @@
   grid-template-columns: repeat(2, 1fr);
   gap: 10px;
 }
+/* An odd tile out (5 document types) takes the full last row. */
+.docr-type-grid > .docr-type-tile:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.docr-table tr.docr-row-flagged td {
+  background: rgba(217, 119, 6, 0.08);
+}
 
 .docr-type-tile {
   display: flex;

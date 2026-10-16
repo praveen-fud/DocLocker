@@ -832,7 +832,7 @@ function RecoverMetaModal({ student, onClose, onRestored }) {
 
 // ─── Identity check (admin / advisor only) ────────────────────────────────────
 // Name, parents' names, DOB and gender as read from the student's passport /
-// Aadhaar / PAN / 12th certificate, compared against each other and against
+// Aadhaar / PAN / 10th and 12th certificates, compared against each other and against
 // what the student typed. Recomputed from the stored reads every time the
 // popup opens, so it reflects edits made after the student's last save.
 //
@@ -970,7 +970,7 @@ function IdentityCheckSection({ student }) {
   if (report.overall === "none") {
     verdict = "none";
     title = "Not checked yet";
-    sub = "Fills in once the student uploads at least two of Passport, Aadhaar, PAN and 12th certificate.";
+    sub = "Fills in once the student uploads at least two of Passport, Aadhaar, PAN, 10th and 12th certificate.";
   } else if (!problems.length) {
     verdict = "match";
     title = "All details match";
@@ -4460,7 +4460,7 @@ export default function Admin() {
     },
     advisors: { eyebrow: roleEyebrow, title: "Advisors", sub: "Workload and progress by advisor" },
     banks:    { eyebrow: roleEyebrow, title: "Banks & Lenders", sub: "Manage loan officers and control which students each one can see" },
-    docReader: { eyebrow: roleEyebrow, title: "Document Reader", sub: "Extract structured data from a certificate, passport, Aadhaar or PAN card in seconds" },
+    docReader: { eyebrow: roleEyebrow, title: "Document Reader", sub: "Extract structured data from a 10th or 12th certificate, passport, Aadhaar or PAN card in seconds" },
     audit:    { eyebrow: roleEyebrow, title: "Audit Log", sub: "Who did what, and when" },
     bankActivity: { eyebrow: roleEyebrow, title: "Bank Activity", sub: "Student, advisor, and banker actions, grouped by lender" },
   };

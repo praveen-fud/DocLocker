@@ -1,6 +1,6 @@
-// Maps our document model's output (passport / Aadhaar / PAN / 12th
-// certificate) onto the student portal's form fields. Replaces the old
-// regex-based autoFillMap.js for these four document types; every other
+// Maps our document model's output (passport / Aadhaar / PAN / 10th and
+// 12th certificates) onto the student portal's form fields. Replaces the
+// old regex-based autoFillMap.js for these document types; every other
 // document still goes through the old parser.
 
 export const READER_SOURCE_LABEL = {
@@ -8,12 +8,13 @@ export const READER_SOURCE_LABEL = {
   aadhaar: "Aadhaar",
   pan: "PAN Card",
   certificate: "12th Certificate",
+  ssc: "10th Certificate",
 };
 
 // When two documents fill the same field, the more trustworthy one wins.
 // Labels written by the old parser aren't listed, so they rank 0 and are
 // replaced by any document this model reads.
-const SOURCE_PRIORITY = { Passport: 4, Aadhaar: 3, "PAN Card": 2, "12th Certificate": 1 };
+const SOURCE_PRIORITY = { Passport: 4, Aadhaar: 3, "PAN Card": 2, "10th Certificate": 1, "12th Certificate": 1 };
 
 const SMALL_WORDS = new Set(["S/O", "D/O", "W/O", "C/O"]);
 
@@ -33,6 +34,12 @@ function splitName(full) {
   if (!parts.length) return {};
   if (parts.length === 1) return { firstName: parts[0] };
   return { firstName: parts.slice(0, -1).join(" "), lastName: parts[parts.length - 1] };
+}
+
+// "SSC Public Examinations, March 2019" → "2019"
+function examYear(exam) {
+  const years = String(exam || "").match(/\b(19|20)\d{2}\b/g);
+  return years ? years[years.length - 1] : "";
 }
 
 function gender(v) {
@@ -95,6 +102,26 @@ export function applicantFieldsFromReader(docType, flat = {}, checks = {}) {
       set("pct12Score", flat.percentage, "percentage");
     }
     set("pct12Year", flat.year_of_pass, "year_of_pass");
+  } else if (docType === "ssc" && checks.supported !== false) {
+    const n = splitName(flat.student_name);
+    set("firstName", n.firstName, "student_name");
+    set("lastName", n.lastName, "student_name");
+    set("fatherName", titleCase(flat.father_name), "father_name");
+    set("motherName", titleCase(flat.mother_name), "mother_name");
+    set("dob", flat.date_of_birth, "date_of_birth");
+    // TS/AP SSC is graded on a 10-point CGPA from 2010; older and other
+    // memos print marks.
+    if (flat.result_type === "grades" && flat.cgpa != null) {
+      set("pct10Type", "points", "cgpa");
+      set("pct10Score", flat.cgpa, "cgpa");
+    } else if (flat.percentage != null) {
+      set("pct10Type", "percentage", "percentage");
+      set("pct10Score", flat.percentage, "percentage");
+    } else if (flat.total_marks != null) {
+      set("pct10Type", "marks", "total_marks");
+      set("pct10Score", flat.total_marks, "total_marks");
+    }
+    set("pct10Year", examYear(flat.exam), "exam");
   }
   return { values, from };
 }

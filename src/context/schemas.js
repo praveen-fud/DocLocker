@@ -1,9 +1,10 @@
 // Document schemas
 
-// `reader` = this slot is read by our own document model (certificate /
-// passport / aadhaar / pan) instead of the old Drive OCR + regex parser.
+// `reader` = this slot is read by our own document model (ssc /
+// certificate / passport / aadhaar / pan) instead of the old Drive OCR +
+// regex parser.
 // `keepOcr` = also run the old parser, as a fallback for documents the
-// model can't handle (its certificate reader only knows TS/AP Intermediate).
+// model can't handle (its 10th and 12th readers only know TS/AP boards).
 // Passport and Aadhaar take two pages because the parents' names and the
 // address are only printed on the second one.
 const PASSPORT_READER = {
@@ -100,6 +101,8 @@ export const DOCUMENT_SCHEMA = {
         // FIX: was ".pdf,.jpg,.jpeg,.png,doc,.docx" (missing dot before doc)
         accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
         optional: true,
+        reader: "ssc",
+        keepOcr: true,
       },
       {
         id: "marksheet_12",

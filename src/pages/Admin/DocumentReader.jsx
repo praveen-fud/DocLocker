@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  BookOpen,
   GraduationCap,
   IdCard,
   Fingerprint,
@@ -26,9 +27,18 @@ const MAX_BYTES = 25 * 1024 * 1024;
 
 const DOC_TYPES = [
   {
+    id: "ssc",
+    label: "10th Certificate",
+    hint: "SSC marks memo (TS / AP)",
+    icon: BookOpen,
+    maxFiles: 1,
+    filesHint: "Exactly 1 file",
+    accept: ".pdf,.jpg,.jpeg,.png,.tiff,.tif,.bmp,.webp",
+  },
+  {
     id: "certificate",
-    label: "Certificate",
-    hint: "12th / Intermediate marks memo",
+    label: "12th Certificate",
+    hint: "Intermediate marks memo (TS / AP)",
     icon: GraduationCap,
     maxFiles: 1,
     filesHint: "Exactly 1 file",
@@ -78,6 +88,8 @@ const FIELD_LABELS = {
   aadhaar_number: "Aadhaar Number", name: "Name", gender: "Gender",
   care_of: "Care Of", relation: "Relation", pincode: "PIN Code",
   pan_number: "PAN Number",
+  roll_number: "Roll Number", school: "School", exam: "Examination",
+  appearance: "Appeared As", result_type: "Result Type", subjects: "Subjects",
 };
 
 function labelFor(key) {
@@ -141,6 +153,25 @@ function VerificationChips({ kind, full }) {
   if (kind === "certificate" && full && full.supported === false) {
     chips.push({ ok: false, label: "Doesn't look like a supported TS/AP Intermediate certificate" });
   }
+  if (kind === "ssc" && full) {
+    if (full.document_type && full.document_type !== "ssc") {
+      chips.push({ ok: false, label: "Doesn't look like a TS/AP 10th (SSC) certificate" });
+    }
+    const c = full.checks || {};
+    if (typeof c.cgpa_matches_grade_points === "boolean") {
+      chips.push({
+        ok: c.cgpa_matches_grade_points,
+        label: c.cgpa_matches_grade_points ? "CGPA matches the subject grade points" : "CGPA doesn't match the subject grade points",
+      });
+    }
+    if (typeof c.total_matches_subjects === "boolean") {
+      chips.push({
+        ok: c.total_matches_subjects,
+        label: c.total_matches_subjects ? "Total matches the subject marks" : "Total doesn't match the subject marks",
+      });
+    }
+    if (c.tilt_corrected) chips.push({ ok: null, label: "Photo was tilted — straightened before reading" });
+  }
   if (kind === "passport" && typeof full?.mrz_valid === "boolean") {
     chips.push({ ok: full.mrz_valid, label: full.mrz_valid ? "MRZ check digits verified" : "MRZ check failed" });
   }
@@ -198,6 +229,40 @@ function SubjectsTable({ subjects }) {
               <td>{s.maximum_marks ?? "—"}</td>
             </tr>
           ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// 10th subjects: graded memos (CGPA era) show grade + grade point,
+// older/marks memos show marks out of 100. Language papers carry the
+// actual language in `subject` (e.g. "First Language (Telugu)").
+function SscSubjectsTable({ subjects, graded }) {
+  if (!subjects || subjects.length === 0) return null;
+  return (
+    <div className="docr-table-wrap">
+      <table className="docr-table">
+        <thead>
+          <tr>
+            <th>Subject</th>
+            {graded ? <><th>Grade</th><th>Grade Point</th></> : <><th>Marks</th><th>Max</th></>}
+          </tr>
+        </thead>
+        <tbody>
+          {subjects.map((s, i) => {
+            const isLanguage = /^L\d$/.test(s.area || "");
+            const name = isLanguage && s.subject ? `${s.area_name} (${s.subject})` : (s.area_name || s.subject || "—");
+            const flagged = s.review && s.review !== "auto";
+            return (
+              <tr key={i} className={flagged ? "docr-row-flagged" : undefined}>
+                <td>{name}</td>
+                {graded
+                  ? <><td>{s.grade ?? "—"}</td><td>{s.grade_point ?? "—"}</td></>
+                  : <><td>{s.marks ?? "—"}</td><td>100</td></>}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -277,6 +342,46 @@ function ExtractedFields({ kind, flat }) {
           )}
         </div>
         {flat.notes && <p className="docr-notes">{flat.notes}</p>}
+      </>
+    );
+  }
+
+  if (kind === "ssc") {
+    const graded = flat.result_type === "grades";
+    const gridKeys = ["board", "student_name", "father_name", "mother_name", "date_of_birth",
+      "roll_number", "exam", "medium", "appearance"];
+    return (
+      <>
+        <div className="info-grid docr-grid">
+          {gridKeys.map((k) => <InfoCell key={k} label={labelFor(k)} value={flat[k]} />)}
+          <InfoCell label={labelFor("school")} value={flat.school} wide />
+        </div>
+        <SscSubjectsTable subjects={flat.subjects} graded={graded} />
+        <div className="docr-result-strip">
+          {graded ? (
+            <div className="docr-result-item">
+              <span className="docr-result-label">CGPA</span>
+              <span className="docr-result-value">{flat.cgpa != null ? `${Number(flat.cgpa).toFixed(1)} / 10` : "—"}</span>
+            </div>
+          ) : (
+            <>
+              <div className="docr-result-item">
+                <span className="docr-result-label">Total Marks</span>
+                <span className="docr-result-value">
+                  {flat.total_marks != null ? `${flat.total_marks}${flat.maximum_marks != null ? ` / ${flat.maximum_marks}` : ""}` : "—"}
+                </span>
+              </div>
+              <div className="docr-result-item">
+                <span className="docr-result-label">Percentage</span>
+                <span className="docr-result-value">{flat.percentage != null ? `${flat.percentage}%` : "—"}</span>
+              </div>
+            </>
+          )}
+          <div className="docr-result-item">
+            <span className="docr-result-label">Subjects Read</span>
+            <span className="docr-result-value">{(flat.subjects || []).length || "—"}</span>
+          </div>
+        </div>
       </>
     );
   }
