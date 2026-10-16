@@ -246,13 +246,41 @@ export async function getStudentFiles(studentName, studentIdentifier = '') {
   return data.groups || {};
 }
 
-// ── Build a URL for viewing/downloading a file through the secure proxy ───────
-// The JWT has to ride in the query string here (not a header) since this URL
-// is used directly as <img src>/<iframe src>/download-link href.
-export function getFileProxyUrl(fileId, mode = 'view') {
-  const token = getAuthHeaders().Authorization?.replace('Bearer ', '') || '';
-  const params = new URLSearchParams({ mode, token });
-  return `${API_URL}/api/files/${fileId}/content?${params.toString()}`;
+// ── Documents: view in the app, download with a one-time link ─────────────────
+// The login token never goes into a URL. Viewing fetches the file with the
+// Authorization header and hands back a Blob for the in-app viewer; a
+// download asks the backend for a one-time link (2 minutes, that file only)
+// so the browser can save it natively. Every open is recorded server-side.
+
+// thumbnail: the small profile photo in the staff student list — not
+// recorded as a document view (it loads for every row on every visit).
+export async function fetchFileBlob(fileId, { thumbnail = false } = {}) {
+  const params = new URLSearchParams({ mode: 'view' });
+  if (thumbnail) params.set('purpose', 'thumbnail');
+  const res = await fetch(`${API_URL}/api/files/${encodeURIComponent(fileId)}/content?${params}`, {
+    headers: getAuthHeaders(),
+    signal: AbortSignal.timeout(60000),
+  });
+  if (!res.ok) {
+    let message = `Could not open the document (${res.status})`;
+    try { message = (await res.json()).error || message; } catch { /* not JSON */ }
+    throw new Error(message);
+  }
+  return res.blob();
+}
+
+function startBrowserDownload(path) {
+  const a = document.createElement('a');
+  a.href = `${API_URL}${path}`;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+export async function downloadFile(fileId) {
+  const { url } = await apiPost(`/api/files/${encodeURIComponent(fileId)}/download-link`, {});
+  startBrowserDownload(url);
 }
 
 // ── Update student loan status (admin / advisor / banker with access) ─────────
@@ -282,12 +310,11 @@ export async function restoreMeta(studentName, studentIdentifier = '', meta) {
   return apiPost(`/api/students/${encodeURIComponent(folderKey)}/restore-meta`, { metaJson: JSON.stringify(meta) });
 }
 
-// ── Build a URL to download all student documents as a zip ────────────────────
-export function getDownloadAllUrl(studentName, studentIdentifier = '') {
+// ── Download all of a student's documents as a zip (one-time link) ───────────
+export async function downloadAllFiles(studentName, studentIdentifier = '') {
   const folderKey = buildFolderKey(studentName, studentIdentifier);
-  const token = getAuthHeaders().Authorization?.replace('Bearer ', '') || '';
-  const params = new URLSearchParams({ token });
-  return `${API_URL}/api/students/${encodeURIComponent(folderKey)}/files/zip?${params.toString()}`;
+  const { url } = await apiPost(`/api/students/${encodeURIComponent(folderKey)}/files/zip-link`, {});
+  startBrowserDownload(url);
 }
 
 // ── Document reader — certificate / passport / Aadhaar / PAN extraction ───────

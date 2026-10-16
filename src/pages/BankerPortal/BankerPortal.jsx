@@ -5,7 +5,8 @@ import {
   CheckCircle, Upload, Archive,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
-import { getAllStudentsFromDrive, getStudentFiles, getFileProxyUrl, changeOwnPassword, updateLoanStatus, uploadSanctionLetter, getDownloadAllUrl } from "../../utils/driveApi";
+import { getAllStudentsFromDrive, getStudentFiles, changeOwnPassword, updateLoanStatus, uploadSanctionLetter, downloadFile, downloadAllFiles } from "../../utils/driveApi";
+import DocumentViewer from "../../components/DocumentViewer/DocumentViewer";
 import { getBankLogo } from "../../utils/bankOptions";
 import "./BankerPortal.css";
 
@@ -165,18 +166,24 @@ export default function BankerPortal() {
     }
   };
 
+  // Downloads use one-time links (this student's zip / this file only,
+  // valid 2 minutes, single use) — never a link carrying the login.
   const handleDownloadAll = async (student) => {
     setDownloadingAll(true);
     try {
-      const url = getDownloadAllUrl(student.name, student.email || student.phone || "");
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      await downloadAllFiles(student.name, student.email || student.phone || "");
+    } catch (e) {
+      setGroupsError(e.message || "Could not start the download.");
     } finally {
       setTimeout(() => setDownloadingAll(false), 1500);
+    }
+  };
+
+  const handleDownloadFile = async (file) => {
+    try {
+      await downloadFile(file.id);
+    } catch (e) {
+      setGroupsError(e.message || "Could not start the download.");
     }
   };
 
@@ -377,18 +384,20 @@ export default function BankerPortal() {
                                           <button
                                             className="icon-btn"
                                             title="View"
-                                            onClick={() => setPreviewFile(f)}
+                                            onClick={() => setPreviewFile({ ...f, group })}
                                           >
                                             <Eye size={14} />
                                           </button>
                                         )}
-                                        <a
+                                        <button
+                                          type="button"
                                           className="icon-btn"
                                           title="Download"
-                                          href={getFileProxyUrl(f.id, "download")}
+                                          aria-label={`Download ${f.name}`}
+                                          onClick={() => handleDownloadFile(f)}
                                         >
                                           <Download size={14} />
-                                        </a>
+                                        </button>
                                       </div>
                                     </div>
                                   ))}
@@ -424,28 +433,11 @@ export default function BankerPortal() {
       </div>
 
       {previewFile && (
-        <div className="banker-preview-backdrop" onClick={() => setPreviewFile(null)}>
-          <div className="banker-preview-box" onClick={(e) => e.stopPropagation()}>
-            <div className="banker-preview-header">
-              <span>{previewFile.name}</span>
-              <div className="banker-preview-actions">
-                <a className="icon-btn" title="Download" href={getFileProxyUrl(previewFile.id, "download")}>
-                  <Download size={15} />
-                </a>
-                <button className="icon-btn" title="Close" onClick={() => setPreviewFile(null)}>
-                  <X size={16} />
-                </button>
-              </div>
-            </div>
-            <div className="banker-preview-body">
-              {previewFile.mimeType === "application/pdf" ? (
-                <iframe src={getFileProxyUrl(previewFile.id, "view")} title={previewFile.name} />
-              ) : (
-                <img src={getFileProxyUrl(previewFile.id, "view")} alt={previewFile.name} />
-              )}
-            </div>
-          </div>
-        </div>
+        <DocumentViewer
+          file={previewFile}
+          subtitle={[openStudent?.name, previewFile.group?.replace(/_/g, " ")].filter(Boolean).join(" — ")}
+          onClose={() => setPreviewFile(null)}
+        />
       )}
 
       {/* Loan Status Update Modal */}

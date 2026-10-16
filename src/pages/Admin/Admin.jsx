@@ -56,7 +56,9 @@ import {
   ScanSearch,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
-import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter, recoverMetaFromPdf, restoreMeta, buildFolderKey, getAuditLog, getDownloadAllUrl, getFileProxyUrl } from "../../utils/driveApi";
+import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter, recoverMetaFromPdf, restoreMeta, buildFolderKey, getAuditLog, downloadAllFiles } from "../../utils/driveApi";
+import DocumentViewer from "../../components/DocumentViewer/DocumentViewer";
+import useFileObjectUrl from "../../hooks/useFileObjectUrl";
 import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields } from "../../context/schemas";
 import { BANK_OPTIONS, getBankLogo } from "../../utils/bankOptions";
 import logoImg from "../../assets/logo.png";
@@ -1576,16 +1578,39 @@ function DocumentsTab({ student }) {
   );
 }
 
-// Drive files open in Drive; Railway files (ids starting "rw_") have no
-// Drive link and open through the backend's secure, access-checked proxy.
-function fileViewUrl(file) {
-  if (file.webViewLink) return file.webViewLink;
+// Every document opens inside DocLocker's own viewer (fetched privately,
+// recorded in the audit log). Only a very old upload saved without a file
+// id falls back to its Drive link, which Drive itself still protects.
+function FileOpenAction({ file, onView }) {
   const id = file.id || file.fileId;
-  return id && String(id).startsWith("rw_") ? getFileProxyUrl(id, "view") : null;
+  if (id) {
+    return (
+      <button
+        type="button"
+        className="file-link"
+        onClick={(e) => { e.stopPropagation(); onView(); }}
+      >
+        <Eye size={12} /> View
+      </button>
+    );
+  }
+  if (!file.webViewLink) return null;
+  return (
+    <a
+      href={file.webViewLink}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="file-link"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <ExternalLink size={12} /> Open in Drive
+    </a>
+  );
 }
 
 function FilesTab({ student }) {
   const files = getAllUploadedFiles(student.uploads);
+  const [viewing, setViewing] = useState(null);
   // Student_Summary.pdf / Eligibility_Report.pdf aren't part of student.uploads
   // at all — they're auto-generated server-side into the student's "Others"
   // Drive folder on every save, never recorded into the upload-field state
@@ -1610,6 +1635,13 @@ function FilesTab({ student }) {
 
   return (
     <div className="detail-body">
+      {viewing && (
+        <DocumentViewer
+          file={{ id: viewing.id || viewing.fileId, name: viewing.name }}
+          subtitle={[student.name, viewing.section || viewing.tag].filter(Boolean).join(" — ")}
+          onClose={() => setViewing(null)}
+        />
+      )}
       {generated.length > 0 && (
         <>
           <p className="section-heading">
@@ -1623,17 +1655,7 @@ function FilesTab({ student }) {
                   <div className="file-name">{file.name}</div>
                   <div className="file-section-tag">{file.tag}</div>
                 </div>
-                {fileViewUrl(file) && (
-                  <a
-                    href={fileViewUrl(file)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="file-link"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <ExternalLink size={12} /> View
-                  </a>
-                )}
+                <FileOpenAction file={file} onView={() => setViewing(file)} />
               </div>
             ))}
           </div>
@@ -1653,17 +1675,7 @@ function FilesTab({ student }) {
                   <div className="file-name">{file.name}</div>
                   <div className="file-section-tag">{file.section}</div>
                 </div>
-                {fileViewUrl(file) && (
-                  <a
-                    href={fileViewUrl(file)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="file-link"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <ExternalLink size={12} /> View
-                  </a>
-                )}
+                <FileOpenAction file={file} onView={() => setViewing(file)} />
               </div>
             ))}
           </div>
@@ -1889,6 +1901,34 @@ function AdvisorEditor({ value, onSave, options = [] }) {
   );
 }
 
+// The small profile photo in a student row. Loaded privately (no login in
+// the URL) and only once the row scrolls into view, so a long list doesn't
+// fetch every photo up front.
+function StudentPhoto({ fileId, onFail }) {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      const t = setTimeout(() => setVisible(true), 0);
+      return () => clearTimeout(t);
+    }
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        setVisible(true);
+        io.disconnect();
+      }
+    }, { rootMargin: "200px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  const { url, error, type, loading } = useFileObjectUrl(fileId, { thumbnail: true, enabled: visible });
+  useEffect(() => {
+    if (error || (!loading && visible && !url && type)) onFail();
+  }, [error, loading, visible, url, type, onFail]);
+  return url ? <img ref={ref} src={url} alt="" onError={onFail} /> : <span ref={ref} className="student-photo-placeholder" />;
+}
+
 function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDelete, onOpenDrive, onViewReport, onSendToBank, onLoanStatusUpdate, onRecoverMeta, canEditConsultancy, onConsultancySave, consultancySuggestions, canEditAdvisor, onAdvisorSave, advisorOptions, isDuplicate }) {
   const [activeTab, setActiveTab] = useState("personal");
   const [moreOpen, setMoreOpen] = useState(false);
@@ -1927,11 +1967,7 @@ function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDel
         <div className="student-cell-name">
           <div className={`student-avatar${hasPhoto ? " has-photo" : ` avatar-${avatarVariant}`}`}>
             {hasPhoto ? (
-              <img
-                src={getFileProxyUrl(photoUpload.id, "view")}
-                alt=""
-                onError={() => setPhotoFailed(true)}
-              />
+              <StudentPhoto fileId={photoUpload.id} onFail={() => setPhotoFailed(true)} />
             ) : (
               <User size={16} />
             )}
@@ -4361,16 +4397,17 @@ export default function Admin() {
     }
   };
 
-  const handleBulkDownload = () => {
+  // One-time zip link per student, started one after another — browsers
+  // drop several downloads fired in the same instant.
+  const handleBulkDownload = async () => {
     for (const s of selectedStudents) {
       const identifier = s.email || s.phone || "";
-      const url = getDownloadAllUrl(s.name, identifier);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      try {
+        await downloadAllFiles(s.name, identifier);
+      } catch (e) {
+        console.error(`Download failed for ${s.name}:`, e.message);
+      }
+      await new Promise((r) => setTimeout(r, 700));
     }
   };
 

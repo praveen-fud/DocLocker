@@ -3631,6 +3631,12 @@
   font-weight: 700;
   letter-spacing: -0.02em;
 }
+.student-photo-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(20, 104, 199, 0.08);
+}
 .student-avatar img {
   width: 100%;
   height: 100%;
@@ -4107,6 +4113,14 @@
 .file-link:hover {
   background: rgba(20, 104, 199, 0.2);
   box-shadow: var(--teal-glow);
+}
+button.file-link {
+  font-family: inherit;
+  cursor: pointer;
+}
+.file-link:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
 }
 
 .missing-section {
