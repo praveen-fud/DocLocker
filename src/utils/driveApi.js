@@ -215,7 +215,14 @@ function folderIdFromUrl(url) {
 // studentName + studentIdentifier — that reconstruction can silently mismatch
 // the real Drive folder name (whitespace/casing drift, older naming scheme),
 // which previously made deletes no-op while still looking successful.
-export async function deleteStudent(studentName, studentIdentifier = '', driveUrl = '') {
+//
+// Railway-stored students have no Drive folder; they're deleted by their
+// own student key instead.
+export async function deleteStudent(studentName, studentIdentifier = '', driveUrl = '', railwayStudentKey = '') {
+  if (railwayStudentKey) {
+    await apiDelete('/api/students', { studentKey: railwayStudentKey });
+    return;
+  }
   const folderId = folderIdFromUrl(driveUrl);
   if (folderId) {
     await apiDelete('/api/students', { folderId });

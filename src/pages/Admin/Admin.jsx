@@ -98,6 +98,7 @@ function getAllUploadedFiles(uploads) {
         section,
         fieldId,
         name: fileInfo.name || fileInfo.fileName || fieldId,
+        id: fileInfo.id || fileInfo.fileId,
         webViewLink: fileInfo.webViewLink,
         customName: fileInfo.customName,
       });
@@ -1575,6 +1576,14 @@ function DocumentsTab({ student }) {
   );
 }
 
+// Drive files open in Drive; Railway files (ids starting "rw_") have no
+// Drive link and open through the backend's secure, access-checked proxy.
+function fileViewUrl(file) {
+  if (file.webViewLink) return file.webViewLink;
+  const id = file.id || file.fileId;
+  return id && String(id).startsWith("rw_") ? getFileProxyUrl(id, "view") : null;
+}
+
 function FilesTab({ student }) {
   const files = getAllUploadedFiles(student.uploads);
   // Student_Summary.pdf / Eligibility_Report.pdf aren't part of student.uploads
@@ -1614,9 +1623,9 @@ function FilesTab({ student }) {
                   <div className="file-name">{file.name}</div>
                   <div className="file-section-tag">{file.tag}</div>
                 </div>
-                {file.webViewLink && (
+                {fileViewUrl(file) && (
                   <a
-                    href={file.webViewLink}
+                    href={fileViewUrl(file)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="file-link"
@@ -1644,9 +1653,9 @@ function FilesTab({ student }) {
                   <div className="file-name">{file.name}</div>
                   <div className="file-section-tag">{file.section}</div>
                 </div>
-                {file.webViewLink && (
+                {fileViewUrl(file) && (
                   <a
-                    href={file.webViewLink}
+                    href={fileViewUrl(file)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="file-link"
@@ -2011,9 +2020,11 @@ function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDel
                   <button onClick={(e) => { setMoreOpen(false); onLoanStatusUpdate(e); }}>
                     <Banknote size={14} /> Update Loan Status
                   </button>
-                  <button onClick={(e) => { setMoreOpen(false); onOpenDrive(e); }}>
-                    <ExternalLink size={14} /> Open Drive
-                  </button>
+                  {student.storage !== "railway" && (
+                    <button onClick={(e) => { setMoreOpen(false); onOpenDrive(e); }}>
+                      <ExternalLink size={14} /> Open Drive
+                    </button>
+                  )}
                   <button onClick={(e) => { setMoreOpen(false); onRecoverMeta(e); }}>
                     <ScanText size={14} /> Recover Meta
                   </button>
@@ -2071,9 +2082,11 @@ function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDel
                 <button className="btn btn-primary btn-sm" onClick={onViewReport}>
                   <BarChart3 size={13} /> Eligibility Report
                 </button>
-                <button className="btn btn-secondary btn-sm" onClick={onOpenDrive}>
-                  <ExternalLink size={13} /> Open Drive
-                </button>
+                {student.storage !== "railway" && (
+                  <button className="btn btn-secondary btn-sm" onClick={onOpenDrive}>
+                    <ExternalLink size={13} /> Open Drive
+                  </button>
+                )}
                 <button className="btn btn-secondary btn-sm" onClick={onSendToBank}>
                   <Send size={13} /> Bank Access
                 </button>
@@ -3275,14 +3288,15 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
 /* ─── Main Component ───────────────────────────────────────────── */
 
 // A stable per-student identity for React keys and state tracking.
-// driveUrl is always unique (one Drive folder per student); name is NOT —
+// driveUrl / studentKey are always unique (one Drive folder or one Railway
+// record per student); name is NOT —
 // two students can share a display name, and a student whose meta.json
 // failed to parse falls back to showing its raw folder-key name, which can
 // collide with another record. Using name/array-index as a key or state
 // pointer lets the wrong row appear expanded/selected after a filter or
 // list refresh reorders things.
 function studentKey(s) {
-  return s.driveUrl || s.email || s.phone || s.name;
+  return s.driveUrl || s.studentKey || s.email || s.phone || s.name;
 }
 
 /* ─── Sidebar navigation ──────────────────────────────────────────── */
@@ -4106,7 +4120,7 @@ export default function Admin() {
     setDeleting(true);
     try {
       const identifier = student.email || student.phone || "";
-      await deleteStudent(student.name, identifier, student.driveUrl || "");
+      await deleteStudent(student.name, identifier, student.driveUrl || "", student.storage === "railway" ? student.studentKey : "");
       const key = studentKey(student);
       setStudents((prev) => prev.filter((s) => studentKey(s) !== key));
       setConfirmDelete(null);
@@ -4336,7 +4350,7 @@ export default function Admin() {
     try {
       for (const s of selectedStudents) {
         const identifier = s.email || s.phone || "";
-        await deleteStudent(s.name, identifier, s.driveUrl || "").catch((e) => {
+        await deleteStudent(s.name, identifier, s.driveUrl || "", s.storage === "railway" ? s.studentKey : "").catch((e) => {
           console.error(`Bulk delete failed for ${s.name}:`, e.message);
         });
       }
