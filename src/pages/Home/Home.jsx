@@ -28,6 +28,7 @@ import {
   isValidPhone,
   isValidEmail,
 } from "../../utils/driveApi";
+import { deriveApplicationId } from "../../utils/applicationId";
 import "./Home.css";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "";
@@ -187,6 +188,7 @@ export default function Home() {
         phone: cleanedPhone,
         advisor: form.advisor,
         createdAt: new Date().toISOString(),
+        applicationId: deriveApplicationId({ email: form.email.trim(), phone: cleanedPhone }),
         coApplicants: 1,
         uploads: {},
         personalInfo: {},

@@ -391,6 +391,16 @@ export function getTotalRequiredFields(coCount = 1, coApplicantsInfo = {}) {
   return applicantRequired + academicsRequired + coRequired;
 }
 
+// The document checklist for one co-applicant, from their saved details
+// (personalInfo[`co_info_<i>`]). Shared by the portal and the Application
+// Form PDF so the two can never disagree about what a co-applicant needs.
+export function coApplicantFields(coInfo = {}) {
+  if (coInfo.financialStatus === "non-financial") {
+    return CO_APPLICANT_SCHEMA.other.filter((f) => ["aadhar", "pan", "photo"].includes(f.id));
+  }
+  return CO_APPLICANT_SCHEMA[coInfo.empType || "salaried"] || CO_APPLICANT_SCHEMA.other;
+}
+
 // Counts how many of `fields` have at least one file uploaded. Multi-file
 // fields store extra pages as `<id>_1`, `<id>_2`..., so counting raw upload
 // keys would count a two-page Aadhaar as two documents.

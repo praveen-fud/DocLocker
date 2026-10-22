@@ -1692,7 +1692,7 @@ function FilesTab({ student }) {
   // getAllUploadedFiles reads. Listed separately here so staff can actually
   // find them without leaving the app to browse Drive by hand.
   const generated = [
-    student.summaryPdf && { key: "summary", name: "Application Summary", tag: "Auto-generated", ...student.summaryPdf },
+    student.summaryPdf && { key: "summary", name: "Application Form", tag: "Auto-generated", ...student.summaryPdf },
     student.eligibilityPdf && { key: "eligibility", name: "Eligibility Report", tag: "Auto-generated", ...student.eligibilityPdf },
   ].filter(Boolean);
 
@@ -3912,7 +3912,7 @@ const BANK_ACTIVITY_ACTION_LABELS = {
   ...AUDIT_ACTION_LABELS,
   "document.upload": "Uploaded a document",
   "student.save": "Saved application details",
-  "summary.generate": "Generated application summary",
+  "summary.generate": "Generated application form",
 };
 function bankActivityActionLabel(action) {
   return BANK_ACTIVITY_ACTION_LABELS[action] || action;

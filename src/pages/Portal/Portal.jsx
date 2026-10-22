@@ -29,6 +29,7 @@ import {
   mergeExtractions,
 } from "../../utils/readerAutoFill";
 import { buildIdentityReport } from "../../utils/identityCheck";
+import { getApplicationId } from "../../utils/applicationId";
 import FileUploadBox from "../../components/FileUploadBox/FileUploadBox";
 import ProgressBar from "../../components/ProgressBar/ProgressBar";
 import "./Portal.css";
@@ -115,6 +116,8 @@ export default function Portal() {
   // triggered mid-update never writes a half-applied state.
   const buildStudentRecord = () => ({
     ...student,
+    // Stored the first time it's computed, so it never changes afterwards.
+    applicationId: getApplicationId(student),
     uploads: uploadsRef.current,
     personalInfo: personalRef.current,
     coApplicants: coCountRef.current,
