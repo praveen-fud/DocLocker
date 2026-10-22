@@ -1,7 +1,6 @@
 import { Suspense, lazy } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { StudentProvider, useStudent } from "./context/StudentContext";
-import Navbar from "./components/Navbar/Navbar";
 import Home from "./pages/Home/Home";
 import "./index.css";
 
@@ -13,7 +12,7 @@ const BankerPortal = lazy(() => import("./pages/BankerPortal/BankerPortal"));
 
 function PageLoader() {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh", color: "var(--gray-400)", fontSize: 14 }}>
+    <div role="status" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh", color: "var(--text-muted)", fontSize: 14 }}>
       Loading…
     </div>
   );
@@ -39,26 +38,19 @@ function ProtectedBankerPortal() {
 }
 
 function AppRoutes() {
-  const location = useLocation();
-  // The admin dashboard has its own topbar (search, notifications, account
-  // menu), and the sign-in page is a full-bleed split layout with its own
-  // brand panel and "Back to home" link — the global navbar would duplicate
-  // chrome both already own.
-  const hideGlobalNavbar = location.pathname === "/admin" || location.pathname === "/admin-login";
+  // Every screen owns its chrome: Home has the marketing header, the student
+  // portal its top navigation, and the staff/banker dashboards their sidebars.
   return (
-    <>
-      {!hideGlobalNavbar && <Navbar />}
-      <Suspense fallback={<PageLoader />}>
-        <Routes>
-          <Route path="/"              element={<Home />} />
-          <Route path="/portal"        element={<ProtectedPortal />} />
-          <Route path="/admin"         element={<ProtectedAdmin />} />
-          <Route path="/admin-login"   element={<AdminLogin />} />
-          <Route path="/banker-portal" element={<ProtectedBankerPortal />} />
-          <Route path="*"              element={<Navigate to="/" />} />
-        </Routes>
-      </Suspense>
-    </>
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        <Route path="/"              element={<Home />} />
+        <Route path="/portal"        element={<ProtectedPortal />} />
+        <Route path="/admin"         element={<ProtectedAdmin />} />
+        <Route path="/admin-login"   element={<AdminLogin />} />
+        <Route path="/banker-portal" element={<ProtectedBankerPortal />} />
+        <Route path="*"              element={<Navigate to="/" />} />
+      </Routes>
+    </Suspense>
   );
 }
 

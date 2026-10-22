@@ -1,0 +1,90 @@
+import { ChevronDown, Headset, FileText } from "lucide-react";
+import { DocumentGuidelines } from "./PortalRail";
+import { initials } from "./studentRecord";
+import "./PortalViews.css";
+
+const FAQ = [
+  {
+    q: "Which file types can I upload?",
+    a: "Most documents accept PDF, JPG, PNG, DOC or DOCX — each upload card lists exactly what it takes. On a phone you can also take a photo of the document straight from the card.",
+  },
+  {
+    q: "Is there a file size limit?",
+    a: (max) => `Each file can be up to ${max}. Large photos are resized before they are uploaded.`,
+  },
+  {
+    q: "My PDF is password-protected. What do I do?",
+    a: "Remove the password before uploading — bank statements often have one. You can unlock it for free with the link under Document guidelines.",
+  },
+  {
+    q: "How does auto-fill work?",
+    a: "When you upload your Passport, Aadhaar, PAN card, 10th or 12th marksheet, or a score report such as GRE or IELTS, we read the details and fill them into your profile. Fields filled this way are marked “From …” so you can check them, and anything you type yourself is never overwritten.",
+  },
+  {
+    q: "What do Verified, Uploaded and Needs attention mean?",
+    a: "Verified means our reader confirmed the document matches its slot and read its details cleanly. Uploaded means the file is saved but wasn't checked automatically. Needs attention means a page is missing or some details should be checked.",
+  },
+  {
+    q: "What is the Application Form?",
+    a: "Each time you save your progress, we prepare an Application Form (PDF) from your profile and documents for your advisor, so there is nothing extra for you to fill in.",
+  },
+];
+
+export default function HelpCenter({ student, maxSize, onOpenDocuments }) {
+  return (
+    <div className="sd-page sd-view">
+      <div className="sd-view__head">
+        <h1 className="sd-view__title">Help &amp; Support</h1>
+        <p className="sd-view__lede">Answers to common questions, and who to ask when you are stuck.</p>
+      </div>
+
+      <div className="sd-view__grid">
+        <section className="sd-card" aria-labelledby="sd-faq-title">
+          <h2 className="sd-card__title" id="sd-faq-title">Frequently asked questions</h2>
+          <div className="sd-faq">
+            {FAQ.map((f) => (
+              <details key={f.q} className="sd-faq__item">
+                <summary>
+                  <span>{f.q}</span>
+                  <ChevronDown size={18} aria-hidden="true" />
+                </summary>
+                <p>{typeof f.a === "function" ? f.a(maxSize) : f.a}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+
+        <div className="sd-view__side">
+          <section className="sd-card sd-advisor" aria-labelledby="sd-advisor-title">
+            <h2 className="sd-card__title" id="sd-advisor-title">Your finance advisor</h2>
+            {student.advisor ? (
+              <div className="sd-advisor__who">
+                <span className="sd-advisor__avatar" aria-hidden="true">{initials(student.advisor)}</span>
+                <span>
+                  <strong>{student.advisor}</strong>
+                  <span>Your point of contact for this application</span>
+                </span>
+              </div>
+            ) : (
+              <p className="sd-muted">No advisor is assigned to your application yet.</p>
+            )}
+            <p className="sd-callout">
+              <Headset size={16} aria-hidden="true" />
+              <span>Not sure which document to upload or what a status means? Ask your advisor.</span>
+            </p>
+          </section>
+
+          <DocumentGuidelines maxSize={maxSize} />
+
+          <button type="button" className="sd-card sd-linkcard" onClick={onOpenDocuments}>
+            <span className="sd-linkcard__icon" aria-hidden="true"><FileText size={20} /></span>
+            <span className="sd-linkcard__text">
+              <strong>Go to your documents</strong>
+              <span>Upload, replace or check each document.</span>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,20 +1,25 @@
-// Portal.jsx
-import { useState, useEffect, useRef, createContext, useContext } from "react";
+// Portal.jsx — student document upload + profile
+import { useState, useEffect, useRef, useId, createContext, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  BookOpen,
-  Briefcase,
-  Users,
-  FileText,
   ChevronDown,
-  ChevronUp,
-  Save,
-  CheckCircle,
   Plus,
   Trash2,
-  FolderPlus,
+  FolderOpen,
   Sparkles,
-  AlertTriangle,
+  TriangleAlert,
+  ContactRound,
+  GraduationCap,
+  Landmark,
+  ListChecks,
+  ShieldCheck,
+  UserRound,
+  CircleCheck,
+  CircleAlert,
+  ArrowLeft,
+  ArrowRight,
+  X,
+  Users,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import { saveStudentMeta } from "../../utils/driveApi";
@@ -29,19 +34,40 @@ import {
   mergeExtractions,
 } from "../../utils/readerAutoFill";
 import { buildIdentityReport } from "../../utils/identityCheck";
+import { getApplicationId } from "../../utils/applicationId";
 import FileUploadBox from "../../components/FileUploadBox/FileUploadBox";
-import ProgressBar from "../../components/ProgressBar/ProgressBar";
+import { docAnchorId } from "../../components/FileUploadBox/docMeta";
+import PortalShell from "../../components/StudentPortal/PortalShell";
+import ApplicationStepper from "../../components/StudentPortal/ApplicationStepper";
+import DocumentSection from "../../components/StudentPortal/DocumentSection";
+import ConfirmDialog from "../../components/StudentPortal/ConfirmDialog";
+import StudentDashboard from "../../components/StudentPortal/StudentDashboard";
+import LoanStatus from "../../components/StudentPortal/LoanStatus";
+import HelpCenter from "../../components/StudentPortal/HelpCenter";
+import { buildDocGroups, countStatuses } from "../../components/StudentPortal/dashboardData";
+import {
+  ProgressSummary,
+  AIVerificationPanel,
+  DocumentGuidelines,
+  SaveActions,
+  MobileActionBar,
+} from "../../components/StudentPortal/PortalRail";
 import "./Portal.css";
 
 const CUR_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: CUR_YEAR - 1974 }, (_, i) => CUR_YEAR - i);
 
-const SECTIONS = [
-  { id: "govtId",      label: "Govt ID",                    icon: FileText  },
-  { id: "academics",   label: "Academics",                  icon: BookOpen  },
-  { id: "loan",        label: "Loan & Co-Applicants",       icon: Briefcase },
-  { id: "personalRefs",label: "Personal Info & References", icon: Users     },
-  { id: "otherDocs",   label: "Other Documents",            icon: FolderPlus},
+const MAX_FILE_SIZE = "25 MB";
+
+// The four steps of the document workspace, in page order.
+const STEP_IDS = ["sec-personal", "sec-academic", "sec-financial", "sec-review"];
+
+const PROFILE_PAGES = [
+  { id: 1, label: "Identity & academics" },
+  { id: 2, label: "Destination & address" },
+  { id: 3, label: "Family & guarantor" },
+  { id: 4, label: "History & assets" },
+  { id: 5, label: "References" },
 ];
 
 // Fields the document reader filled but wasn't sure about: { formKey: reason }.
@@ -63,10 +89,18 @@ const CIBIL_HINT = (
   </span>
 );
 
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 export default function Portal() {
-  const { student, setStudent } = useStudent();
+  const { student, setStudent, clearStudent, logoutAdmin } = useStudent();
   const navigate = useNavigate();
-  const [activeSection, setActiveSection]   = useState(0);
+  // home | documents | profile | loan | help
+  const [view, setView]                     = useState("home");
+  const [currentStep, setCurrentStep]       = useState(STEP_IDS[0]);
+  const [profilePage, setProfilePage]       = useState(1);
   const [uploads, setUploads]               = useState(student?.uploads || {});
   const [personalInfo, setPersonalInfo]     = useState(() => {
     const saved = student?.personalInfo || {};
@@ -84,8 +118,12 @@ export default function Portal() {
   const [extractions, setExtractions]             = useState(student?.extractions || {});
   const [reviewFields, setReviewFields]           = useState(student?.reviewFields || {});
   const [saving, setSaving] = useState(false);
-  const [saved,  setSaved]  = useState(false);
-  const [saveError, setSaveError] = useState("");
+  // Header save indicator: idle | saving | saved | dirty | error — only ever
+  // set from the real outcome of a save request.
+  const [saveStatus, setSaveStatus] = useState("idle");
+  const [savedAt, setSavedAt]       = useState(null);
+  const [notice, setNotice]         = useState(null);
+  const [confirmCo, setConfirmCo]   = useState(null);
 
   const studentIdentifier = student?.email || student?.phone || "";
 
@@ -96,6 +134,8 @@ export default function Portal() {
   const autoFilledRef   = useRef(autoFilledFields);
   const extractionsRef  = useRef(extractions);
   const reviewRef       = useRef(reviewFields);
+  const saveSeq         = useRef(0);
+  const editVersion     = useRef(0);
 
   useEffect(() => { uploadsRef.current    = uploads;           }, [uploads]);
   useEffect(() => { personalRef.current   = personalInfo;      }, [personalInfo]);
@@ -109,12 +149,38 @@ export default function Portal() {
     if (!student) navigate("/");
   }, [student, navigate]);
 
+  // Highlight the stepper step for the section currently in view.
+  useEffect(() => {
+    if (view !== "documents") return undefined;
+    const els = STEP_IDS.map((id) => document.getElementById(id)).filter(Boolean);
+    if (!els.length || typeof IntersectionObserver === "undefined") return undefined;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setCurrentStep(visible[0].target.id);
+      },
+      { rootMargin: "-30% 0px -60% 0px" },
+    );
+    els.forEach((el) => obs.observe(el));
+    return () => obs.disconnect();
+  }, [view]);
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const t = setTimeout(() => setNotice(null), 7000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
   if (!student) return null;
 
   // Everything persisted to student_meta.json, built from the refs so a save
   // triggered mid-update never writes a half-applied state.
   const buildStudentRecord = () => ({
     ...student,
+    // Stored the first time it's computed, so it never changes afterwards.
+    applicationId: getApplicationId(student),
     uploads: uploadsRef.current,
     personalInfo: personalRef.current,
     coApplicants: coCountRef.current,
@@ -129,6 +195,31 @@ export default function Portal() {
       legacyDocs: docsRef.current,
     }),
   });
+
+  // Saves the record and reports the real result to the header indicator.
+  // Resolves true/false; never throws.
+  const persist = (record) => {
+    const seq = ++saveSeq.current;
+    const version = editVersion.current;
+    setSaveStatus("saving");
+    return saveStudentMeta(student.name, record, studentIdentifier, { throwOnError: true })
+      .then(() => {
+        if (seq === saveSeq.current) {
+          setSaveStatus(version === editVersion.current ? "saved" : "dirty");
+          setSavedAt(Date.now());
+        }
+        return true;
+      })
+      .catch(() => {
+        if (seq === saveSeq.current) setSaveStatus("error");
+        return false;
+      });
+  };
+
+  const markDirty = () => {
+    editVersion.current += 1;
+    setSaveStatus("dirty");
+  };
 
   const handleUploaded = (sectionKey, fieldId, result) => {
     // result === null means a page was removed from a multi-file slot —
@@ -199,7 +290,7 @@ export default function Portal() {
     docsRef.current = newDocs;
     const updated = buildStudentRecord();
     setStudent(updated);
-    saveStudentMeta(student.name, updated, studentIdentifier);
+    persist(updated);
   };
 
   // Called when our document model finishes reading a passport / Aadhaar /
@@ -263,7 +354,7 @@ export default function Portal() {
 
     const updated = buildStudentRecord();
     setStudent(updated);
-    saveStudentMeta(student.name, updated, studentIdentifier);
+    persist(updated);
   };
 
   const updatePersonal = (key, value) => {
@@ -280,11 +371,14 @@ export default function Portal() {
       return updated;
     });
     setPersonalInfo((prev) => ({ ...prev, [key]: value }));
+    markDirty();
   };
 
   const handleCoCountChange = (newCount) => {
     const prev = coCountRef.current;
     setCoCount(newCount);
+    coCountRef.current = newCount;
+    markDirty();
     if (newCount < prev) {
       setPersonalInfo((pi) => {
         const cleaned = { ...pi };
@@ -299,16 +393,43 @@ export default function Portal() {
     }
   };
 
-  const handleSave = () => {
+  // Lowering the count deletes the removed co-applicants' details and
+  // document records, so ask first when there's anything to lose.
+  const requestCoCount = (n) => {
+    if (n >= coCountRef.current) { handleCoCountChange(n); return; }
+    const losing = [];
+    for (let i = n; i < coCountRef.current; i++) {
+      const hasData = Object.keys(uploads[`co_${i}`] || {}).length || Object.keys(personalInfo[`co_info_${i}`] || {}).length;
+      if (hasData) losing.push(i);
+    }
+    if (!losing.length) { handleCoCountChange(n); return; }
+    setConfirmCo({ count: n, losing });
+  };
+
+  const handleOtherRemoved = (fieldId) => {
+    const updated = { ...uploadsRef.current };
+    if (updated.otherDocs) {
+      const section = { ...updated.otherDocs };
+      delete section[fieldId];
+      updated.otherDocs = section;
+    }
+    uploadsRef.current = updated;
+    setUploads(updated);
+    const updatedStudent = buildStudentRecord();
+    setStudent(updatedStudent);
+    persist(updatedStudent);
+  };
+
+  const handleSave = async () => {
+    if (saving) return false;
     setSaving(true);
-    setSaveError("");
     const updated = buildStudentRecord();
     setStudent(updated);
-    saveStudentMeta(student.name, updated, studentIdentifier);
+    const saved = persist(updated);
     generateAndUploadSummaryPDF(student.name, updated, studentIdentifier, docsRef.current);
-    setSaved(true);
+    const ok = await saved;
     setSaving(false);
-    setTimeout(() => setSaved(false), 2500);
+    return ok;
   };
 
   const getUploadsFor = (key) => uploads[key] || {};
@@ -325,211 +446,399 @@ export default function Portal() {
   const required = (fields) => fields.filter((f) => !f.optional);
 
   // Counted per document, not per file — a two-page Aadhaar is one document.
-  const requiredDone =
-    countUploadedFields(getUploadsFor("applicant"), required(DOCUMENT_SCHEMA.applicant.fields)) +
-    countUploadedFields(getUploadsFor("academics"), required(DOCUMENT_SCHEMA.academics.fields)) +
-    Array.from({ length: coCount }, (_, i) => countUploadedFields(getUploadsFor(`co_${i}`), required(coFieldsFor(i))))
-      .reduce((a, b) => a + b, 0);
+  const personalReq = required(DOCUMENT_SCHEMA.applicant.fields);
+  const academicReq = required(DOCUMENT_SCHEMA.academics.fields);
+  const personalDone = countUploadedFields(getUploadsFor("applicant"), personalReq);
+  const academicDone = countUploadedFields(getUploadsFor("academics"), academicReq);
+  const coIdx = Array.from({ length: coCount }, (_, i) => i);
+  const financialTotal = coIdx.reduce((a, i) => a + required(coFieldsFor(i)).length, 0);
+  const financialDone = coIdx.reduce((a, i) => a + countUploadedFields(getUploadsFor(`co_${i}`), required(coFieldsFor(i))), 0);
+  const requiredDone = personalDone + academicDone + financialDone;
+  const missingCount = Math.max(dynamicTotal - requiredDone, 0);
+  const otherCount = Object.keys(getUploadsFor("otherDocs")).filter((k) => getUploadsFor("otherDocs")[k]).length;
 
-  const progressSections = [
+  const coName = (i) => {
+    const c = personalInfo[`co_info_${i}`] || {};
+    return [c.firstName, c.lastName].filter(Boolean).join(" ") || c.name || `Co-applicant ${i + 1}`;
+  };
+  const missingList = [
+    ...personalReq.filter((f) => !countUploadedFields(getUploadsFor("applicant"), [f])).map((f) => ({ key: `a-${f.id}`, target: "sec-personal", label: f.label, group: "Personal" })),
+    ...academicReq.filter((f) => !countUploadedFields(getUploadsFor("academics"), [f])).map((f) => ({ key: `ac-${f.id}`, target: "sec-academic", label: f.label, group: "Academic" })),
+    ...coIdx.flatMap((i) => required(coFieldsFor(i))
+      .filter((f) => !countUploadedFields(getUploadsFor(`co_${i}`), [f]))
+      .map((f) => ({ key: `co${i}-${f.id}`, target: "sec-financial", label: f.label, group: coName(i) }))),
+  ];
+
+  const identity = buildIdentityReport({ extractions, personalInfo, coCount, legacyDocs: uploadedDocuments });
+  const reviewCount = Object.keys(reviewFields).length;
+  const applicationId = getApplicationId(student);
+
+  // Dashboard tiles: every required document plus anything optional already
+  // uploaded, grouped as the student's own and each co-applicant's.
+  const docGroups = buildDocGroups({
+    sections: [
+      { key: "applicant", sectionId: "sec-personal", fields: DOCUMENT_SCHEMA.applicant.fields },
+      { key: "academics", sectionId: "sec-academic", fields: DOCUMENT_SCHEMA.academics.fields },
+    ],
+    co: coIdx.map((i) => ({ key: `co_${i}`, title: `Co-applicant ${i + 1} · ${coName(i)}`, fields: coFieldsFor(i) })),
+    uploads,
+    extractions,
+    otherDocs: getUploadsFor("otherDocs"),
+  });
+  const docCounts = countStatuses(docGroups);
+
+  const steps = [
+    { id: "sec-personal",  label: "Personal Documents",  icon: ContactRound,  done: personalDone,  total: personalReq.length },
+    { id: "sec-academic",  label: "Academic Documents",  icon: GraduationCap, done: academicDone,  total: academicReq.length },
+    { id: "sec-financial", label: "Financial Documents", icon: Landmark,      done: financialDone, total: financialTotal },
     {
-      id: "govtId",
-      label: "Govt ID",
-      total: required(DOCUMENT_SCHEMA.applicant.fields).length,
-      uploaded: countUploadedFields(getUploadsFor("applicant"), required(DOCUMENT_SCHEMA.applicant.fields)),
-    },
-    {
-      id: "academics",
-      label: "Academics",
-      total: required(DOCUMENT_SCHEMA.academics.fields).length,
-      uploaded: countUploadedFields(getUploadsFor("academics"), required(DOCUMENT_SCHEMA.academics.fields)),
-    },
-    {
-      id: "loan",
-      label: "Loan",
-      total: Array.from({ length: coCount }, (_, i) => required(coFieldsFor(i)).length).reduce((a, b) => a + b, 0),
-      uploaded: Array.from(
-        { length: coCount },
-        (_, i) => countUploadedFields(getUploadsFor(`co_${i}`), required(coFieldsFor(i))),
-      ).reduce((a, b) => a + b, 0),
-    },
-    {
-      id: "personalRefs",
-      label: "Personal",
-      total: 54,
-      uploaded: Object.keys(personalInfo).filter(
-        (k) => !k.startsWith("co_info_") && personalInfo[k],
-      ).length,
-    },
-    {
-      id: "otherDocs",
-      label: "Other Docs",
-      total: Object.keys(getUploadsFor("otherDocs")).length,
-      uploaded: Object.keys(getUploadsFor("otherDocs")).length,
+      id: "sec-review",
+      label: "Review & Save",
+      icon: ListChecks,
+      done: requiredDone,
+      total: dynamicTotal,
+      summary: missingCount ? `${plural(missingCount, "item")} left` : "Ready to save",
     },
   ];
 
+  const scrollToId = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: prefersReducedMotion() ? "instant" : "smooth", block: "start" });
+  };
+
+  const jumpTo = (id) => {
+    setCurrentStep(id);
+    if (view !== "documents") {
+      setView("documents");
+      requestAnimationFrame(() => requestAnimationFrame(() => scrollToId(id)));
+    } else {
+      scrollToId(id);
+    }
+  };
+
+  // Dashboard tile → its upload card, briefly highlighted. Falls back to the
+  // section when the card is collapsed away.
+  const openDoc = (doc) => {
+    setView("documents");
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const card = document.getElementById(doc.anchorId);
+      if (!card?.offsetParent) { scrollToId(doc.sectionId); return; }
+      card.scrollIntoView({ behavior: prefersReducedMotion() ? "instant" : "smooth", block: "center" });
+      card.focus({ preventScroll: true });
+      card.classList.remove("is-spotlight");
+      void card.offsetWidth; // restart the animation on a repeat click
+      card.classList.add("is-spotlight");
+      card.addEventListener("animationend", () => card.classList.remove("is-spotlight"), { once: true });
+    }));
+  };
+
+  const changeView = (next) => {
+    setView(next);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  };
+
+  // A full page load to the home page: it gets past this route's guard
+  // (which would otherwise bounce to the sign-in page) and drops every
+  // piece of student data still held in memory.
+  const handleSignOut = () => {
+    clearStudent();
+    logoutAdmin();
+    window.location.replace("/");
+  };
+
+  const saveProgress = async () => {
+    const ok = await handleSave();
+    setNotice(ok
+      ? { tone: "success", text: "Your progress has been saved." }
+      : { tone: "error", text: "We couldn't save just now. Check your connection and try again." });
+  };
+
+  // Save, then move the student to the next part of the workflow. Missing
+  // documents never block — they're listed so the student knows what's left.
+  const saveAndContinue = async () => {
+    const ok = await handleSave();
+    if (!ok) {
+      setNotice({ tone: "error", text: "We couldn't save just now. Check your connection and try again." });
+      return;
+    }
+    if (view === "documents") {
+      changeView("profile");
+      setNotice(missingCount
+        ? { tone: "warning", text: `Saved. ${plural(missingCount, "required document")} still to upload — you can add ${missingCount === 1 ? "it" : "them"} any time.` }
+        : { tone: "success", text: "Saved. All required documents are in — now check your profile details." });
+    } else if (profilePage < PROFILE_PAGES.length) {
+      setProfilePage(profilePage + 1);
+      window.scrollTo({ top: 0, behavior: "instant" });
+      setNotice({ tone: "success", text: "Saved." });
+    } else {
+      changeView("documents");
+      setNotice({ tone: "success", text: "Your profile has been saved." });
+    }
+  };
+
+  const primaryLabel = view === "documents" || profilePage < PROFILE_PAGES.length ? "Save & Continue" : "Save & Finish";
+
+  const inWorkspace = view === "documents" || view === "profile";
+
+  const railNote = view === "documents"
+    ? (missingCount ? `${plural(missingCount, "required document")} still to upload.` : "All required documents are uploaded.")
+    : null;
+
   return (
-    <>
-      <div className="portal-page page-bg">
-        <div className="portal-container">
-          <div className="portal-header animate-fade-in">
-          <div>
-            <h1 className="portal-title">Hello, {student.name.split(" ")[0]} 👋</h1>
-            <p className="portal-sub">
-              {student.email || student.phone} · Upload your documents below
-            </p>
-          </div>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {saved ? (
-              <><CheckCircle size={14} /> Saved!</>
-            ) : saving ? (
-              "Saving..."
-            ) : (
-              <><Save size={14} /> Save Progress</>
-            )}
-          </button>
-        </div>
-
-        {saveError && <div className="save-error-toast">{saveError}</div>}
-
-        <div className="portal-progress-info">
-          <span className="progress-total-note">
-            {requiredDone} / {dynamicTotal} required documents uploaded
-          </span>
-        </div>
-
-        <ProgressBar
-          sections={progressSections}
-          currentSection={activeSection}
-          onSectionClick={setActiveSection}
+    <PortalShell
+      view={view}
+      onViewChange={changeView}
+      reviewCount={reviewCount}
+      student={student}
+      saveStatus={saveStatus}
+      savedAt={savedAt}
+      onRetrySave={saveProgress}
+      onSignOut={handleSignOut}
+    >
+      {view === "home" && (
+        <StudentDashboard
+          student={student}
+          applicationId={applicationId}
+          done={requiredDone}
+          total={dynamicTotal}
+          counts={docCounts}
+          groups={docGroups}
+          reviewCount={reviewCount}
+          onOpenDoc={openDoc}
+          onViewAll={() => changeView("documents")}
+          onLoanDetails={() => changeView("loan")}
+          onOpenProfile={() => changeView("profile")}
         />
+      )}
+      {view === "loan" && (
+        <LoanStatus student={student} applicationId={applicationId} onOpenHelp={() => changeView("help")} />
+      )}
+      {view === "help" && (
+        <HelpCenter student={student} maxSize={MAX_FILE_SIZE} onOpenDocuments={() => changeView("documents")} />
+      )}
 
-        <div className="portal-tabs">
-          {SECTIONS.map((sec, i) => {
-            const Icon = sec.icon;
-            return (
-              <button
-                key={sec.id}
-                className={`portal-tab ${activeSection === i ? "active" : ""}`}
-                onClick={() => setActiveSection(i)}
+      {/* Stays mounted on every view so uploads in progress keep running
+          and keep their on-screen state. */}
+      <div className="sp-page" hidden={!inWorkspace}>
+        <div className="sp-main">
+          <div className="sp-stack" hidden={view !== "documents"}>
+              <div className="sp-heading">
+                <div className="sp-heading__text">
+                  <p className="sp-eyebrow">Application ID · <strong>{applicationId}</strong></p>
+                  <h1 className="sp-title">Upload Your Documents</h1>
+                  <p className="sp-lede">
+                    Upload all required documents for your education loan. Our AI will automatically verify and fill your profile details.
+                  </p>
+                </div>
+                <div className="sp-secure">
+                  <span className="sp-secure__icon" aria-hidden="true"><ShieldCheck size={22} /></span>
+                  <div>
+                    <p className="sp-secure__title">Your documents are secure and encrypted</p>
+                    <p className="sp-secure__text">Your documents are handled securely throughout the application process.</p>
+                  </div>
+                </div>
+              </div>
+
+              <ApplicationStepper steps={steps} currentId={currentStep} onSelect={jumpTo} />
+
+              <DocumentSection
+                id="sec-personal"
+                icon={ContactRound}
+                title="Personal Documents"
+                description="These documents help us verify your identity. Start with your Passport, Aadhaar and PAN — we read them and fill in your details."
+                done={personalDone}
+                total={personalReq.length}
               >
-                <Icon size={15} />
-                <span>{sec.label}</span>
-              </button>
-            );
-          })}
-        </div>
+                <DocGrid
+                  sectionKey="applicant"
+                  fields={DOCUMENT_SCHEMA.applicant.fields}
+                  studentName={student.name}
+                  studentIdentifier={studentIdentifier}
+                  subFolder="GOVT ID"
+                  uploads={getUploadsFor("applicant")}
+                  onUploaded={(fieldId, result) => handleUploaded("applicant", fieldId, result)}
+                  extractionsFor={(fieldId) => extractions[`applicant.${fieldId}`]}
+                  onExtracted={(fieldId, payload) => handleExtracted("applicant", fieldId, payload)}
+                />
+              </DocumentSection>
 
-        <div className="portal-content animate-fade-in" key={activeSection}>
-          {activeSection === 0 && (
-            <DocsSection
-              title="Government ID Documents"
-              subtitle="Start here — upload your Passport, Aadhaar and PAN first. We read them and fill in your name, date of birth, parents' names, address and ID numbers for you."
-              fields={DOCUMENT_SCHEMA.applicant.fields}
-              studentName={student.name}
-              studentIdentifier={studentIdentifier}
-              subFolder="GOVT ID"
-              uploads={getUploadsFor("applicant")}
-              onUploaded={(fieldId, result) => handleUploaded("applicant", fieldId, result)}
-              extractionsFor={(fieldId) => extractions[`applicant.${fieldId}`]}
-              onExtracted={(fieldId, payload) => handleExtracted("applicant", fieldId, payload)}
-            />
-          )}
-          {activeSection === 1 && (
-            <DocsSection
-              title="Academic Certificates"
-              subtitle="Upload marksheets and score reports. Scores, years, and test results will be auto-filled in your personal profile."
-              fields={DOCUMENT_SCHEMA.academics.fields}
-              studentName={student.name}
-              studentIdentifier={studentIdentifier}
-              subFolder="Academics"
-              uploads={getUploadsFor("academics")}
-              onUploaded={(fieldId, result) => handleUploaded("academics", fieldId, result)}
-              extractionsFor={(fieldId) => extractions[`academics.${fieldId}`]}
-              onExtracted={(fieldId, payload) => handleExtracted("academics", fieldId, payload)}
-            />
-          )}
-          {activeSection === 2 && (
-            <LoanSection
-              studentName={student.name}
-              studentIdentifier={studentIdentifier}
-              coCount={coCount}
-              setCoCount={handleCoCountChange}
-              uploads={uploads}
-              onUploaded={handleUploaded}
-              extractions={extractions}
-              onExtracted={handleExtracted}
-              personalInfo={personalInfo}
-              onInfoChange={updatePersonal}
-            />
-          )}
-          {activeSection === 3 && (
+              <DocumentSection
+                id="sec-academic"
+                icon={GraduationCap}
+                title="Academic Documents"
+                description="Upload your academic records, certificates and test scores. Scores and years are filled into your profile."
+                done={academicDone}
+                total={academicReq.length}
+              >
+                <DocGrid
+                  sectionKey="academics"
+                  fields={DOCUMENT_SCHEMA.academics.fields}
+                  studentName={student.name}
+                  studentIdentifier={studentIdentifier}
+                  subFolder="Academics"
+                  uploads={getUploadsFor("academics")}
+                  onUploaded={(fieldId, result) => handleUploaded("academics", fieldId, result)}
+                  extractionsFor={(fieldId) => extractions[`academics.${fieldId}`]}
+                  onExtracted={(fieldId, payload) => handleExtracted("academics", fieldId, payload)}
+                />
+              </DocumentSection>
+
+              <DocumentSection
+                id="sec-financial"
+                icon={Landmark}
+                title="Financial Documents"
+                description="Upload the financial records of each co-applicant. The checklist adapts to their employment type."
+                done={financialDone}
+                total={financialTotal}
+              >
+                <LoanSection
+                  studentName={student.name}
+                  studentIdentifier={studentIdentifier}
+                  coCount={coCount}
+                  setCoCount={requestCoCount}
+                  uploads={uploads}
+                  onUploaded={handleUploaded}
+                  extractions={extractions}
+                  onExtracted={handleExtracted}
+                  personalInfo={personalInfo}
+                  onInfoChange={updatePersonal}
+                  coFieldsFor={coFieldsFor}
+                />
+              </DocumentSection>
+
+              <DocumentSection
+                id="sec-review"
+                icon={ListChecks}
+                title="Review & Save"
+                description="Add any other documents, check what's still missing, then save."
+                done={requiredDone}
+                total={dynamicTotal}
+              >
+                <ReviewPanel
+                  missing={missingList}
+                  onJump={jumpTo}
+                  reviewCount={reviewCount}
+                  onOpenProfile={() => changeView("profile")}
+                />
+                <OtherDocumentsSection
+                  studentName={student.name}
+                  studentIdentifier={studentIdentifier}
+                  uploads={getUploadsFor("otherDocs")}
+                  count={otherCount}
+                  onUploaded={(fieldId, result) => handleUploaded("otherDocs", fieldId, result)}
+                  onRemoved={handleOtherRemoved}
+                />
+              </DocumentSection>
+          </div>
+          {view === "profile" && (
             <ReviewContext.Provider value={reviewFields}>
               <PersonalAndRefsSection
                 info={personalInfo}
                 onChange={updatePersonal}
                 autoFilledFields={autoFilledFields}
+                reviewCount={reviewCount}
+                subStep={profilePage}
+                setSubStep={(p) => { setProfilePage(p); window.scrollTo({ top: 0, behavior: "instant" }); }}
+                onBack={() => changeView("documents")}
               />
             </ReviewContext.Provider>
           )}
-          {activeSection === 4 && (
-            <OtherDocumentsSection
-              studentName={student.name}
-              studentIdentifier={studentIdentifier}
-              uploads={getUploadsFor("otherDocs")}
-              onUploaded={(fieldId, result) => handleUploaded("otherDocs", fieldId, result)}
-              onRemoved={(fieldId) => {
-                const updated = { ...uploadsRef.current };
-                if (updated.otherDocs) {
-                  const section = { ...updated.otherDocs };
-                  delete section[fieldId];
-                  updated.otherDocs = section;
-                }
-                setUploads(updated);
-                const updatedStudent = {
-                  ...student,
-                  uploads: updated,
-                  personalInfo: personalRef.current,
-                  coApplicants: coCountRef.current,
-                };
-                setStudent(updatedStudent);
-                saveStudentMeta(student.name, updatedStudent, studentIdentifier);
-              }}
-            />
-          )}
         </div>
 
-        <div className="portal-nav-btns">
-          {activeSection > 0 && (
-            <button
-              className="btn btn-secondary"
-              onClick={() => setActiveSection(activeSection - 1)}
-            >
-              ← Previous
-            </button>
-          )}
-          {activeSection < SECTIONS.length - 1 && (
-            <button
-              className="btn btn-primary"
-              style={{ marginLeft: "auto" }}
-              onClick={() => setActiveSection(activeSection + 1)}
-            >
-              Next Section →
-            </button>
-          )}
+        <aside className="sp-rail" aria-label="Application progress">
+          <ProgressSummary
+            done={requiredDone}
+            total={dynamicTotal}
+            categories={steps.slice(0, 3).map((s) => ({ id: s.id, label: s.label, done: s.done, total: s.total }))}
+            onJump={jumpTo}
+          />
+          <AIVerificationPanel
+            info={personalInfo}
+            autoFilled={autoFilledFields}
+            review={reviewFields}
+            identity={identity}
+            onEditProfile={view === "documents" ? () => changeView("profile") : null}
+          />
+          <DocumentGuidelines maxSize={MAX_FILE_SIZE} />
+          <SaveActions
+            primaryLabel={primaryLabel}
+            onPrimary={saveAndContinue}
+            onSave={saveProgress}
+            saving={saving}
+            note={railNote}
+          />
+        </aside>
+      </div>
+
+      {inWorkspace && (
+        <MobileActionBar
+          done={requiredDone}
+          total={dynamicTotal}
+          primaryLabel={primaryLabel}
+          onPrimary={saveAndContinue}
+          saving={saving}
+        />
+      )}
+
+      {notice && (
+        <div className={`sp-toast is-${notice.tone}`} role="status">
+          {notice.tone === "success" ? <CircleCheck size={18} aria-hidden="true" /> : notice.tone === "error" ? <CircleAlert size={18} aria-hidden="true" /> : <TriangleAlert size={18} aria-hidden="true" />}
+          <span>{notice.text}</span>
+          <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss">
+            <X size={16} aria-hidden="true" />
+          </button>
         </div>
-      </div>
-      </div>
-    </>
+      )}
+
+      {confirmCo && (
+        <ConfirmDialog
+          title="Remove co-applicants?"
+          confirmLabel="Remove"
+          danger
+          onCancel={() => setConfirmCo(null)}
+          onConfirm={() => { handleCoCountChange(confirmCo.count); setConfirmCo(null); }}
+        >
+          This removes the details and document records entered for{" "}
+          <strong>{confirmCo.losing.map((i) => coName(i)).join(", ")}</strong>. You&apos;d need to upload their documents again.
+        </ConfirmDialog>
+      )}
+    </PortalShell>
   );
 }
 
 // ─── Field Helpers ─────────────────────────────────────────────────────────────
+
+function FieldBadges({ source, reviewReason }) {
+  return (
+    <>
+      {source && (
+        <span className="autofill-badge">
+          <Sparkles size={11} aria-hidden="true" /> From {source}
+        </span>
+      )}
+      {reviewReason && (
+        <span className="review-badge" title={reviewReason}>
+          <TriangleAlert size={11} aria-hidden="true" /> Please check
+        </span>
+      )}
+    </>
+  );
+}
+
+function FieldShell({ id, label, source, reviewReason, hint, full, children }) {
+  return (
+    <div className={`input-group${source ? " autofill-group" : ""}${reviewReason ? " review-group" : ""}${full ? " is-full" : ""}`}>
+      <label htmlFor={id}>
+        <span className="input-label-text">{label}</span>
+        <FieldBadges source={source} reviewReason={reviewReason} />
+      </label>
+      {children}
+      {reviewReason && <span className="field-hint field-hint-warn">{reviewReason}</span>}
+      {hint && hint}
+    </div>
+  );
+}
 
 function PersonalField({
   label,
@@ -544,6 +853,7 @@ function PersonalField({
   maxVal,
   autoFilledFields = {},
 }) {
+  const id = useId();
   const handleChange = (e) => {
     let val = e.target.value;
     if (integerOnly) {
@@ -563,12 +873,9 @@ function PersonalField({
   const reviewReason = useContext(ReviewContext)[k];
 
   return (
-    <div className={`input-group${source ? " autofill-group" : ""}${reviewReason ? " review-group" : ""}`}>
-      <label>
-        {label}
-        <FieldBadges source={source} reviewReason={reviewReason} />
-      </label>
+    <FieldShell id={id} label={label} source={source} reviewReason={reviewReason} hint={hint}>
       <input
+        id={id}
         className={`input-field${source ? " autofill-input" : ""}`}
         type={type}
         inputMode={integerOnly ? "numeric" : numericOnly ? "decimal" : undefined}
@@ -576,40 +883,18 @@ function PersonalField({
         value={info[k] || ""}
         onChange={handleChange}
       />
-      {hint && hint}
-    </div>
+    </FieldShell>
   );
 }
 
-function FieldBadges({ source, reviewReason }) {
-  return (
-    <>
-      {source && (
-        <span className="autofill-badge">
-          <Sparkles size={10} /> From {source}
-        </span>
-      )}
-      {reviewReason && (
-        <span className="review-badge" title={reviewReason}>
-          <AlertTriangle size={10} /> Please check
-        </span>
-      )}
-    </>
-  );
-}
-
-function YearSelect({ label, k, info, onChange, placeholder = "Select Year", autoFilledFields = {} }) {
+function YearSelect({ label, k, info, onChange, placeholder = "Select year", autoFilledFields = {} }) {
+  const id = useId();
   const source = autoFilledFields[k];
   const reviewReason = useContext(ReviewContext)[k];
   return (
-    <div className={`input-group${source ? " autofill-group" : ""}${reviewReason ? " review-group" : ""}`}>
-      {label && (
-        <label>
-          {label}
-          <FieldBadges source={source} reviewReason={reviewReason} />
-        </label>
-      )}
+    <FieldShell id={id} label={label} source={source} reviewReason={reviewReason}>
       <select
+        id={id}
         className={`input-field${source ? " autofill-input" : ""}`}
         value={info[k] || ""}
         onChange={(e) => onChange(k, e.target.value)}
@@ -619,32 +904,96 @@ function YearSelect({ label, k, info, onChange, placeholder = "Select Year", aut
           <option key={y} value={y}>{y}</option>
         ))}
       </select>
+    </FieldShell>
+  );
+}
+
+// options: ["A", "B"] or [{ value, label }]. `fallback` is the value shown
+// (and assumed) when nothing has been chosen yet; with it there's no blank option.
+function SelectField({ label, k, options, info, onChange, placeholder = "Select", fallback, autoFilledFields = {} }) {
+  const id = useId();
+  const source = autoFilledFields[k];
+  const reviewReason = useContext(ReviewContext)[k];
+  const opts = options.map((o) => (typeof o === "string" ? { value: o, label: o } : o));
+  return (
+    <FieldShell id={id} label={label} source={source} reviewReason={reviewReason}>
+      <select
+        id={id}
+        className={`input-field${source ? " autofill-input" : ""}`}
+        value={info[k] || fallback || ""}
+        onChange={(e) => onChange(k, e.target.value)}
+      >
+        {fallback === undefined && <option value="">{placeholder}</option>}
+        {opts.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </FieldShell>
+  );
+}
+
+function TextAreaField({ label, k, info, onChange, placeholder = "", autoFilledFields = {} }) {
+  const id = useId();
+  const source = autoFilledFields[k];
+  const reviewReason = useContext(ReviewContext)[k];
+  return (
+    <FieldShell id={id} label={label} source={source} reviewReason={reviewReason} full>
+      <textarea
+        id={id}
+        className={`input-field${source ? " autofill-input" : ""}`}
+        rows={2}
+        placeholder={placeholder}
+        value={info[k] || ""}
+        onChange={(e) => onChange(k, e.target.value)}
+      />
+    </FieldShell>
+  );
+}
+
+// Plain controlled inputs for co-applicant and reference details.
+function TextInput({ label, value, onChange, full, ...rest }) {
+  const id = useId();
+  return (
+    <div className={`input-group${full ? " is-full" : ""}`}>
+      <label htmlFor={id}><span className="input-label-text">{label}</span></label>
+      <input id={id} className="input-field" value={value || ""} onChange={(e) => onChange(e.target.value)} {...rest} />
     </div>
   );
 }
 
-function SelectField({ label, k, options, info, onChange, placeholder = "Select", autoFilledFields = {} }) {
-  const source = autoFilledFields[k];
-  const reviewReason = useContext(ReviewContext)[k];
+function TextArea({ label, value, onChange }) {
+  const id = useId();
   return (
-    <div className={`input-group${source ? " autofill-group" : ""}${reviewReason ? " review-group" : ""}`}>
-      <label>
-        {label}
-        <FieldBadges source={source} reviewReason={reviewReason} />
-      </label>
-      <select
-        className={`input-field${source ? " autofill-input" : ""}`}
-        value={info[k] || ""}
-        onChange={(e) => onChange(k, e.target.value)}
-      >
-        <option value="">{placeholder}</option>
-        {options.map((o) => (
-          <option key={o} value={o}>{o}</option>
-        ))}
+    <div className="input-group is-full">
+      <label htmlFor={id}><span className="input-label-text">{label}</span></label>
+      <textarea id={id} className="input-field" rows={2} value={value || ""} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+function PlainSelect({ label, value, onChange, options, placeholder }) {
+  const id = useId();
+  return (
+    <div className="input-group">
+      <label htmlFor={id}><span className="input-label-text">{label}</span></label>
+      <select id={id} className="input-field" value={value} onChange={(e) => onChange(e.target.value)}>
+        {placeholder !== undefined && <option value="">{placeholder}</option>}
+        {options.map((o) => {
+          const opt = typeof o === "string" ? { value: o, label: o } : o;
+          return <option key={opt.value} value={opt.value}>{opt.label}</option>;
+        })}
       </select>
     </div>
   );
 }
+
+const SCORE_TYPES_SCHOOL = [
+  { value: "percentage", label: "Percentage (%)" },
+  { value: "marks", label: "Marks" },
+  { value: "points", label: "Points (0 – 10)" },
+];
+const YES_NO = ["Yes", "No"];
+const NO_YES = ["No", "Yes"];
 
 // Banks and universities generally want a passport valid well past the
 // course start, so warn a year ahead instead of only once it has expired.
@@ -665,398 +1014,280 @@ function passportExpiryHint(expiry) {
   );
 }
 
-// ─── Personal Info + References (combined section) ─────────────────────────────
+function FormGroup({ title, note, children }) {
+  return (
+    <fieldset className="sp-fieldset">
+      <legend className="sp-fieldset__title">{title}</legend>
+      {note && <p className="sp-fieldset__note">{note}</p>}
+      <div className="sp-form-grid">{children}</div>
+    </fieldset>
+  );
+}
 
-function PersonalAndRefsSection({ info, onChange, autoFilledFields }) {
-  const [subStep, setSubStep] = useState(1);
+// ─── Personal Info + References (the "My Profile" view) ────────────────────────
+
+function PersonalAndRefsSection({ info, onChange, autoFilledFields, reviewCount, subStep, setSubStep, onBack }) {
   const af = autoFilledFields || {};
   const afCount = Object.keys(af).length;
 
-  const STEP_LABELS = ["Page 1", "Page 2", "Page 3", "Page 4", "References"];
-
   return (
-    <div className="section-panel">
-      <div className="section-intro">
-        <h2>Personal Profile &amp; References</h2>
-        <p>
-          Fill in your details across the pages below.
-          {afCount > 0
-            ? " Fields highlighted in green were auto-filled from your uploaded documents — verify and update as needed."
-            : " Upload documents in earlier sections to auto-fill fields here."}
-        </p>
-        {afCount > 0 && (
-          <div className="autofill-summary">
-            <Sparkles size={13} />
-            <span>{afCount} field{afCount !== 1 ? "s" : ""} auto-filled from uploaded documents</span>
+    <div className="sp-profile">
+      <div className="sp-heading sp-heading--profile">
+        <div className="sp-heading__text">
+          <button type="button" className="sp-back" onClick={onBack}>
+            <ArrowLeft size={15} aria-hidden="true" /> Back to documents
+          </button>
+          <h1 className="sp-title">My Profile</h1>
+          <p className="sp-lede">
+            {afCount > 0
+              ? "Fields marked “From …” were filled in from your documents. Check them and correct anything that looks wrong — what you type is never overwritten."
+              : "Fill in your details across the pages below. Uploading your Passport, Aadhaar and PAN fills many of them in for you."}
+          </p>
+        </div>
+        {(afCount > 0 || reviewCount > 0) && (
+          <div className="sp-profile-stats">
+            {afCount > 0 && (
+              <span className="sp-stat is-ai"><Sparkles size={14} aria-hidden="true" /> {plural(afCount, "field")} filled from documents</span>
+            )}
+            {reviewCount > 0 && (
+              <span className="sp-stat is-warning"><TriangleAlert size={14} aria-hidden="true" /> {plural(reviewCount, "detail")} to check</span>
+            )}
           </div>
         )}
       </div>
 
-      <div className="sub-step-navigator" style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
-        {STEP_LABELS.map((lbl, idx) => {
-          const stepNum = idx + 1;
-          return (
+      <div className="sp-card">
+        <div className="sp-tabs" role="tablist" aria-label="Profile pages">
+          {PROFILE_PAGES.map((p) => (
             <button
-              key={stepNum}
+              key={p.id}
               type="button"
-              className={`btn btn-sm ${subStep === stepNum ? "btn-primary" : "btn-secondary"}`}
-              style={{ flex: "1 1 80px", minWidth: 0, whiteSpace: "normal" }}
-              onClick={() => setSubStep(stepNum)}
+              role="tab"
+              id={`profile-tab-${p.id}`}
+              aria-selected={subStep === p.id}
+              aria-controls="profile-panel"
+              className={`sp-tab${subStep === p.id ? " is-active" : ""}`}
+              onClick={() => setSubStep(p.id)}
             >
-              {lbl}
+              <span className="sp-tab__num">{p.id}</span>
+              <span className="sp-tab__label">{p.label}</span>
             </button>
-          );
-        })}
-      </div>
+          ))}
+        </div>
 
-      {/* ── Page 1: Identity & Academic Parameters ── */}
-      {subStep === 1 && (
-        <div className="animate-fade-in">
-          <h3 className="sub-heading">Identity &amp; Academic Parameters</h3>
-          <div className="grid-2">
-            <PersonalField label="First Name" k="firstName" placeholder="As per passport" info={info} onChange={onChange} autoFilledFields={af} />
-            <PersonalField label="Last Name" k="lastName" placeholder="As per passport" info={info} onChange={onChange} autoFilledFields={af} />
-            <PersonalField label="Mobile &amp; WhatsApp Number" k="phone" placeholder="+91 XXXXX XXXXX" info={info} onChange={onChange} />
-            <PersonalField label="Email Identity Address" k="email" type="email" placeholder="name@example.com" info={info} onChange={onChange} />
-            <PersonalField label="Required Loan Amount (₹)" k="loanAmount" placeholder="e.g. 5000000" info={info} onChange={onChange} integerOnly />
-            <PersonalField label="Student CIBIL Score" k="studentCibil" placeholder="300 – 900" info={info} onChange={onChange} integerOnly maxVal={900} hint={CIBIL_HINT} autoFilledFields={af} />
+        <div className="sp-tabpanel" role="tabpanel" id="profile-panel" aria-labelledby={`profile-tab-${subStep}`}>
+          {/* ── Page 1: Identity & Academic Parameters ── */}
+          {subStep === 1 && (
+            <>
+              <FormGroup title="Identity & academic details">
+                <PersonalField label="First name" k="firstName" placeholder="As per passport" info={info} onChange={onChange} autoFilledFields={af} />
+                <PersonalField label="Last name" k="lastName" placeholder="As per passport" info={info} onChange={onChange} autoFilledFields={af} />
+                <PersonalField label="Mobile & WhatsApp number" k="phone" placeholder="+91 XXXXX XXXXX" info={info} onChange={onChange} />
+                <PersonalField label="Email address" k="email" type="email" placeholder="name@example.com" info={info} onChange={onChange} />
+                <PersonalField label="Required loan amount (₹)" k="loanAmount" placeholder="e.g. 5000000" info={info} onChange={onChange} integerOnly />
+                <PersonalField label="Student CIBIL score" k="studentCibil" placeholder="300 – 900" info={info} onChange={onChange} integerOnly maxVal={900} hint={CIBIL_HINT} autoFilledFields={af} />
+                <SelectField label="Marital status — married?" k="marital" options={YES_NO} info={info} onChange={onChange} autoFilledFields={af} />
+                <PersonalField label="Highest qualification" k="qualName" placeholder="e.g. B.Tech, MCA, MBA" info={info} onChange={onChange} autoFilledFields={af} />
+                <YearSelect label="Qualification passed-out year" k="qualYear" info={info} onChange={onChange} autoFilledFields={af} />
+                <PersonalField label="Graduation institution" k="qualInstitution" placeholder="e.g. Anna University" info={info} onChange={onChange} autoFilledFields={af} />
+              </FormGroup>
 
-            <div className={`input-group${af.marital ? " autofill-group" : ""}`}>
-              <label>Marital Status — Married?</label>
-              <select className="input-field" value={info.marital || ""} onChange={(e) => onChange("marital", e.target.value)}>
-                <option value="">Select</option>
-                <option value="Yes">Yes</option>
-                <option value="No">No</option>
-              </select>
-            </div>
+              <FormGroup title="School & graduation scores">
+                <SelectField label="10th score type" k="pct10Type" options={SCORE_TYPES_SCHOOL} fallback="percentage" info={info} onChange={onChange} autoFilledFields={af} />
+                <PersonalField
+                  label={info.pct10Type === "marks" ? "10th marks" : info.pct10Type === "points" ? "10th points (0 – 10)" : "10th percentage (%)"}
+                  k="pct10Score"
+                  placeholder={info.pct10Type === "marks" ? "e.g. 450" : info.pct10Type === "points" ? "e.g. 8.5" : "e.g. 85.4"}
+                  info={info}
+                  onChange={onChange}
+                  numericOnly
+                  maxVal={info.pct10Type === "marks" ? undefined : info.pct10Type === "points" ? 10 : 100}
+                  autoFilledFields={af}
+                />
+                <YearSelect label="10th passed-out year" k="pct10Year" info={info} onChange={onChange} autoFilledFields={af} />
 
-            <PersonalField label="Highest Qualification (e.g. B.Tech, MCA)" k="qualName" placeholder="e.g. B.Tech, MCA, MBA" info={info} onChange={onChange} autoFilledFields={af} />
-            <YearSelect label="Qualification Passed Out Year" k="qualYear" info={info} onChange={onChange} autoFilledFields={af} />
-            <PersonalField label="Graduation Institution" k="qualInstitution" placeholder="e.g. Anna University" info={info} onChange={onChange} autoFilledFields={af} />
-            <div className="input-group">
-              <label>10th Score Type</label>
-              <select
-                className="input-field"
-                value={info.pct10Type || "percentage"}
-                onChange={(e) => onChange("pct10Type", e.target.value)}
-              >
-                <option value="percentage">Percentage (%)</option>
-                <option value="marks">Marks</option>
-                <option value="points">Points (0 – 10)</option>
-              </select>
-            </div>
-            <PersonalField
-              label={info.pct10Type === "marks" ? "10th Marks" : info.pct10Type === "points" ? "10th Points (0 – 10)" : "10th Percentage (%)"}
-              k="pct10Score"
-              placeholder={info.pct10Type === "marks" ? "e.g. 450" : info.pct10Type === "points" ? "e.g. 8.5" : "e.g. 85.4"}
-              info={info}
-              onChange={onChange}
-              numericOnly
-              maxVal={info.pct10Type === "marks" ? undefined : info.pct10Type === "points" ? 10 : 100}
-              autoFilledFields={af}
-            />
-            <YearSelect label="10th Passed Out Year" k="pct10Year" info={info} onChange={onChange} autoFilledFields={af} />
+                <SelectField label="12th score type" k="pct12Type" options={SCORE_TYPES_SCHOOL} fallback="percentage" info={info} onChange={onChange} autoFilledFields={af} />
+                <PersonalField
+                  label={info.pct12Type === "marks" ? "12th / Inter marks" : info.pct12Type === "points" ? "12th / Inter points (0 – 10)" : "Inter / 12th percentage (%)"}
+                  k="pct12Score"
+                  placeholder={info.pct12Type === "marks" ? "e.g. 480" : info.pct12Type === "points" ? "e.g. 8.0" : "e.g. 82.0"}
+                  info={info}
+                  onChange={onChange}
+                  numericOnly
+                  maxVal={info.pct12Type === "marks" ? undefined : info.pct12Type === "points" ? 10 : 100}
+                  autoFilledFields={af}
+                />
+                <YearSelect label="12th passed-out year" k="pct12Year" info={info} onChange={onChange} autoFilledFields={af} />
 
-            <div className="input-group">
-              <label>12th Score Type</label>
-              <select
-                className="input-field"
-                value={info.pct12Type || "percentage"}
-                onChange={(e) => onChange("pct12Type", e.target.value)}
-              >
-                <option value="percentage">Percentage (%)</option>
-                <option value="marks">Marks</option>
-                <option value="points">Points (0 – 10)</option>
-              </select>
-            </div>
-            <PersonalField
-              label={info.pct12Type === "marks" ? "12th / Inter Marks" : info.pct12Type === "points" ? "12th / Inter Points (0 – 10)" : "Inter / 12th Percentage (%)"}
-              k="pct12Score"
-              placeholder={info.pct12Type === "marks" ? "e.g. 480" : info.pct12Type === "points" ? "e.g. 8.0" : "e.g. 82.0"}
-              info={info}
-              onChange={onChange}
-              numericOnly
-              maxVal={info.pct12Type === "marks" ? undefined : info.pct12Type === "points" ? 10 : 100}
-              autoFilledFields={af}
-            />
-            <YearSelect label="12th Passed Out Year" k="pct12Year" info={info} onChange={onChange} autoFilledFields={af} />
+                <SelectField
+                  label="Graduation score type"
+                  k="pctGradType"
+                  options={[{ value: "percentage", label: "Percentage (%)" }, { value: "cgpa", label: "CGPA (0 – 10)" }]}
+                  fallback="percentage"
+                  info={info}
+                  onChange={onChange}
+                  autoFilledFields={af}
+                />
+                <PersonalField
+                  label={info.pctGradType === "cgpa" ? "Graduation CGPA" : "Graduation percentage (%)"}
+                  k="pctGradScore"
+                  placeholder={info.pctGradType === "cgpa" ? "e.g. 8.2" : "e.g. 74.5"}
+                  info={info}
+                  onChange={onChange}
+                  numericOnly
+                  maxVal={info.pctGradType === "cgpa" ? 10 : 100}
+                  autoFilledFields={af}
+                />
+                <YearSelect label="Graduation passed-out year" k="pctGradYear" info={info} onChange={onChange} autoFilledFields={af} />
 
-            <div className={`input-group${af.pctGradType ? " autofill-group" : ""}`}>
-              <label>
-                Graduation Score Type
-                {af.pctGradType && <span className="autofill-badge"><Sparkles size={10} /> From {af.pctGradType}</span>}
-              </label>
-              <select
-                className={`input-field${af.pctGradType ? " autofill-input" : ""}`}
-                value={info.pctGradType || "percentage"}
-                onChange={(e) => onChange("pctGradType", e.target.value)}
-              >
-                <option value="percentage">Percentage (%)</option>
-                <option value="cgpa">CGPA (0 – 10)</option>
-              </select>
-            </div>
+                <SelectField label="Any active or past backlogs?" k="hasBacklogs" options={NO_YES} info={info} onChange={onChange} autoFilledFields={af} />
+                {info.hasBacklogs === "Yes" && (
+                  <PersonalField label="Number of backlogs" k="backlogCount" placeholder="e.g. 2" info={info} onChange={onChange} integerOnly maxVal={50} />
+                )}
+              </FormGroup>
 
-            <PersonalField
-              label={info.pctGradType === "cgpa" ? "Graduation CGPA" : "Graduation Percentage (%)"}
-              k="pctGradScore"
-              placeholder={info.pctGradType === "cgpa" ? "e.g. 8.2" : "e.g. 74.5"}
-              info={info}
-              onChange={onChange}
-              numericOnly
-              maxVal={info.pctGradType === "cgpa" ? 10 : 100}
-              autoFilledFields={af}
-            />
-            <YearSelect label="Graduation Passed Out Year" k="pctGradYear" info={info} onChange={onChange} autoFilledFields={af} />
+              <FormGroup title="Identity details" note="Read from your Passport, Aadhaar and PAN — check them and correct anything that looks wrong.">
+                <PersonalField label="Date of birth" k="dob" type="date" info={info} onChange={onChange} autoFilledFields={af} />
+                <SelectField label="Gender" k="gender" options={["Male", "Female", "Other"]} info={info} onChange={onChange} autoFilledFields={af} />
+                <PersonalField label="Nationality" k="nationality" placeholder="e.g. Indian" info={info} onChange={onChange} autoFilledFields={af} />
+                <PersonalField label="Place of birth" k="placeOfBirth" placeholder="e.g. Hyderabad, Telangana" info={info} onChange={onChange} autoFilledFields={af} />
+                <PersonalField label="Passport number" k="passportNumber" placeholder="e.g. Z1234567" info={info} onChange={onChange} autoFilledFields={af} />
+                <PersonalField label="Passport date of issue" k="passportIssueDate" type="date" info={info} onChange={onChange} autoFilledFields={af} />
+                <PersonalField label="Passport date of expiry" k="passportExpiry" type="date" info={info} onChange={onChange} autoFilledFields={af} hint={passportExpiryHint(info.passportExpiry)} />
+                <PersonalField label="Aadhaar number" k="aadhaarNumber" placeholder="XXXX XXXX 1234" info={info} onChange={onChange} autoFilledFields={af} />
+                <PersonalField label="PAN number" k="panNumber" placeholder="e.g. ABCPR1234K" info={info} onChange={onChange} autoFilledFields={af} />
+              </FormGroup>
 
-            <div className="input-group">
-              <label>Any Active/Past Backlogs?</label>
-              <select className="input-field" value={info.hasBacklogs || ""} onChange={(e) => onChange("hasBacklogs", e.target.value)}>
-                <option value="">Select</option>
-                <option value="No">No</option>
-                <option value="Yes">Yes</option>
-              </select>
-            </div>
-            {info.hasBacklogs === "Yes" && (
-              <PersonalField label="Number of Backlogs" k="backlogCount" placeholder="e.g. 2" info={info} onChange={onChange} integerOnly maxVal={50} />
-            )}
-          </div>
+              <FormGroup title="Standardised test scores">
+                <PersonalField label="GRE score (260 – 340)" k="greScore" placeholder="e.g. 312" info={info} onChange={onChange} integerOnly maxVal={340} autoFilledFields={af} />
+                <PersonalField label="IELTS score (0 – 9)" k="ieltsScore" placeholder="e.g. 7.0" info={info} onChange={onChange} numericOnly maxVal={9} autoFilledFields={af} />
+                <PersonalField label="Duolingo score (10 – 160)" k="duolingoScore" placeholder="e.g. 120" info={info} onChange={onChange} integerOnly maxVal={160} autoFilledFields={af} />
+                <PersonalField label="TOEFL score (0 – 120)" k="toeflScore" placeholder="e.g. 98" info={info} onChange={onChange} integerOnly maxVal={120} autoFilledFields={af} />
+                <PersonalField label="GMAT score (200 – 800)" k="gmatScore" placeholder="e.g. 650" info={info} onChange={onChange} integerOnly maxVal={800} autoFilledFields={af} />
+                <PersonalField label="PTE score (10 – 90)" k="pteScore" placeholder="e.g. 65" info={info} onChange={onChange} integerOnly maxVal={90} autoFilledFields={af} />
+              </FormGroup>
+            </>
+          )}
 
-          <div className="divider" />
-          <h3 className="sub-heading">Identity Details</h3>
-          <p className="sub-heading-note">Read from your Passport, Aadhaar and PAN — check them and correct anything that looks wrong.</p>
-          <div className="grid-2">
-            <PersonalField label="Date of Birth" k="dob" type="date" info={info} onChange={onChange} autoFilledFields={af} />
-            <SelectField label="Gender" k="gender" options={["Male", "Female", "Other"]} info={info} onChange={onChange} autoFilledFields={af} />
-            <PersonalField label="Nationality" k="nationality" placeholder="e.g. Indian" info={info} onChange={onChange} autoFilledFields={af} />
-            <PersonalField label="Place of Birth" k="placeOfBirth" placeholder="e.g. Hyderabad, Telangana" info={info} onChange={onChange} autoFilledFields={af} />
-            <PersonalField label="Passport Number" k="passportNumber" placeholder="e.g. Z1234567" info={info} onChange={onChange} autoFilledFields={af} />
-            <PersonalField label="Passport Date of Issue" k="passportIssueDate" type="date" info={info} onChange={onChange} autoFilledFields={af} />
-            <PersonalField label="Passport Date of Expiry" k="passportExpiry" type="date" info={info} onChange={onChange} autoFilledFields={af} hint={passportExpiryHint(info.passportExpiry)} />
-            <PersonalField label="Aadhaar Number" k="aadhaarNumber" placeholder="XXXX XXXX 1234" info={info} onChange={onChange} autoFilledFields={af} />
-            <PersonalField label="PAN Number" k="panNumber" placeholder="e.g. ABCPR1234K" info={info} onChange={onChange} autoFilledFields={af} />
-          </div>
+          {/* ── Page 2: Destination & Application Context ── */}
+          {subStep === 2 && (
+            <>
+              <FormGroup title="Destination & application">
+                <SelectField
+                  label="Loan application track"
+                  k="loanTrack"
+                  options={[{ value: "MS", label: "Master of Science (MS)" }, { value: "Under Graduation", label: "Under Graduation (UG)" }]}
+                  placeholder="Select option"
+                  info={info}
+                  onChange={onChange}
+                  autoFilledFields={af}
+                />
+                <PersonalField label="Destination country" k="destinationCountry" placeholder="e.g. USA" info={info} onChange={onChange} autoFilledFields={af} />
+                <PersonalField label="Travelling country & university" k="targetUniversity" placeholder="e.g. USA - UT Dallas" info={info} onChange={onChange} autoFilledFields={af} />
+                <PersonalField label="Course name & university" k="courseNameUniversity" placeholder="e.g. Computer Science - UTD" info={info} onChange={onChange} autoFilledFields={af} />
+                <SelectField label="I-20 document received?" k="i20Received" options={YES_NO} placeholder="Select option" info={info} onChange={onChange} autoFilledFields={af} />
+                <SelectField label="Visa slot booked?" k="visaBooked" options={NO_YES} placeholder="Select status" info={info} onChange={onChange} autoFilledFields={af} />
+                {info.visaBooked === "Yes" && (
+                  <PersonalField label="Visa slot date" k="visaSlotDate" type="date" info={info} onChange={onChange} autoFilledFields={af} />
+                )}
+              </FormGroup>
 
-          <div className="divider" />
-          <h3 className="sub-heading">Standardized Test Metrics</h3>
-          <div className="grid-2">
-            <PersonalField label="GRE Score (260 – 340)" k="greScore" placeholder="e.g. 312" info={info} onChange={onChange} integerOnly maxVal={340} autoFilledFields={af} />
-            <PersonalField label="IELTS Score (0 – 9)" k="ieltsScore" placeholder="e.g. 7.0" info={info} onChange={onChange} numericOnly maxVal={9} autoFilledFields={af} />
-            <PersonalField label="Duolingo Score (10 – 160)" k="duolingoScore" placeholder="e.g. 120" info={info} onChange={onChange} integerOnly maxVal={160} autoFilledFields={af} />
-            <PersonalField label="TOEFL Score (0 – 120)" k="toeflScore" placeholder="e.g. 98" info={info} onChange={onChange} integerOnly maxVal={120} autoFilledFields={af} />
-            <PersonalField label="GMAT Score (200 – 800)" k="gmatScore" placeholder="e.g. 650" info={info} onChange={onChange} integerOnly maxVal={800} autoFilledFields={af} />
-            <PersonalField label="PTE Score (10 – 90)" k="pteScore" placeholder="e.g. 65" info={info} onChange={onChange} integerOnly maxVal={90} autoFilledFields={af} />
+              <FormGroup title="Address">
+                <TextAreaField label="Present address (with landmark)" k="currentAddress" placeholder="Door no, street, landmark, PIN code" info={info} onChange={onChange} autoFilledFields={af} />
+                <TextAreaField label="Permanent address (with landmark)" k="permanentAddress" placeholder="Same as above, or your permanent address" info={info} onChange={onChange} autoFilledFields={af} />
+              </FormGroup>
+            </>
+          )}
+
+          {/* ── Page 3: Paternal & Maternal Baselines ── */}
+          {subStep === 3 && (
+            <>
+              <FormGroup title="Parents">
+                <PersonalField label="Father's name" k="fatherName" info={info} onChange={onChange} autoFilledFields={af} />
+                <PersonalField label="Father's mobile & email" k="fatherContact" placeholder="Phone / email" info={info} onChange={onChange} />
+                <PersonalField label="Father's CIBIL score (300 – 900)" k="fatherCibil" placeholder="e.g. 780" info={info} onChange={onChange} integerOnly maxVal={900} hint={CIBIL_HINT} />
+                <PersonalField label="Mother's name" k="motherName" info={info} onChange={onChange} autoFilledFields={af} />
+                <PersonalField label="Mother's mobile & email" k="motherContact" info={info} onChange={onChange} />
+                <PersonalField label="Mother's CIBIL score (300 – 900)" k="motherCibil" placeholder="e.g. 760" info={info} onChange={onChange} integerOnly maxVal={900} hint={CIBIL_HINT} />
+              </FormGroup>
+
+              <FormGroup title="Financial guarantor">
+                <PersonalField label="Guarantor's name" k="guarantorName" info={info} onChange={onChange} />
+                <PersonalField label="Relationship to you" k="guarantorRelation" placeholder="e.g. Uncle" info={info} onChange={onChange} />
+                <PersonalField label="Guarantor's mobile number" k="guarantorMobile" info={info} onChange={onChange} />
+                <PersonalField label="Guarantor's CIBIL score (300 – 900)" k="guarantorCibil" placeholder="e.g. 800" info={info} onChange={onChange} integerOnly maxVal={900} hint={CIBIL_HINT} />
+                <PersonalField label="Guarantor's sector (job / business)" k="guarantorSector" placeholder="e.g. Software business" info={info} onChange={onChange} />
+                <SelectField label="Income documents available?" k="guarantorDocsAvailable" options={YES_NO} placeholder="Select option" info={info} onChange={onChange} />
+              </FormGroup>
+
+              <FormGroup title="Extended family">
+                <PersonalField label="Maternal grandmother's name" k="maternalGrandma" info={info} onChange={onChange} />
+                <PersonalField label="Paternal grandmother's name" k="paternalGrandma" info={info} onChange={onChange} />
+              </FormGroup>
+            </>
+          )}
+
+          {/* ── Page 4: Prior History & Assets ── */}
+          {subStep === 4 && (
+            <>
+              <FormGroup title="Prior loan history & assets">
+                <SelectField label="Applied to any bank before?" k="priorBankApplied" options={NO_YES} placeholder="Select option" info={info} onChange={onChange} />
+                {info.priorBankApplied === "Yes" && (
+                  <SelectField
+                    label="Which bank?"
+                    k="priorBankName"
+                    placeholder="Select bank"
+                    options={[
+                      "HDFC Bank",
+                      "HDFC Credila Financial Services",
+                      "Avanse Financial Services",
+                      "Auxilo Finserve",
+                      "InCred Finance",
+                      "Tata Capital",
+                      "Poonawalla Fincorp",
+                      "IDFC FIRST Bank",
+                      "ICICI Bank",
+                      "Axis Bank",
+                      "YES Bank",
+                      "Others",
+                    ]}
+                    info={info}
+                    onChange={onChange}
+                  />
+                )}
+                {info.priorBankApplied === "Yes" && info.priorBankName === "Others" && (
+                  <PersonalField label="Bank name" k="priorBankNameCustom" placeholder="Type bank name here" info={info} onChange={onChange} />
+                )}
+                <SelectField label="Family owns a house?" k="ownHouseStatus" options={YES_NO} placeholder="Select status" info={info} onChange={onChange} />
+              </FormGroup>
+
+              <FormGroup title="Your work experience">
+                <SelectField label="Do you have a job?" k="hasJobDetails" options={NO_YES} info={info} onChange={onChange} />
+                {info.hasJobDetails === "Yes" && (
+                  <PersonalField label="Salary per month & total experience" k="jobSpecs" placeholder="e.g. ₹45,000 - 2 years" info={info} onChange={onChange} />
+                )}
+              </FormGroup>
+
+              <FormGroup title="Overseas education consultant">
+                <PersonalField label="Consultant name & location" k="consultantNameLoc" placeholder="Name and city branch" info={info} onChange={onChange} />
+                <PersonalField label="Consultant phone & email" k="consultantContact" placeholder="Contact details" info={info} onChange={onChange} />
+              </FormGroup>
+            </>
+          )}
+
+          {/* ── Page 5: References ── */}
+          {subStep === 5 && <ReferencesContent info={info} onChange={onChange} />}
+
+          <div className="sp-pager">
+            <button type="button" className="rail-btn rail-btn--secondary" disabled={subStep === 1} onClick={() => setSubStep(subStep - 1)}>
+              <ArrowLeft size={15} aria-hidden="true" /> Previous page
+            </button>
+            <span className="sp-pager__pos">Page {subStep} of {PROFILE_PAGES.length}</span>
+            <button type="button" className="rail-btn rail-btn--secondary" disabled={subStep === PROFILE_PAGES.length} onClick={() => setSubStep(subStep + 1)}>
+              Next page <ArrowRight size={15} aria-hidden="true" />
+            </button>
           </div>
         </div>
-      )}
-
-      {/* ── Page 2: Destination & Application Context ── */}
-      {subStep === 2 && (
-        <div className="animate-fade-in">
-          <h3 className="sub-heading">Destination &amp; Application Context</h3>
-          <div className="grid-2">
-            <div className="input-group">
-              <label>Loan Application Track For</label>
-              <select className="input-field" value={info.loanTrack || ""} onChange={(e) => onChange("loanTrack", e.target.value)}>
-                <option value="">Select Option</option>
-                <option value="MS">Master of Science (MS)</option>
-                <option value="Under Graduation">Under Graduation (UG)</option>
-              </select>
-            </div>
-
-            <PersonalField label="Destination Country" k="destinationCountry" placeholder="e.g. USA" info={info} onChange={onChange} autoFilledFields={af} />
-            <PersonalField label="Traveling Country &amp; University" k="targetUniversity" placeholder="e.g. USA - UT Dallas" info={info} onChange={onChange} autoFilledFields={af} />
-            <PersonalField label="Course Name &amp; University" k="courseNameUniversity" placeholder="e.g. Computer Science - UTD" info={info} onChange={onChange} autoFilledFields={af} />
-
-            <div className={`input-group${af.i20Received ? " autofill-group" : ""}`}>
-              <label>
-                I20 Document Received?
-                {af.i20Received && <span className="autofill-badge"><Sparkles size={10} /> From {af.i20Received}</span>}
-              </label>
-              <select
-                className={`input-field${af.i20Received ? " autofill-input" : ""}`}
-                value={info.i20Received || ""}
-                onChange={(e) => onChange("i20Received", e.target.value)}
-              >
-                <option value="">Select Option</option>
-                <option value="Yes">Yes</option>
-                <option value="No">No</option>
-              </select>
-            </div>
-
-            <div className={`input-group${af.visaBooked ? " autofill-group" : ""}`}>
-              <label>
-                Visa Slot Booked Or Not?
-                {af.visaBooked && <span className="autofill-badge"><Sparkles size={10} /> From {af.visaBooked}</span>}
-              </label>
-              <select
-                className={`input-field${af.visaBooked ? " autofill-input" : ""}`}
-                value={info.visaBooked || ""}
-                onChange={(e) => onChange("visaBooked", e.target.value)}
-              >
-                <option value="">Select Status</option>
-                <option value="No">No</option>
-                <option value="Yes">Yes</option>
-              </select>
-            </div>
-            {info.visaBooked === "Yes" && (
-              <PersonalField label="Visa Slot Booked Date" k="visaSlotDate" type="date" info={info} onChange={onChange} autoFilledFields={af} />
-            )}
-          </div>
-
-          <div className="divider" />
-          <h3 className="sub-heading">Residential Tracking Matrices</h3>
-          <div className={`input-group${af.currentAddress ? " autofill-group" : ""}`}>
-            <label>
-              Present Address (With Landmark)
-              {af.currentAddress && <span className="autofill-badge"><Sparkles size={10} /> From {af.currentAddress}</span>}
-            </label>
-            <textarea
-              className={`input-field${af.currentAddress ? " autofill-input" : ""}`}
-              rows={2}
-              placeholder="Door no, Street, Landmark, PIN Code"
-              value={info.currentAddress || ""}
-              onChange={(e) => onChange("currentAddress", e.target.value)}
-            />
-          </div>
-          <div className={`input-group${af.permanentAddress ? " autofill-group" : ""}`}>
-            <label>
-              Permanent Address (With Landmark)
-              {af.permanentAddress && <span className="autofill-badge"><Sparkles size={10} /> From {af.permanentAddress}</span>}
-            </label>
-            <textarea
-              className={`input-field${af.permanentAddress ? " autofill-input" : ""}`}
-              rows={2}
-              placeholder="Same as above or structural fallback layout"
-              value={info.permanentAddress || ""}
-              onChange={(e) => onChange("permanentAddress", e.target.value)}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* ── Page 3: Paternal & Maternal Baselines ── */}
-      {subStep === 3 && (
-        <div className="animate-fade-in">
-          <h3 className="sub-heading">Paternal &amp; Maternal Baselines</h3>
-          <div className="grid-2">
-            <PersonalField label="Father Name" k="fatherName" info={info} onChange={onChange} autoFilledFields={af} />
-            <PersonalField label="Father Mobile No. &amp; Mail Id" k="fatherContact" placeholder="Phone / Email info" info={info} onChange={onChange} />
-            <PersonalField label="Father CIBIL Score (300 – 900)" k="fatherCibil" placeholder="e.g. 780" info={info} onChange={onChange} integerOnly maxVal={900} hint={CIBIL_HINT} />
-            <PersonalField label="Mother Name" k="motherName" info={info} onChange={onChange} autoFilledFields={af} />
-            <PersonalField label="Mother Mobile No. &amp; Mail Id" k="motherContact" info={info} onChange={onChange} />
-            <PersonalField label="Mother CIBIL Score (300 – 900)" k="motherCibil" placeholder="e.g. 760" info={info} onChange={onChange} integerOnly maxVal={900} hint={CIBIL_HINT} />
-          </div>
-
-          <div className="divider" />
-          <h3 className="sub-heading">Financial Guarantor Setup</h3>
-          <div className="grid-2">
-            <PersonalField label="Financial Guarantee Name" k="guarantorName" info={info} onChange={onChange} />
-            <PersonalField label="Financial Guarantee Relationship" k="guarantorRelation" placeholder="e.g. Uncle" info={info} onChange={onChange} />
-            <PersonalField label="Financial Guarantee Mobile No." k="guarantorMobile" info={info} onChange={onChange} />
-            <PersonalField label="Financial Guarantee CIBIL Score (300 – 900)" k="guarantorCibil" placeholder="e.g. 800" info={info} onChange={onChange} integerOnly maxVal={900} hint={CIBIL_HINT} />
-            <PersonalField label="Financial Guarantee Sector (Job / Business)" k="guarantorSector" placeholder="e.g. Software Business" info={info} onChange={onChange} />
-
-            <div className="input-group">
-              <label>Income Documents Available?</label>
-              <select className="input-field" value={info.guarantorDocsAvailable || ""} onChange={(e) => onChange("guarantorDocsAvailable", e.target.value)}>
-                <option value="">Select Option</option>
-                <option value="Yes">Yes</option>
-                <option value="No">No</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="divider" />
-          <h3 className="sub-heading">Extended Lineage References</h3>
-          <div className="grid-2">
-            <PersonalField label="Maternal Grandmother Name" k="maternalGrandma" info={info} onChange={onChange} />
-            <PersonalField label="Paternal Grandmother Name" k="paternalGrandma" info={info} onChange={onChange} />
-          </div>
-        </div>
-      )}
-
-      {/* ── Page 4: Prior History & Assets ── */}
-      {subStep === 4 && (
-        <div className="animate-fade-in">
-          <h3 className="sub-heading">Prior History &amp; Assets</h3>
-          <div className="grid-2">
-            <div className="input-group">
-              <label>Applied Any Bank Before?</label>
-              <select className="input-field" value={info.priorBankApplied || ""} onChange={(e) => onChange("priorBankApplied", e.target.value)}>
-                <option value="">Select Option</option>
-                <option value="No">No</option>
-                <option value="Yes">Yes</option>
-              </select>
-            </div>
-            {info.priorBankApplied === "Yes" && (
-              <div className="input-group">
-                <label>Which Bank Was Applied?</label>
-                <select className="input-field" value={info.priorBankName || ""} onChange={(e) => onChange("priorBankName", e.target.value)}>
-                  <option value="">Select Bank</option>
-                  <option value="HDFC Bank">HDFC Bank</option>
-                  <option value="HDFC Credila Financial Services">HDFC Credila Financial Services</option>
-                  <option value="Avanse Financial Services">Avanse Financial Services</option>
-                  <option value="Auxilo Finserve">Auxilo Finserve</option>
-                  <option value="InCred Finance">InCred Finance</option>
-                  <option value="Tata Capital">Tata Capital</option>
-                  <option value="Poonawalla Fincorp">Poonawalla Fincorp</option>
-                  <option value="IDFC FIRST Bank">IDFC FIRST Bank</option>
-                  <option value="ICICI Bank">ICICI Bank</option>
-                  <option value="Axis Bank">Axis Bank</option>
-                  <option value="YES Bank">YES Bank</option>
-                  <option value="Others">Others</option>
-                </select>
-              </div>
-            )}
-            {info.priorBankApplied === "Yes" && info.priorBankName === "Others" && (
-              <PersonalField label="Enter Bank Name" k="priorBankNameCustom" placeholder="Type bank name here" info={info} onChange={onChange} />
-            )}
-
-            <div className="input-group">
-              <label>Family Own House Available Or Not?</label>
-              <select className="input-field" value={info.ownHouseStatus || ""} onChange={(e) => onChange("ownHouseStatus", e.target.value)}>
-                <option value="">Select Status</option>
-                <option value="Yes">Yes</option>
-                <option value="No">No</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="divider" />
-          <h3 className="sub-heading">Applicant Professional Status</h3>
-          <div className="grid-2">
-            <div className="input-group">
-              <label>If Any Job Details (Yes/No)</label>
-              <select className="input-field" value={info.hasJobDetails || ""} onChange={(e) => onChange("hasJobDetails", e.target.value)}>
-                <option value="">Select</option>
-                <option value="No">No</option>
-                <option value="Yes">Yes</option>
-              </select>
-            </div>
-            {info.hasJobDetails === "Yes" && (
-              <PersonalField label="Salary per Month &amp; Total Experience" k="jobSpecs" placeholder="e.g. ₹45,000 - 2 Years" info={info} onChange={onChange} />
-            )}
-          </div>
-
-          <div className="divider" />
-          <h3 className="sub-heading">Overseas Consultants Reference Mapping</h3>
-          <div className="grid-2">
-            <PersonalField label="Overseas Consultants Name, Location" k="consultantNameLoc" placeholder="Name and city branch" info={info} onChange={onChange} />
-            <PersonalField label="Consultant Phone No. &amp; Mail ID" k="consultantContact" placeholder="Contact details string" info={info} onChange={onChange} />
-          </div>
-        </div>
-      )}
-
-      {/* ── Page 5: References ── */}
-      {subStep === 5 && <ReferencesContent info={info} onChange={onChange} />}
-
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 24 }}>
-        <button type="button" className="btn btn-secondary" disabled={subStep === 1} onClick={() => setSubStep((p) => p - 1)}>
-          ← Prev Page
-        </button>
-        <button type="button" className="btn btn-secondary" disabled={subStep === 5} onClick={() => setSubStep((p) => p + 1)}>
-          Next Page →
-        </button>
       </div>
     </div>
   );
@@ -1071,143 +1302,120 @@ function ReferencesContent({ info, onChange }) {
   ];
 
   return (
-    <div className="animate-fade-in">
-      <h3 className="sub-heading">Applicant References</h3>
-      <p style={{ fontSize: 13, color: "var(--gray-400)", marginBottom: 16 }}>
-        Provide details of 2 references who can vouch for the student
-      </p>
+    <>
+      <p className="sp-fieldset__note">Provide details of 2 references who can vouch for the student.</p>
       {[1, 2].map((n) => {
         const relationKey       = `ref${n}_relation`;
         const customRelationKey = `ref${n}_custom_relation`;
         const currentRelation   = info[relationKey] || "";
+        const set = (suffix) => (v) => onChange(`ref${n}_${suffix}`, v);
 
         return (
-          <div key={n} className="ref-card">
-            <h3 className="sub-heading">Reference {n}</h3>
-            <div className="grid-2">
-              <div className="input-group">
-                <label>Name</label>
-                <input className="input-field" value={info[`ref${n}_name`] || ""} onChange={(e) => onChange(`ref${n}_name`, e.target.value)} />
-              </div>
-              <div className="input-group">
-                <label>Mobile</label>
-                <input className="input-field" value={info[`ref${n}_mobile`] || ""} onChange={(e) => onChange(`ref${n}_mobile`, e.target.value)} />
-              </div>
-              <div className="input-group">
-                <label>Occupation</label>
-                <input className="input-field" value={info[`ref${n}_occupation`] || ""} onChange={(e) => onChange(`ref${n}_occupation`, e.target.value)} />
-              </div>
-              <div className="input-group">
-                <label>Relation to Student</label>
-                <select
-                  className="input-field"
-                  value={currentRelation}
-                  onChange={(e) => {
-                    onChange(relationKey, e.target.value);
-                    if (e.target.value !== "Other") onChange(customRelationKey, "");
-                  }}
-                >
-                  <option value="">Select Relation</option>
-                  {REFERENCE_RELATIONS.map((rel) => (
-                    <option key={rel} value={rel}>{rel}</option>
-                  ))}
-                </select>
-              </div>
-              {currentRelation === "Other" && (
-                <div className="input-group" style={{ gridColumn: "1 / -1" }}>
-                  <label>Specify Custom Relation</label>
-                  <input
-                    className="input-field animate-fade-in"
-                    placeholder="e.g. Mother's Distant Cousin"
-                    value={info[customRelationKey] || ""}
-                    onChange={(e) => onChange(customRelationKey, e.target.value)}
-                  />
-                </div>
-              )}
-              <div className="input-group">
-                <label>House Number</label>
-                <input className="input-field" value={info[`ref${n}_house_number`] || ""} onChange={(e) => onChange(`ref${n}_house_number`, e.target.value)} />
-              </div>
-              <div className="input-group">
-                <label>Street Name</label>
-                <input className="input-field" value={info[`ref${n}_street_name`] || ""} onChange={(e) => onChange(`ref${n}_street_name`, e.target.value)} />
-              </div>
-              <div className="input-group">
-                <label>City</label>
-                <input className="input-field" value={info[`ref${n}_city`] || ""} onChange={(e) => onChange(`ref${n}_city`, e.target.value)} />
-              </div>
-              <div className="input-group">
-                <label>State</label>
-                <input className="input-field" value={info[`ref${n}_state`] || ""} onChange={(e) => onChange(`ref${n}_state`, e.target.value)} />
-              </div>
-              <div className="input-group">
-                <label>Pincode</label>
-                <input className="input-field" inputMode="numeric" value={info[`ref${n}_pincode`] || ""} onChange={(e) => onChange(`ref${n}_pincode`, e.target.value.replace(/[^0-9]/g, "").slice(0, 6))} />
-              </div>
-            </div>
-          </div>
+          <FormGroup key={n} title={`Reference ${n}`}>
+            <TextInput label="Name" value={info[`ref${n}_name`]} onChange={set("name")} />
+            <TextInput label="Mobile" value={info[`ref${n}_mobile`]} onChange={set("mobile")} inputMode="tel" />
+            <TextInput label="Occupation" value={info[`ref${n}_occupation`]} onChange={set("occupation")} />
+            <PlainSelect
+              label="Relation to student"
+              value={currentRelation}
+              placeholder="Select relation"
+              options={REFERENCE_RELATIONS}
+              onChange={(v) => {
+                onChange(relationKey, v);
+                if (v !== "Other") onChange(customRelationKey, "");
+              }}
+            />
+            {currentRelation === "Other" && (
+              <TextInput
+                label="Specify relation"
+                placeholder="e.g. Mother's distant cousin"
+                value={info[customRelationKey]}
+                onChange={(v) => onChange(customRelationKey, v)}
+                full
+              />
+            )}
+            <TextInput label="House number" value={info[`ref${n}_house_number`]} onChange={set("house_number")} />
+            <TextInput label="Street name" value={info[`ref${n}_street_name`]} onChange={set("street_name")} />
+            <TextInput label="City" value={info[`ref${n}_city`]} onChange={set("city")} />
+            <TextInput label="State" value={info[`ref${n}_state`]} onChange={set("state")} />
+            <TextInput
+              label="Pincode"
+              inputMode="numeric"
+              value={info[`ref${n}_pincode`]}
+              onChange={(v) => onChange(`ref${n}_pincode`, v.replace(/[^0-9]/g, "").slice(0, 6))}
+            />
+          </FormGroup>
         );
       })}
-    </div>
+    </>
   );
 }
 
-// ─── Docs Section ──────────────────────────────────────────────────────────────
+// ─── Document grid ─────────────────────────────────────────────────────────────
 
-function DocsSection({ title, subtitle, fields, studentName, studentIdentifier, subFolder, uploads, onUploaded, extractionsFor, onExtracted }) {
-  const uploaded = countUploadedFields(uploads, fields);
+// Required documents first, optional ones under their own heading.
+function DocGrid({ sectionKey, fields, studentName, studentIdentifier, subFolder, uploads, onUploaded, extractionsFor, onExtracted }) {
+  const card = (field) => (
+    <FileUploadBox
+      key={field.id}
+      anchorId={docAnchorId(sectionKey, field.id)}
+      field={field}
+      studentName={studentName}
+      studentIdentifier={studentIdentifier}
+      subFolder={subFolder}
+      uploadedFiles={uploads}
+      onUploaded={(fieldId, result) => onUploaded(fieldId, result)}
+      extraction={extractionsFor?.(field.id)}
+      onExtracted={onExtracted}
+    />
+  );
+  const req = fields.filter((f) => !f.optional);
+  const opt = fields.filter((f) => f.optional);
   return (
-    <div className="section-panel">
-      <div className="section-intro">
-        <h2>{title}</h2>
-        <p>{subtitle}</p>
-        <div className="section-stats">
-          <span className="badge badge-info">{uploaded}/{fields.length} uploaded</span>
+    <>
+      {req.length > 0 && <div className="doc-grid">{req.map(card)}</div>}
+      {opt.length > 0 && (
+        <div className={req.length ? "doc-subgroup" : undefined}>
+          <h3 className="doc-subgroup__title">
+            Optional documents <span>— add them if you have them</span>
+          </h3>
+          <div className="doc-grid">{opt.map(card)}</div>
         </div>
-      </div>
-      <div className="upload-grid">
-        {fields.map((field) => (
-          <FileUploadBox
-            key={field.id}
-            field={field}
-            studentName={studentName}
-            studentIdentifier={studentIdentifier}
-            subFolder={subFolder}
-            uploadedFiles={uploads}
-            onUploaded={(fieldId, result) => onUploaded(fieldId, result)}
-            extraction={extractionsFor?.(field.id)}
-            onExtracted={onExtracted}
-          />
-        ))}
-      </div>
-    </div>
+      )}
+    </>
   );
 }
 
-// ─── Loan Section ──────────────────────────────────────────────────────────────
+// ─── Loan Section (co-applicants) ──────────────────────────────────────────────
 
-function LoanSection({ studentName, studentIdentifier, coCount, setCoCount, uploads, onUploaded, extractions = {}, onExtracted, personalInfo, onInfoChange }) {
+const EMP_LABEL = { salaried: "Salaried", selfEmployed: "Self-employed", other: "Other / retired" };
+
+function LoanSection({ studentName, studentIdentifier, coCount, setCoCount, uploads, onUploaded, extractions = {}, onExtracted, personalInfo, onInfoChange, coFieldsFor }) {
   const [expandedCo, setExpandedCo] = useState(0);
   const coRelations = ["Father", "Mother", "Sibling", "Spouse", "Other"];
+  const countLabelId = useId();
 
   return (
-    <div className="section-panel">
-      <div className="section-intro">
-        <h2>Loan &amp; Co-Applicants</h2>
-        <p>Select the number of co-applicants, set their type, upload documents, then fill in their details below.</p>
-      </div>
-
-      <div className="input-group" style={{ maxWidth: 220 }}>
-        <label>Number of Co-Applicants</label>
-        <select
-          className="input-field"
-          value={coCount}
-          onChange={(e) => setCoCount(Number(e.target.value))}
-        >
+    <div className="co-wrap">
+      <div className="co-count">
+        <div>
+          <p className="co-count__label" id={countLabelId}>Number of co-applicants</p>
+          <p className="co-count__hint">Usually a parent. Add up to 5.</p>
+        </div>
+        <div className="co-count__seg" role="radiogroup" aria-labelledby={countLabelId}>
           {[1, 2, 3, 4, 5].map((n) => (
-            <option key={n} value={n}>{n}</option>
+            <button
+              key={n}
+              type="button"
+              role="radio"
+              aria-checked={coCount === n}
+              className={`co-count__opt${coCount === n ? " is-active" : ""}`}
+              onClick={() => setCoCount(n)}
+            >
+              {n}
+            </button>
           ))}
-        </select>
+        </div>
       </div>
 
       {Array.from({ length: coCount }, (_, i) => {
@@ -1217,260 +1425,142 @@ function LoanSection({ studentName, studentIdentifier, coCount, setCoCount, uplo
         const empType         = coInfo.empType || "salaried";
         const financialStatus = coInfo.financialStatus || "financial";
         const isOpen   = expandedCo === i;
-
-        let fields;
-        if (financialStatus === "non-financial") {
-          fields = CO_APPLICANT_SCHEMA.other.filter((f) => ["aadhar", "pan", "photo"].includes(f.id));
-        } else {
-          fields = CO_APPLICANT_SCHEMA[empType] || CO_APPLICANT_SCHEMA.other;
-        }
+        const fields   = coFieldsFor(i);
+        const reqFields = fields.filter((f) => !f.optional);
 
         const coUploads = uploads[key] || {};
         const coDisplayName = [coInfo.firstName, coInfo.lastName].filter(Boolean).join(" ") || coInfo.name || "";
+        const done = countUploadedFields(coUploads, reqFields);
+        const complete = reqFields.length > 0 && done >= reqFields.length;
+        const typeLabel = financialStatus === "non-financial" ? "Non-financial" : `Financial · ${EMP_LABEL[empType] || "Salaried"}`;
+        const set = (field) => (v) => onInfoChange(infoKey, { ...coInfo, [field]: v });
+        const bodyId = `co-body-${i}`;
 
         return (
-          <div key={i} className="co-card">
+          <div key={i} className={`co-card${isOpen ? " is-open" : ""}`}>
             <button
-              className="co-card-header"
+              className="co-card__head"
               type="button"
               onClick={() => setExpandedCo(isOpen ? -1 : i)}
+              aria-expanded={isOpen}
+              aria-controls={bodyId}
             >
-              <div className="co-info">
-                <span className="co-number">Co-Applicant {i + 1}</span>
-                <span className="co-label">
-                  ({financialStatus === "financial" ? "Financial" : "Non-Financial"})
+              <span className={`co-avatar${complete ? " is-complete" : ""}`} aria-hidden="true">
+                {complete ? <CircleCheck size={18} /> : <Users size={18} />}
+              </span>
+              <span className="co-card__titles">
+                <span className="co-card__title">
+                  {coDisplayName || `Co-applicant ${i + 1}`}
+                  {coInfo.relation && <span className="co-card__rel"> · {coInfo.relation}</span>}
                 </span>
-                {coDisplayName && <span className="co-name">{coDisplayName}</span>}
-              </div>
-              <div className="co-header-right">
-                <span className="badge badge-info">{countUploadedFields(coUploads, fields)}/{fields.length} files</span>
-                {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-              </div>
+                <span className="co-card__meta">
+                  {coDisplayName ? `Co-applicant ${i + 1} · ` : ""}{typeLabel}
+                </span>
+              </span>
+              <span className={`co-card__count${complete ? " is-complete" : ""}`}>
+                {done}/{reqFields.length}<span className="co-card__count-word"> required</span>
+              </span>
+              <ChevronDown size={18} className="co-card__chev" aria-hidden="true" />
             </button>
 
-            {isOpen && (
-              <div className="co-body animate-fade-in">
-
-                {/* ── Step A: Applicant type ── */}
-                <div className="grid-2" style={{ marginBottom: 16 }}>
-                  <div className="input-group">
-                    <label>Applicant Responsibility</label>
-                    <select
-                      className="input-field"
-                      value={financialStatus}
-                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, financialStatus: e.target.value })}
-                    >
-                      <option value="financial">Financial Applicant</option>
-                      <option value="non-financial">Non-Financial Applicant</option>
-                    </select>
-                  </div>
-
-                  {financialStatus !== "non-financial" && (
-                    <div className="input-group">
-                      <label>Employment Type</label>
-                      <select
-                        className="input-field"
-                        value={empType}
-                        onChange={(e) => onInfoChange(infoKey, { ...coInfo, empType: e.target.value })}
-                      >
-                        <option value="salaried">Salaried</option>
-                        <option value="selfEmployed">Self-Employed / Business</option>
-                        <option value="other">Other / Retired</option>
-                      </select>
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Step B: Documents ── */}
-                <h4 className="sub-heading" style={{ marginBottom: 12 }}>
-                  Documents —{" "}
-                  {financialStatus === "non-financial"
-                    ? "Non-Financial (Aadhar, PAN, Photo)"
-                    : `${empType === "salaried" ? "Salaried" : empType === "selfEmployed" ? "Self-Employed" : "Basic"} Financial`}
-                </h4>
-                <div className="upload-grid" style={{ marginBottom: 20 }}>
-                  {fields.map((field) => {
-                    const statusSlug = financialStatus === "financial" ? "Financial" : "NonFinancial";
-                    return (
-                      <FileUploadBox
-                        key={field.id}
-                        field={{
-                          ...field,
-                          rename: `Co${i + 1}_${coDisplayName.replace(/\s+/g, "_") || `Applicant${i + 1}`}_${statusSlug}_${field.rename}`,
-                        }}
-                        studentName={studentName}
-                        studentIdentifier={studentIdentifier}
-                        subFolder={`Loan/Co_Applicant_${i + 1}`}
-                        uploadedFiles={coUploads}
-                        onUploaded={(fieldId, result) => onUploaded(key, fieldId, result)}
-                        extraction={extractions[`${key}.${field.id}`]}
-                        onExtracted={(fieldId, payload) => onExtracted?.(key, fieldId, payload)}
-                      />
-                    );
-                  })}
-                </div>
-
-                {/* ── Step C: Input fields ── */}
-                <h4 className="sub-heading" style={{ marginBottom: 12 }}>Co-Applicant Details</h4>
-                <div className="grid-2">
-                  <div className="input-group">
-                    <label>First Name</label>
-                    <input
-                      className="input-field"
-                      placeholder="Co-applicant first name"
-                      value={coInfo.firstName || ""}
-                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, firstName: e.target.value })}
-                    />
-                  </div>
-                  <div className="input-group">
-                    <label>Last Name</label>
-                    <input
-                      className="input-field"
-                      placeholder="Co-applicant last name"
-                      value={coInfo.lastName || ""}
-                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, lastName: e.target.value })}
-                    />
-                  </div>
-                  <div className="input-group">
-                    <label>Date of Birth</label>
-                    <input
-                      className="input-field"
-                      type="date"
-                      value={coInfo.dob || ""}
-                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, dob: e.target.value })}
-                    />
-                  </div>
-                  <div className="input-group">
-                    <label>PAN Number</label>
-                    <input
-                      className="input-field"
-                      placeholder="e.g. ABCPR1234K"
-                      value={coInfo.panNumber || ""}
-                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, panNumber: e.target.value.toUpperCase() })}
-                    />
-                  </div>
-                  <div className="input-group">
-                    <label>Aadhaar Number</label>
-                    <input
-                      className="input-field"
-                      placeholder="XXXX XXXX 1234"
-                      value={coInfo.aadhaarNumber || ""}
-                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, aadhaarNumber: e.target.value })}
-                    />
-                  </div>
-                  <div className="input-group">
-                    <label>Occupation</label>
-                    <input
-                      className="input-field"
-                      placeholder="e.g. Software Engineer"
-                      value={coInfo.occupation || ""}
-                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, occupation: e.target.value })}
-                    />
-                  </div>
-                  {financialStatus !== "non-financial" && (
-                    <div className="input-group">
-                      <label>Annual Income (₹)</label>
-                      <input
-                        className="input-field"
-                        inputMode="numeric"
-                        placeholder="e.g. 600000"
-                        value={coInfo.annualIncome || ""}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/[^0-9]/g, "");
-                          onInfoChange(infoKey, { ...coInfo, annualIncome: val });
-                        }}
-                      />
-                    </div>
-                  )}
-                  <div className="input-group">
-                    <label>Relation to Student</label>
-                    <select
-                      className="input-field"
-                      value={coInfo.relation || ""}
-                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, relation: e.target.value })}
-                    >
-                      <option value="">Select</option>
-                      {coRelations.map((r) => (
-                        <option key={r} value={r}>{r}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="input-group">
-                    <label>Mobile Number</label>
-                    <input
-                      className="input-field"
-                      inputMode="numeric"
-                      placeholder="10-digit mobile number"
-                      value={coInfo.mobile || ""}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/[^0-9]/g, "").slice(0, 10);
-                        onInfoChange(infoKey, { ...coInfo, mobile: val });
-                      }}
-                    />
-                  </div>
-                  <div className="input-group">
-                    <label>Email Address</label>
-                    <input
-                      className="input-field"
-                      type="email"
-                      placeholder="email@example.com"
-                      value={coInfo.email || ""}
-                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, email: e.target.value })}
-                    />
-                  </div>
-                  <div className="input-group">
-                    <label>Qualifications</label>
-                    <input
-                      className="input-field"
-                      placeholder="e.g. B.Com, MBA"
-                      value={coInfo.qualifications || ""}
-                      onChange={(e) => onInfoChange(infoKey, { ...coInfo, qualifications: e.target.value })}
-                    />
-                  </div>
-                  <div className="input-group">
-                    <label>Number of Dependants</label>
-                    <input
-                      className="input-field"
-                      inputMode="numeric"
-                      placeholder="e.g. 3"
-                      value={coInfo.dependants || ""}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/[^0-9]/g, "");
-                        onInfoChange(infoKey, { ...coInfo, dependants: val });
-                      }}
-                    />
-                  </div>
-                  <div className="input-group">
-                    <label>Years at Current Address</label>
-                    <input
-                      className="input-field"
-                      inputMode="numeric"
-                      placeholder="e.g. 10"
-                      value={coInfo.yearsAddress || ""}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/[^0-9]/g, "");
-                        onInfoChange(infoKey, { ...coInfo, yearsAddress: val });
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="input-group">
-                  <label>Current Address</label>
-                  <textarea className="input-field" rows={2} value={coInfo.currentAddress || ""} onChange={(e) => onInfoChange(infoKey, { ...coInfo, currentAddress: e.target.value })} />
-                </div>
-                <div className="input-group">
-                  <label>Permanent Address</label>
-                  <textarea className="input-field" rows={2} value={coInfo.permanentAddress || ""} onChange={(e) => onInfoChange(infoKey, { ...coInfo, permanentAddress: e.target.value })} />
-                </div>
+            <div className="co-card__body" id={bodyId} hidden={!isOpen}>
+              <div className="sp-form-grid co-type">
+                <PlainSelect
+                  label="Applicant responsibility"
+                  value={financialStatus}
+                  options={[{ value: "financial", label: "Financial applicant" }, { value: "non-financial", label: "Non-financial applicant" }]}
+                  onChange={set("financialStatus")}
+                />
                 {financialStatus !== "non-financial" && (
-                  <div className="input-group">
-                    <label>Business / Office Address</label>
-                    <textarea className="input-field" rows={2} value={coInfo.officeAddress || ""} onChange={(e) => onInfoChange(infoKey, { ...coInfo, officeAddress: e.target.value })} />
-                  </div>
+                  <PlainSelect
+                    label="Employment type"
+                    value={empType}
+                    options={[
+                      { value: "salaried", label: "Salaried" },
+                      { value: "selfEmployed", label: "Self-employed / business" },
+                      { value: "other", label: "Other / retired" },
+                    ]}
+                    onChange={set("empType")}
+                  />
                 )}
               </div>
-            )}
+
+              <h3 className="co-subhead">
+                {financialStatus === "non-financial"
+                  ? "Documents — non-financial co-applicant (Aadhaar, PAN, photo)"
+                  : `Documents — ${empType === "salaried" ? "salaried" : empType === "selfEmployed" ? "self-employed" : "basic"} financial co-applicant`}
+              </h3>
+              <div className="doc-grid">
+                {fields.map((field) => {
+                  const statusSlug = financialStatus === "financial" ? "Financial" : "NonFinancial";
+                  return (
+                    <FileUploadBox
+                      key={field.id}
+                      anchorId={docAnchorId(key, field.id)}
+                      field={{
+                        ...field,
+                        rename: `Co${i + 1}_${coDisplayName.replace(/\s+/g, "_") || `Applicant${i + 1}`}_${statusSlug}_${field.rename}`,
+                      }}
+                      studentName={studentName}
+                      studentIdentifier={studentIdentifier}
+                      subFolder={`Loan/Co_Applicant_${i + 1}`}
+                      uploadedFiles={coUploads}
+                      onUploaded={(fieldId, result) => onUploaded(key, fieldId, result)}
+                      extraction={extractions[`${key}.${field.id}`]}
+                      onExtracted={(fieldId, payload) => onExtracted?.(key, fieldId, payload)}
+                    />
+                  );
+                })}
+              </div>
+
+              <h3 className="co-subhead">Co-applicant details</h3>
+              <div className="sp-form-grid">
+                <TextInput label="First name" placeholder="Co-applicant first name" value={coInfo.firstName} onChange={set("firstName")} />
+                <TextInput label="Last name" placeholder="Co-applicant last name" value={coInfo.lastName} onChange={set("lastName")} />
+                <TextInput label="Date of birth" type="date" value={coInfo.dob} onChange={set("dob")} />
+                <TextInput label="PAN number" placeholder="e.g. ABCPR1234K" value={coInfo.panNumber} onChange={(v) => onInfoChange(infoKey, { ...coInfo, panNumber: v.toUpperCase() })} />
+                <TextInput label="Aadhaar number" placeholder="XXXX XXXX 1234" value={coInfo.aadhaarNumber} onChange={set("aadhaarNumber")} />
+                <TextInput label="Occupation" placeholder="e.g. Software Engineer" value={coInfo.occupation} onChange={set("occupation")} />
+                {financialStatus !== "non-financial" && (
+                  <TextInput
+                    label="Annual income (₹)"
+                    inputMode="numeric"
+                    placeholder="e.g. 600000"
+                    value={coInfo.annualIncome}
+                    onChange={(v) => onInfoChange(infoKey, { ...coInfo, annualIncome: v.replace(/[^0-9]/g, "") })}
+                  />
+                )}
+                <PlainSelect label="Relation to student" value={coInfo.relation || ""} placeholder="Select" options={coRelations} onChange={set("relation")} />
+                <TextInput
+                  label="Mobile number"
+                  inputMode="numeric"
+                  placeholder="10-digit mobile number"
+                  value={coInfo.mobile}
+                  onChange={(v) => onInfoChange(infoKey, { ...coInfo, mobile: v.replace(/[^0-9]/g, "").slice(0, 10) })}
+                />
+                <TextInput label="Email address" type="email" placeholder="email@example.com" value={coInfo.email} onChange={set("email")} />
+                <TextInput label="Qualifications" placeholder="e.g. B.Com, MBA" value={coInfo.qualifications} onChange={set("qualifications")} />
+                <TextInput
+                  label="Number of dependants"
+                  inputMode="numeric"
+                  placeholder="e.g. 3"
+                  value={coInfo.dependants}
+                  onChange={(v) => onInfoChange(infoKey, { ...coInfo, dependants: v.replace(/[^0-9]/g, "") })}
+                />
+                <TextInput
+                  label="Years at current address"
+                  inputMode="numeric"
+                  placeholder="e.g. 10"
+                  value={coInfo.yearsAddress}
+                  onChange={(v) => onInfoChange(infoKey, { ...coInfo, yearsAddress: v.replace(/[^0-9]/g, "") })}
+                />
+                <TextArea label="Current address" value={coInfo.currentAddress} onChange={set("currentAddress")} />
+                <TextArea label="Permanent address" value={coInfo.permanentAddress} onChange={set("permanentAddress")} />
+                {financialStatus !== "non-financial" && (
+                  <TextArea label="Business / office address" value={coInfo.officeAddress} onChange={set("officeAddress")} />
+                )}
+              </div>
+            </div>
           </div>
         );
       })}
@@ -1478,9 +1568,48 @@ function LoanSection({ studentName, studentIdentifier, coCount, setCoCount, uplo
   );
 }
 
+// ─── Review checklist ──────────────────────────────────────────────────────────
+
+function ReviewPanel({ missing, onJump, reviewCount, onOpenProfile }) {
+  return (
+    <div className="review">
+      {missing.length === 0 ? (
+        <p className="review__ok">
+          <CircleCheck size={18} aria-hidden="true" /> All required documents are uploaded.
+        </p>
+      ) : (
+        <div className="review__list-wrap">
+          <p className="review__title">
+            <TriangleAlert size={16} aria-hidden="true" /> Still needed ({missing.length})
+          </p>
+          <ul className="review__list">
+            {missing.map((m) => (
+              <li key={m.key}>
+                <button type="button" className="review__item" onClick={() => onJump(m.target)}>
+                  <span className="review__group">{m.group}</span>
+                  <span className="review__label">{m.label}</span>
+                  <ArrowRight size={14} aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <button type="button" className="review__profile" onClick={onOpenProfile}>
+        <UserRound size={18} aria-hidden="true" />
+        <span>
+          <strong>Check your profile</strong>
+          <span>{reviewCount > 0 ? `${plural(reviewCount, "detail")} read from your documents need a quick check.` : "Confirm the details we filled in and add the rest."}</span>
+        </span>
+        <ArrowRight size={16} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 // ─── Other Documents Section ───────────────────────────────────────────────────
 
-function OtherDocumentsSection({ studentName, studentIdentifier, uploads, onUploaded, onRemoved }) {
+function OtherDocumentsSection({ studentName, studentIdentifier, uploads, count, onUploaded, onRemoved }) {
   const [items, setItems] = useState(() => {
     const existingIds = Object.keys(uploads);
     if (existingIds.length === 0) return [];
@@ -1503,52 +1632,58 @@ function OtherDocumentsSection({ studentName, studentIdentifier, uploads, onUplo
 
   const getFieldForItem = (item) => ({
     id: item.id,
-    label: item.fileName ? `Document: ${item.fileName}` : "New Document (enter name above)",
+    label: item.fileName ? `Document: ${item.fileName}` : "New document (enter a name first)",
     rename: item.fileName ? item.fileName.replace(/\s+/g, "_") : "custom_document",
     accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
-    optional: false,
+    optional: true,
   });
 
   return (
-    <div className="section-panel">
-      <div className="section-intro">
-        <h2>Other Documents</h2>
-        <p>Add any extra documents — each with a custom name.</p>
+    <div className="other-docs">
+      <div className="other-docs__head">
+        <span className="other-docs__icon" aria-hidden="true"><FolderOpen size={18} /></span>
+        <div>
+          <h3 className="other-docs__title">Other documents</h3>
+          <p className="other-docs__desc">
+            Anything else your advisor asked for — scholarship letters, affidavits, and so on. Each one gets its own name.
+            {count > 0 ? ` ${plural(count, "document")} added.` : ""}
+          </p>
+        </div>
       </div>
-      <div className="other-docs-list">
-        {items.map((item) => (
-          <div key={item.id} className="custom-doc-card" style={{ marginBottom: 24, padding: 16, border: "1px solid #e2e8f0", borderRadius: 12 }}>
-            <div className="custom-doc-header" style={{ display: "flex", gap: 12, alignItems: "flex-end", marginBottom: 12 }}>
-              <div className="input-group" style={{ flex: 1 }}>
-                <label>Document name (without extension)</label>
-                <input
-                  className="input-field"
+      {items.length > 0 && (
+        <div className="doc-grid">
+          {items.map((item) => (
+            <div key={item.id} className="custom-doc">
+              <div className="custom-doc__head">
+                <TextInput
+                  label="Document name"
                   placeholder="e.g. Scholarship_Letter"
                   value={item.fileName}
-                  onChange={(e) => updateFileName(item.id, e.target.value)}
+                  onChange={(v) => updateFileName(item.id, v)}
                 />
+                <button className="doc-icon-btn doc-icon-btn--danger" type="button" onClick={() => removeItem(item.id)} aria-label="Remove this document slot" title="Remove">
+                  <Trash2 size={16} aria-hidden="true" />
+                </button>
               </div>
-              <button className="icon-btn del-btn" type="button" onClick={() => removeItem(item.id)} title="Remove this document">
-                <Trash2 size={16} />
-              </button>
+              <FileUploadBox
+                anchorId={docAnchorId("otherDocs", item.id)}
+                field={getFieldForItem(item)}
+                studentName={studentName}
+                studentIdentifier={studentIdentifier}
+                subFolder="Other_Documents"
+                uploadedFiles={uploads}
+                onUploaded={(fieldId, result) => {
+                  if (result) result.customName = item.fileName;
+                  onUploaded(fieldId, result);
+                }}
+              />
             </div>
-            <FileUploadBox
-              field={getFieldForItem(item)}
-              studentName={studentName}
-              studentIdentifier={studentIdentifier}
-              subFolder="Other_Documents"
-              uploadedFiles={uploads}
-              onUploaded={(fieldId, result) => {
-                if (result) result.customName = item.fileName;
-                onUploaded(fieldId, result);
-              }}
-            />
-          </div>
-        ))}
-        <button className="btn btn-secondary btn-sm" type="button" onClick={addNewItem} style={{ marginTop: 8 }}>
-          <Plus size={14} /> Add another document
-        </button>
-      </div>
+          ))}
+        </div>
+      )}
+      <button className="rail-btn rail-btn--secondary other-docs__add" type="button" onClick={addNewItem}>
+        <Plus size={16} aria-hidden="true" /> Add a document
+      </button>
     </div>
   );
 }

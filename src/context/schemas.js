@@ -12,12 +12,23 @@ const PASSPORT_READER = {
   multiple: true,
   maxFiles: 2,
   pageHint: "Photo page + last page (the last page has your parents' names and address)",
+  // Display-only: which page carries what, so the card can say exactly
+  // which page is still needed. `readKeys` are the reader fields printed
+  // only on that page.
+  pages: [
+    { label: "Photo page", readKeys: ["passport_number", "surname", "given_names", "date_of_birth"] },
+    { label: "Last page", detail: "parents' names and address", readKeys: ["father_name", "mother_name", "address"] },
+  ],
 };
 const AADHAAR_READER = {
   reader: "aadhaar",
   multiple: true,
   maxFiles: 2,
   pageHint: "Front + back (the back has the address)",
+  pages: [
+    { label: "Front side", readKeys: ["aadhaar_number", "name", "date_of_birth"] },
+    { label: "Back side", detail: "address", readKeys: ["address"] },
+  ],
 };
 const PAN_READER = { reader: "pan" };
 
@@ -389,6 +400,16 @@ export function getTotalRequiredFields(coCount = 1, coApplicantsInfo = {}) {
   }
 
   return applicantRequired + academicsRequired + coRequired;
+}
+
+// The document checklist for one co-applicant, from their saved details
+// (personalInfo[`co_info_<i>`]). Shared by the portal and the Application
+// Form PDF so the two can never disagree about what a co-applicant needs.
+export function coApplicantFields(coInfo = {}) {
+  if (coInfo.financialStatus === "non-financial") {
+    return CO_APPLICANT_SCHEMA.other.filter((f) => ["aadhar", "pan", "photo"].includes(f.id));
+  }
+  return CO_APPLICANT_SCHEMA[coInfo.empType || "salaried"] || CO_APPLICANT_SCHEMA.other;
 }
 
 // Counts how many of `fields` have at least one file uploaded. Multi-file

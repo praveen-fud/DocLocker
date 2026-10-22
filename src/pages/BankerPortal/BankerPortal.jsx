@@ -1,22 +1,25 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react";
 import {
-  Search, RefreshCw, AlertCircle, FileText, Eye, Download, ChevronDown,
-  Building2, FolderOpen, X, GraduationCap, Banknote, FolderInput, KeyRound, EyeOff,
-  CheckCircle, Upload, Archive,
+  Search, RefreshCw, AlertCircle, FileText, Eye, Download, Building2, FolderOpen, X,
+  GraduationCap, Banknote, FolderInput, KeyRound, EyeOff, CheckCircle, Upload, Archive,
+  UsersRound, LogOut, Menu, Hourglass, ShieldCheck, TriangleAlert, Info, Mail, Phone,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import { getAllStudentsFromDrive, getStudentFiles, changeOwnPassword, updateLoanStatus, uploadSanctionLetter, downloadFile, downloadAllFiles } from "../../utils/driveApi";
+import { DOCUMENT_SCHEMA, getTotalRequiredFields, coApplicantFields, countUploadedFields } from "../../context/schemas";
 import DocumentViewer from "../../components/DocumentViewer/DocumentViewer";
+import BrandLogo from "../../components/BrandLogo/BrandLogo";
 import { getBankLogo } from "../../utils/bankOptions";
+import { getApplicationId } from "../../utils/applicationId";
 import "./BankerPortal.css";
 
 const LOAN_STATUS_CONFIG = {
-  pending:    { label: "Pending",    cls: "loan-pending" },
-  inprocess:  { label: "In Process", cls: "loan-inprocess" },
-  sanctioned: { label: "Sanctioned", cls: "loan-sanctioned" },
-  disbursed:  { label: "Disbursed",  cls: "loan-disbursed" },
-  rejected:   { label: "Rejected",   cls: "loan-rejected" },
-  dropped:    { label: "Dropped",    cls: "loan-dropped" },
+  pending:    { label: "Pending" },
+  inprocess:  { label: "In Process" },
+  sanctioned: { label: "Sanctioned" },
+  disbursed:  { label: "Disbursed" },
+  rejected:   { label: "Rejected" },
+  dropped:    { label: "Dropped" },
 };
 
 // Statuses that must carry an explanatory remark (mirrors backend validation)
@@ -37,9 +40,21 @@ const DISBURSEMENT_FIELDS = [
 ];
 const EMPTY_DISBURSEMENT = { loanAmount: "", tenureMonths: "", interestRate: "", processingFee: "", insuranceAmount: "" };
 
-function BpLoanBadge({ status }) {
-  const cfg = LOAN_STATUS_CONFIG[status || "pending"] || LOAN_STATUS_CONFIG.pending;
-  return <span className={`loan-badge ${cfg.cls}`}>{cfg.label}</span>;
+const loanKey = (status) => (LOAN_STATUS_CONFIG[status] ? status : "pending");
+
+function LoanChip({ status }) {
+  const key = loanKey(status);
+  return <span className={`bk-chip bk-chip--${key}`}>{LOAN_STATUS_CONFIG[key].label}</span>;
+}
+
+function DocChip({ docs }) {
+  return docs.complete ? (
+    <span className="bk-chip bk-chip--complete" title={`All ${docs.total} required documents uploaded`}>Complete</span>
+  ) : (
+    <span className="bk-chip bk-chip--missing" title={`${docs.total - docs.done} of ${docs.total} required documents missing`}>
+      Missing Docs
+    </span>
+  );
 }
 
 const GROUP_ICONS = {
@@ -64,15 +79,202 @@ function formatBytes(size) {
 
 const PREVIEWABLE = new Set(["application/pdf", "image/jpeg", "image/jpg", "image/png"]);
 
-function getTimeGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 17) return "Good afternoon";
-  return "Good evening";
+// Folder names carry a "__<email/phone>" suffix; show only the person.
+function displayName(s) {
+  const p = s.personalInfo || {};
+  return [p.firstName, p.lastName].filter(Boolean).join(" ") || p.fullName || (s.name || "").split("__")[0] || "Unnamed student";
+}
+
+function initials(name) {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] || "?") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+}
+
+const AVATAR_TONES = ["blue", "teal", "amber", "violet", "rose"];
+const avatarTone = (name) => AVATAR_TONES[(name || "?").charCodeAt(0) % AVATAR_TONES.length];
+
+// Required documents uploaded vs required — counted per document (a
+// two-page Aadhaar is one), using the same checklist as the student portal.
+function getDocStatus(s) {
+  const uploads = s.uploads || {};
+  const p = s.personalInfo || {};
+  const coCount = s.coApplicants || 1;
+  const required = (fields) => fields.filter((f) => !f.optional);
+  let done =
+    countUploadedFields(uploads.applicant, required(DOCUMENT_SCHEMA.applicant.fields)) +
+    countUploadedFields(uploads.academics, required(DOCUMENT_SCHEMA.academics.fields));
+  for (let i = 0; i < coCount; i++) {
+    done += countUploadedFields(uploads[`co_${i}`], required(coApplicantFields(p[`co_info_${i}`])));
+  }
+  const total = getTotalRequiredFields(coCount, p);
+  return { done: Math.min(done, total), total, complete: done >= total };
+}
+
+const studentIdentifier = (s) => s.email || s.phone || "";
+
+const MOBILE_QUERY = "(max-width: 1023px)";
+const subscribeMobile = (cb) => {
+  const mq = window.matchMedia(MOBILE_QUERY);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+};
+const useIsMobile = () => useSyncExternalStore(subscribeMobile, () => window.matchMedia(MOBILE_QUERY).matches);
+
+// Moves focus into a panel when it opens and back to whatever opened it
+// when it closes.
+function useFocusOnOpen(ref) {
+  useEffect(() => {
+    const opener = document.activeElement;
+    ref.current?.focus();
+    return () => { if (opener instanceof HTMLElement && opener.isConnected) opener.focus(); };
+  }, [ref]);
+}
+
+function StudentDrawer({
+  student, groups, groupsLoading, groupsError, downloadingAll,
+  onClose, onUpdateLoan, onView, onDownloadFile, onDownloadAll,
+}) {
+  const closeRef = useRef(null);
+  useFocusOnOpen(closeRef);
+
+  const p = student.personalInfo || {};
+  const name = displayName(student);
+  const appId = getApplicationId(student);
+  const docs = getDocStatus(student);
+  const fileCount = Object.values(groups).flat().length;
+  const folderCount = Object.keys(groups).length;
+  const details = [
+    ["Application ID", appId || "—"],
+    ["Course", p.courseNameUniversity || "—"],
+    ["Destination", p.destinationCountry || "—"],
+    ["Loan Amount", p.loanAmount ? `₹${Number(p.loanAmount).toLocaleString("en-IN")}` : "—"],
+  ];
+
+  return (
+    <div className="bk-drawer-backdrop" onClick={onClose}>
+      <aside
+        className="bk-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bk-drawer-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="bk-drawer-head">
+          <span className={`bk-avatar bk-avatar--lg bk-avatar--${avatarTone(name)}`} aria-hidden="true">{initials(name)}</span>
+          <div className="bk-drawer-heading">
+            <h2 id="bk-drawer-title" className="bk-drawer-title">{name}</h2>
+            <p className="bk-drawer-contact">
+              {student.email && <span><Mail size={13} aria-hidden="true" /> {student.email}</span>}
+              {student.phone && <span><Phone size={13} aria-hidden="true" /> {student.phone}</span>}
+              {!student.email && !student.phone && <span>No contact info</span>}
+            </p>
+          </div>
+          <button type="button" ref={closeRef} className="bk-icon-btn" onClick={onClose} aria-label="Close student details">
+            <X size={20} />
+          </button>
+        </header>
+
+        <div className="bk-drawer-body">
+          <dl className="bk-facts">
+            {details.map(([label, value]) => (
+              <div key={label} className="bk-fact">
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+
+          <section className="bk-loan-card" aria-labelledby="bk-loan-title">
+            <div className="bk-loan-main">
+              <span className="bk-loan-icon" aria-hidden="true"><Banknote size={18} /></span>
+              <div className="bk-loan-text">
+                <h3 id="bk-loan-title" className="bk-loan-title">Loan Status</h3>
+                <LoanChip status={student.loanStatus} />
+              </div>
+              <button type="button" className="btn btn-primary btn-sm bk-loan-update" onClick={() => onUpdateLoan(student)}>
+                Update
+              </button>
+            </div>
+            {REMARK_STATUSES.includes(student.loanStatus) && student.loanRemark && (
+              <p className="bk-loan-remark">“{student.loanRemark}”</p>
+            )}
+          </section>
+
+          <section className="bk-docs" aria-labelledby="bk-docs-title">
+            <div className="bk-docs-head">
+              <h3 id="bk-docs-title" className="bk-section-title">Documents</h3>
+              <span className="bk-docs-progress">
+                <DocChip docs={docs} />
+                <span>{docs.done} of {docs.total} required</span>
+              </span>
+            </div>
+
+            {groupsLoading ? (
+              <div className="bk-state" role="status">
+                <RefreshCw size={20} className="bk-spin" /> Loading documents…
+              </div>
+            ) : groupsError ? (
+              <div className="bk-alert" role="alert"><AlertCircle size={16} /> {groupsError}</div>
+            ) : folderCount === 0 ? (
+              <p className="bk-state">No documents found for this student.</p>
+            ) : (
+              Object.entries(groups).map(([group, files]) => {
+                const GroupIcon = groupIconFor(group);
+                const label = group.replace(/_/g, " ");
+                return (
+                  <div key={group} className="bk-group">
+                    <h4 className="bk-group-title">
+                      <GroupIcon size={15} aria-hidden="true" /> {label}
+                      <span className="bk-group-count">{files.length}</span>
+                    </h4>
+                    <ul className="bk-files">
+                      {files.map((f) => (
+                        <li key={f.id} className="bk-file">
+                          <span className="bk-file-icon" aria-hidden="true"><FileText size={16} /></span>
+                          <span className="bk-file-meta">
+                            <span className="bk-file-name" title={f.name}>{f.name}</span>
+                            {formatBytes(f.size) && <span className="bk-file-size">{formatBytes(f.size)}</span>}
+                          </span>
+                          <span className="bk-file-actions">
+                            {PREVIEWABLE.has(f.mimeType) && (
+                              <button type="button" className="bk-file-btn" onClick={() => onView(f, files)} aria-label={`View ${f.name}`}>
+                                <Eye size={15} /> <span className="bk-file-btn-label">View</span>
+                              </button>
+                            )}
+                            <button type="button" className="bk-file-btn bk-file-btn--icon" onClick={() => onDownloadFile(f)} aria-label={`Download ${f.name}`} title="Download (one-time link)">
+                              <Download size={15} />
+                            </button>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })
+            )}
+          </section>
+        </div>
+
+        {!groupsLoading && !groupsError && folderCount > 0 && (
+          <footer className="bk-drawer-foot">
+            <span className="bk-drawer-foot-info">
+              {fileCount} document{fileCount !== 1 ? "s" : ""} across {folderCount} folder{folderCount !== 1 ? "s" : ""}
+            </span>
+            <button type="button" className="btn btn-primary bk-download-all" disabled={downloadingAll} onClick={() => onDownloadAll(student)}>
+              {downloadingAll
+                ? <><RefreshCw size={15} className="bk-spin" /> Preparing…</>
+                : <><Archive size={15} /> Download All</>}
+            </button>
+          </footer>
+        )}
+      </aside>
+    </div>
+  );
 }
 
 export default function BankerPortal() {
-  const { isAdmin, adminName, adminBank } = useStudent();
+  const { isAdmin, adminName, adminBank, clearStudent, logoutAdmin } = useStudent();
+  const isMobile = useIsMobile();
 
   const [students, setStudents] = useState([]);
   const [search, setSearch] = useState("");
@@ -83,6 +285,9 @@ export default function BankerPortal() {
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [groupsError, setGroupsError] = useState("");
   const [previewFile, setPreviewFile] = useState(null);
+  const [navOpen, setNavOpen] = useState(false);
+  const [bankLogoFailed, setBankLogoFailed] = useState(false);
+  const filesRequest = useRef(0);
 
   const [showPwModal, setShowPwModal] = useState(false);
   const [curPass, setCurPass] = useState("");
@@ -137,7 +342,7 @@ export default function BankerPortal() {
       setLoanLoadingMsg("Updating status…");
       await updateLoanStatus(
         loanModalStudent.name,
-        loanModalStudent.email || loanModalStudent.phone || "",
+        studentIdentifier(loanModalStudent),
         loanStatus,
         loanRemark,
         disbursementPayload
@@ -146,7 +351,7 @@ export default function BankerPortal() {
         setLoanLoadingMsg("Uploading sanction letter…");
         await uploadSanctionLetter(
           loanModalStudent.name,
-          loanModalStudent.email || loanModalStudent.phone || "",
+          studentIdentifier(loanModalStudent),
           loanSanctionFile
         );
       }
@@ -171,7 +376,7 @@ export default function BankerPortal() {
   const handleDownloadAll = async (student) => {
     setDownloadingAll(true);
     try {
-      await downloadAllFiles(student.name, student.email || student.phone || "");
+      await downloadAllFiles(student.name, studentIdentifier(student));
     } catch (e) {
       setGroupsError(e.message || "Could not start the download.");
     } finally {
@@ -203,6 +408,21 @@ export default function BankerPortal() {
     }
   };
 
+  const openPasswordModal = () => {
+    setNavOpen(false);
+    setShowPwModal(true);
+    setPwMsg(null);
+  };
+
+  // A full page load to the home page: it gets past this route's guard
+  // (which would otherwise bounce to the sign-in page) and drops every
+  // piece of student data still held in memory.
+  const handleSignOut = () => {
+    clearStudent();
+    logoutAdmin();
+    window.location.replace("/");
+  };
+
   const loadStudents = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -218,6 +438,8 @@ export default function BankerPortal() {
 
   useEffect(() => {
     if (!isAdmin) return;
+    // Load on open — loadStudents sets state as part of an async fetch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadStudents();
   }, [isAdmin, loadStudents]);
 
@@ -226,241 +448,326 @@ export default function BankerPortal() {
       setOpenStudent(null);
       return;
     }
+    // Ignore a slower response for a student opened earlier
+    const request = ++filesRequest.current;
     setOpenStudent(student);
     setGroups({});
     setGroupsError("");
     setGroupsLoading(true);
     try {
-      const g = await getStudentFiles(student.name, student.email || student.phone || "");
-      setGroups(g);
+      const g = await getStudentFiles(student.name, studentIdentifier(student));
+      if (request === filesRequest.current) setGroups(g);
     } catch (e) {
-      setGroupsError(e.message || "Could not load documents.");
+      if (request === filesRequest.current) setGroupsError(e.message || "Could not load documents.");
     } finally {
-      setGroupsLoading(false);
+      if (request === filesRequest.current) setGroupsLoading(false);
     }
   };
 
+  // Escape closes the top-most layer. The document viewer handles its own.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "Escape" || previewFile) return;
+      if (loanModalStudent) { if (!loanLoading) setLoanModalStudent(null); }
+      else if (showPwModal) { if (!pwLoading) setShowPwModal(false); }
+      else if (openStudent) setOpenStudent(null);
+      else if (navOpen) setNavOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [previewFile, loanModalStudent, loanLoading, showPwModal, pwLoading, openStudent, navOpen]);
+
+  // No page scroll behind the student drawer or the mobile menu
+  const lockScroll = Boolean(openStudent) || (isMobile && navOpen);
+  useEffect(() => {
+    if (!lockScroll) return undefined;
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = overflow; };
+  }, [lockScroll]);
+
+  const q = search.trim().toLowerCase();
   const filtered = students.filter((s) => {
-    const q = search.toLowerCase();
     if (!q) return true;
-    return (s.name || "").toLowerCase().includes(q) ||
+    return displayName(s).toLowerCase().includes(q) ||
+      (s.name || "").toLowerCase().includes(q) ||
       (s.email || "").toLowerCase().includes(q) ||
-      (s.phone || "").includes(q);
+      (s.phone || "").includes(q) ||
+      getApplicationId(s).toLowerCase().includes(q);
   });
+
+  // The drawer shows the live record so a loan update is reflected at once
+  const openRecord = openStudent && (students.find((s) => s.name === openStudent.name) || openStudent);
 
   if (!isAdmin) return null;
 
+  const countBy = (pred) => students.filter(pred).length;
+  const kpis = [
+    { key: "total", label: "Total Assigned", Icon: UsersRound, value: students.length,
+      hint: "Students whose applications have been shared with you" },
+    { key: "inprocess", label: "In Process", Icon: Hourglass, value: countBy((s) => s.loanStatus === "inprocess"),
+      hint: "Loan status is In Process" },
+    { key: "sanctioned", label: "Sanctioned", Icon: ShieldCheck, value: countBy((s) => ["sanctioned", "disbursed"].includes(s.loanStatus)),
+      hint: "Loan status is Sanctioned or Disbursed" },
+    { key: "attention", label: "Needs Attention", Icon: TriangleAlert, value: countBy((s) => loanKey(s.loanStatus) === "pending"),
+      hint: "Loan status is still Pending — not yet picked up by your bank" },
+  ];
+
+  const roleName = adminName || "Banker";
+  const sidebarHidden = isMobile && !navOpen;
+
   return (
-    <div className="banker-page">
-      <div className="banker-container">
+    <div className="bk-page">
+      {/* ── Mobile top bar ── */}
+      <header className="bk-topbar">
+        <button
+          type="button"
+          className="bk-icon-btn"
+          onClick={() => setNavOpen(true)}
+          aria-label="Open menu"
+          aria-expanded={navOpen}
+          aria-controls="bk-sidebar"
+        >
+          <Menu size={22} />
+        </button>
+        <BrandLogo size="sm" />
+        <span className={`bk-avatar bk-avatar--${avatarTone(roleName)}`} title={`${roleName} · Banker`} aria-hidden="true">{initials(roleName)}</span>
+      </header>
 
-        {/* ── Welcome Hero ─────────────────────────────────────── */}
-        <div className="bp-hero animate-fade-in">
-          <div className="bp-hero-glow" />
-          <div className="bp-hero-content">
-            <div className="bp-hero-logo-wrap">
-              <img
-                src={getBankLogo(adminBank)}
-                alt={adminBank || "Bank"}
-                className="bp-hero-logo"
-                onError={(e) => { e.target.style.display = "none"; }}
-              />
-            </div>
-            <div className="bp-hero-text">
-              <p className="bp-hero-greeting">{getTimeGreeting()}, {adminName}! 👋</p>
-              <h1 className="bp-hero-bank">{adminBank || "Banker Portal"}</h1>
-              <p className="bp-hero-tagline">Your loan application workspace — students shared with you appear below.</p>
-            </div>
-          </div>
-          <div className="bp-hero-actions">
-            <button className="btn btn-secondary btn-sm" onClick={loadStudents} disabled={loading}>
-              <RefreshCw size={13} className={loading ? "spin" : ""} />
-              <span>Refresh</span>
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => { setShowPwModal(true); setPwMsg(null); }}>
-              <KeyRound size={13} />
-              <span>Change Password</span>
-            </button>
-          </div>
+      {isMobile && navOpen && <div className="bk-nav-backdrop" onClick={() => setNavOpen(false)} />}
+
+      {/* ── Sidebar (drawer on mobile) ── */}
+      <aside
+        id="bk-sidebar"
+        className={`bk-sidebar${navOpen ? " is-open" : ""}`}
+        aria-label="Banker portal"
+        inert={sidebarHidden || undefined}
+      >
+        <div className="bk-sidebar-top">
+          <BrandLogo size="sm" />
+          <button type="button" className="bk-icon-btn bk-sidebar-close" onClick={() => setNavOpen(false)} aria-label="Close menu">
+            <X size={20} />
+          </button>
         </div>
 
-        <div className="banker-search">
-          <Search size={15} />
-          <input
-            className="banker-search-input"
-            placeholder="Search by name, email, or phone…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          {search && (
-            <button className="banker-search-clear" onClick={() => setSearch("")}><X size={14} /></button>
-          )}
+        <div className="bk-role">
+          <span className={`bk-avatar bk-avatar--${avatarTone(roleName)}`} aria-hidden="true">{initials(roleName)}</span>
+          <span className="bk-role-text">
+            <span className="bk-role-label">Banker</span>
+            {adminName && <span className="bk-role-name">{adminName}</span>}
+          </span>
         </div>
+
+        <nav className="bk-nav" aria-label="Main">
+          <ul>
+            <li>
+              <button type="button" className="bk-nav-item is-active" aria-current="page" onClick={() => setNavOpen(false)}>
+                <UsersRound size={19} aria-hidden="true" /> Assigned Students
+              </button>
+            </li>
+            <li>
+              <button type="button" className="bk-nav-item" onClick={openPasswordModal}>
+                <KeyRound size={19} aria-hidden="true" /> Change Password
+              </button>
+            </li>
+          </ul>
+        </nav>
+
+        <div className="bk-sidebar-foot">
+          <button type="button" className="bk-nav-item bk-nav-item--signout" onClick={handleSignOut}>
+            <LogOut size={19} aria-hidden="true" /> Sign out
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Main ── */}
+      <main className="bk-main" id="bk-main">
+        <header className="bk-head">
+          <div className="bk-head-text">
+            <h1 className="bk-title">Assigned Students</h1>
+            <p className="bk-subtitle">Students shared with your bank for loan processing.</p>
+          </div>
+          <div className="bk-head-side">
+            <div className="bk-bank">
+              <span className="bk-bank-label">Allotted Bank</span>
+              <span className="bk-bank-value">
+                {!bankLogoFailed && (
+                  <img src={getBankLogo(adminBank)} alt="" className="bk-bank-logo" onError={() => setBankLogoFailed(true)} />
+                )}
+                <span className="bk-bank-name">{adminBank || "Not set"}</span>
+              </span>
+            </div>
+            <button type="button" className="btn btn-secondary bk-refresh" onClick={loadStudents} disabled={loading} aria-label="Refresh students">
+              <RefreshCw size={16} className={loading ? "bk-spin" : ""} aria-hidden="true" />
+              <span className="bk-refresh-label">Refresh</span>
+            </button>
+          </div>
+        </header>
+
+        <div className="bk-search-row">
+          <label className="bk-search">
+            <span className="sr-only">Search students</span>
+            <Search size={17} aria-hidden="true" />
+            <input
+              type="search"
+              className="bk-search-input"
+              placeholder="Search by name, email, phone or application ID"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <button type="button" className="bk-search-clear" onClick={() => setSearch("")} aria-label="Clear search">
+                <X size={15} />
+              </button>
+            )}
+          </label>
+        </div>
+
+        <ul className="bk-kpis" aria-label="Application counts">
+          {kpis.map(({ key, label, Icon, value, hint }) => (
+            <li key={key} className={`bk-kpi bk-kpi--${key}`} title={hint}>
+              <span className="bk-kpi-icon" aria-hidden="true"><Icon size={21} /></span>
+              <span className="bk-kpi-text">
+                <span className="bk-kpi-value">{loading ? "–" : value}</span>
+                <span className="bk-kpi-label">
+                  {label}
+                  {key === "attention" && <Info size={13} className="bk-kpi-info" aria-hidden="true" />}
+                </span>
+                <span className="sr-only">{hint}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
 
         {error && (
-          <div className="banker-error animate-fade-in">
-            <AlertCircle size={15} />
-            {error}
+          <div className="bk-alert" role="alert">
+            <AlertCircle size={16} /> {error}
           </div>
         )}
 
-        {loading ? (
-          <div className="banker-loading">
-            <div className="loading-dots"><span /><span /><span /></div>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="banker-empty">
-            <div className="banker-empty-icon"><FolderOpen size={28} /></div>
-            <h3>No students shared with you yet</h3>
-            <p>When an advisor grants you access to a student's application, it will appear here.</p>
-          </div>
-        ) : (
-          <div className="banker-student-list">
-            {filtered.map((s) => {
-              const isOpen = openStudent?.name === s.name;
-              const p = s.personalInfo || {};
-              const fullName = [p.firstName, p.lastName].filter(Boolean).join(" ") || p.fullName || s.name;
-              return (
-                <div key={s.name} className={`banker-card${isOpen ? " open" : ""}`}>
-                  <button className="banker-card-header" onClick={() => handleOpenStudent(s)}>
-                    <div className="banker-card-avatar">{(fullName || "?")[0].toUpperCase()}</div>
-                    <div className="banker-card-info">
-                      <span className="banker-card-name">{fullName}</span>
-                      <span className="banker-card-contact">{s.email || s.phone || "No contact info"}</span>
-                    </div>
-                    <BpLoanBadge status={s.loanStatus} />
-                    {p.loanAmount && (
-                      <span className="meta-pill">₹{Number(p.loanAmount).toLocaleString("en-IN")}</span>
-                    )}
-                    <ChevronDown size={18} className={`banker-chevron${isOpen ? " open" : ""}`} />
-                  </button>
-
-                  {isOpen && (
-                    <div className="banker-card-body animate-fade-in">
-                      {/* Loan Status Row */}
-                      <div className="bp-loan-status-row">
-                        <Banknote size={14} className="bp-loan-icon" />
-                        <span className="bp-loan-label">Loan Status</span>
-                        <BpLoanBadge status={s.loanStatus} />
-                        {REMARK_STATUSES.includes(s.loanStatus) && s.loanRemark && (
-                          <span className="bp-loan-remark">"{s.loanRemark}"</span>
-                        )}
+        <section className="bk-table-card" aria-label="Assigned students">
+          {loading ? (
+            <div className="bk-state bk-state--lg" role="status">
+              <RefreshCw size={22} className="bk-spin" /> Loading students…
+            </div>
+          ) : students.length === 0 ? (
+            <div className="bk-empty">
+              <span className="bk-empty-icon" aria-hidden="true"><FolderOpen size={26} /></span>
+              <h2>No students shared with you yet</h2>
+              <p>When an advisor grants you access to a student's application, it will appear here.</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="bk-empty">
+              <span className="bk-empty-icon" aria-hidden="true"><Search size={24} /></span>
+              <h2>No matching students</h2>
+              <p>Nothing matches “{search.trim()}”. Try a name, email, phone number or application ID.</p>
+            </div>
+          ) : (
+            <table className="bk-table">
+              <thead>
+                <tr>
+                  <th scope="col">Student Name</th>
+                  <th scope="col">Application ID</th>
+                  <th scope="col">Course</th>
+                  <th scope="col">Document Status</th>
+                  <th scope="col">Loan Status</th>
+                  <th scope="col"><span className="bk-th-actions">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((s) => {
+                  const name = displayName(s);
+                  const course = s.personalInfo?.courseNameUniversity;
+                  const appId = getApplicationId(s);
+                  return (
+                    <tr key={s.name} className={openStudent?.name === s.name ? "is-open" : undefined}>
+                      <td className="bk-td-name">
+                        <span className="bk-person">
+                          <span className={`bk-avatar bk-avatar--${avatarTone(name)}`} aria-hidden="true">{initials(name)}</span>
+                          <span className="bk-person-text">
+                            <span className="bk-person-name">{name}</span>
+                            <span className="bk-person-contact">{s.email || s.phone || "No contact info"}</span>
+                          </span>
+                        </span>
+                      </td>
+                      <td className="bk-td-id" data-label="Application ID">{appId || "—"}</td>
+                      <td className="bk-td-course" data-label="Course">{course || "—"}</td>
+                      <td className="bk-td-docs"><DocChip docs={getDocStatus(s)} /></td>
+                      <td className="bk-td-loan"><LoanChip status={s.loanStatus} /></td>
+                      <td className="bk-td-action">
                         <button
-                          className="bp-loan-update-btn"
-                          onClick={(e) => { e.stopPropagation(); openLoanModal(s); }}
+                          type="button"
+                          className="bk-view-btn"
+                          onClick={() => handleOpenStudent(s)}
+                          aria-label={`View ${name}`}
                         >
-                          Update
+                          View
                         </button>
-                      </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </section>
+      </main>
 
-                      {groupsLoading ? (
-                        <div className="banker-loading" style={{ padding: "24px 0" }}>
-                          <div className="loading-dots"><span /><span /><span /></div>
-                        </div>
-                      ) : groupsError ? (
-                        <div className="banker-error"><AlertCircle size={15} /> {groupsError}</div>
-                      ) : Object.keys(groups).length === 0 ? (
-                        <p className="banker-no-docs">No documents found for this student.</p>
-                      ) : (
-                        <>
-                          {Object.entries(groups).map(([group, files]) => {
-                            const GroupIcon = groupIconFor(group);
-                            return (
-                              <div key={group} className="banker-doc-group">
-                                <div className="banker-doc-group-title">
-                                  <GroupIcon size={14} /> {group.replace(/_/g, " ")}
-                                  <span className="banker-doc-count">{files.length}</span>
-                                </div>
-                                <div className="banker-doc-list">
-                                  {files.map((f) => (
-                                    <div key={f.id} className="banker-doc-row">
-                                      <FileText size={15} className="banker-doc-file-icon" />
-                                      <div className="banker-doc-meta">
-                                        <span className="banker-doc-name">{f.name}</span>
-                                        <span className="banker-doc-size">{formatBytes(f.size)}</span>
-                                      </div>
-                                      <div className="banker-doc-actions">
-                                        {PREVIEWABLE.has(f.mimeType) && (
-                                          <button
-                                            className="icon-btn"
-                                            title="View"
-                                            onClick={() => setPreviewFile({ ...f, group })}
-                                          >
-                                            <Eye size={14} />
-                                          </button>
-                                        )}
-                                        <button
-                                          type="button"
-                                          className="icon-btn"
-                                          title="Download"
-                                          aria-label={`Download ${f.name}`}
-                                          onClick={() => handleDownloadFile(f)}
-                                        >
-                                          <Download size={14} />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })}
-                          <div className="bp-download-all-bar">
-                            <span className="bp-download-all-info">
-                              {Object.values(groups).flat().length} document{Object.values(groups).flat().length !== 1 ? "s" : ""} across {Object.keys(groups).length} folder{Object.keys(groups).length !== 1 ? "s" : ""}
-                            </span>
-                            <button
-                              className="btn bp-download-all-btn"
-                              disabled={downloadingAll}
-                              onClick={() => handleDownloadAll(s)}
-                            >
-                              {downloadingAll
-                                ? <><RefreshCw size={13} className="spin" /> Preparing…</>
-                                : <><Archive size={13} /> Download All</>
-
-                              }
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      {openRecord && (
+        <StudentDrawer
+          student={openRecord}
+          groups={groups}
+          groupsLoading={groupsLoading}
+          groupsError={groupsError}
+          downloadingAll={downloadingAll}
+          onClose={() => setOpenStudent(null)}
+          onUpdateLoan={openLoanModal}
+          onView={(f, files) => setPreviewFile({ file: f, files })}
+          onDownloadFile={handleDownloadFile}
+          onDownloadAll={handleDownloadAll}
+        />
+      )}
 
       {previewFile && (
         <DocumentViewer
-          file={previewFile}
-          subtitle={[openStudent?.name, previewFile.group?.replace(/_/g, " ")].filter(Boolean).join(" — ")}
+          file={previewFile.file}
+          files={previewFile.files}
+          subtitle={openRecord ? [displayName(openRecord), getApplicationId(openRecord)].filter(Boolean).join(" · ") : undefined}
           onClose={() => setPreviewFile(null)}
         />
       )}
 
       {/* Loan Status Update Modal */}
       {loanModalStudent && (
-        <div className="modal-backdrop" onClick={() => !loanLoading && setLoanModalStudent(null)}>
-          <div className="loan-status-modal animate-fade-in" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-backdrop bk-modal-backdrop" onClick={() => !loanLoading && setLoanModalStudent(null)}>
+          <div
+            className="loan-status-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lsm-title"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="lsm-header">
-              <div className="lsm-icon"><Banknote size={22} /></div>
+              <div className="lsm-icon" aria-hidden="true"><Banknote size={22} /></div>
               <div className="lsm-title-block">
-                <h3 className="lsm-title">Update Loan Status</h3>
-                <p className="lsm-sub">{loanModalStudent.name}</p>
+                <h3 id="lsm-title" className="lsm-title">Update Loan Status</h3>
+                <p className="lsm-sub">
+                  {[displayName(loanModalStudent), getApplicationId(loanModalStudent)].filter(Boolean).join(" · ")}
+                </p>
               </div>
-              <button className="lsm-close" onClick={() => setLoanModalStudent(null)} disabled={loanLoading}>
+              <button type="button" className="lsm-close" onClick={() => setLoanModalStudent(null)} disabled={loanLoading} aria-label="Close">
                 <X size={18} />
               </button>
             </div>
             <form onSubmit={handleLoanSubmit} className="lsm-body">
-              <div className="lsm-status-grid">
+              <div className="lsm-status-grid" role="radiogroup" aria-label="Loan status">
                 {Object.entries(LOAN_STATUS_CONFIG).map(([key, cfg]) => (
                   <button
                     key={key}
                     type="button"
-                    className={`lsm-option ${cfg.cls}${loanStatus === key ? " selected" : ""}`}
+                    role="radio"
+                    aria-checked={loanStatus === key}
+                    className={`lsm-option lsm-option--${key}${loanStatus === key ? " selected" : ""}`}
                     onClick={() => { setLoanStatus(key); if (!REMARK_STATUSES.includes(key)) setLoanRemark(""); if (key !== "sanctioned") setLoanSanctionFile(null); }}
                   >
                     <span className="lsm-option-dot" />
@@ -471,10 +778,11 @@ export default function BankerPortal() {
               </div>
               {REMARK_STATUSES.includes(loanStatus) && (
                 <div className="lsm-remark-wrap">
-                  <label className="lsm-remark-label">
+                  <label className="lsm-remark-label" htmlFor="lsm-remark">
                     {REMARK_LABELS[loanStatus].label} <span className="required-star">*</span>
                   </label>
                   <textarea
+                    id="lsm-remark"
                     className="lsm-remark-input"
                     rows={3}
                     placeholder={REMARK_LABELS[loanStatus].placeholder}
@@ -485,17 +793,17 @@ export default function BankerPortal() {
               )}
               {loanStatus === "sanctioned" && (
                 <div className="lsm-upload-wrap">
-                  <label className="lsm-remark-label">
+                  <span className="lsm-remark-label">
                     Sanction Letter <span className="lsm-optional">— optional</span>
-                  </label>
+                  </span>
                   <label className={`lsm-file-drop${loanSanctionFile ? " has-file" : ""}`}>
-                    <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }}
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="sr-only"
                       onChange={(e) => setLoanSanctionFile(e.target.files[0] || null)} />
                     {loanSanctionFile ? (
                       <div className="lsm-file-selected">
                         <FileText size={15} />
                         <span className="lsm-file-name">{loanSanctionFile.name}</span>
-                        <button type="button" className="lsm-file-remove"
+                        <button type="button" className="lsm-file-remove" aria-label="Remove sanction letter"
                           onClick={(e) => { e.preventDefault(); setLoanSanctionFile(null); }}>
                           <X size={12} />
                         </button>
@@ -510,17 +818,18 @@ export default function BankerPortal() {
                 </div>
               )}
               {loanStatus === "disbursed" && (
-                <div className="lsm-disbursement-wrap">
-                  <label className="lsm-remark-label">
+                <fieldset className="lsm-disbursement-wrap">
+                  <legend className="lsm-remark-label">
                     Disbursement Details <span className="required-star">*</span>
-                  </label>
+                  </legend>
                   <div className="lsm-disbursement-grid">
                     {DISBURSEMENT_FIELDS.map(({ key, label, unit, placeholder }) => (
                       <div className="lsm-disbursement-field" key={key}>
-                        <label className="lsm-disbursement-label">{label}</label>
+                        <label className="lsm-disbursement-label" htmlFor={`lsm-${key}`}>{label}</label>
                         <div className="lsm-disbursement-input-wrap">
                           <span className="lsm-disbursement-unit">{unit}</span>
                           <input
+                            id={`lsm-${key}`}
                             type="number"
                             min="0"
                             step="0.01"
@@ -534,15 +843,15 @@ export default function BankerPortal() {
                       </div>
                     ))}
                   </div>
-                </div>
+                </fieldset>
               )}
-              {loanErr && <p className="lsm-error">{loanErr}</p>}
+              {loanErr && <p className="lsm-error" role="alert">{loanErr}</p>}
               <div className="lsm-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setLoanModalStudent(null)} disabled={loanLoading}>
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={loanLoading}>
-                  {loanLoading ? <><RefreshCw size={13} className="spin" /> {loanLoadingMsg}</> : "Update Status"}
+                  {loanLoading ? <><RefreshCw size={13} className="bk-spin" /> {loanLoadingMsg}</> : "Update Status"}
                 </button>
               </div>
             </form>
@@ -551,38 +860,45 @@ export default function BankerPortal() {
       )}
 
       {showPwModal && (
-        <div className="modal-backdrop" onClick={() => !pwLoading && setShowPwModal(false)}>
-          <div className="modal-box bank-modal-box animate-fade-in" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-icon"><KeyRound size={28} /></div>
-            <h3 className="bank-modal-title">Change Password</h3>
+        <div className="modal-backdrop bk-modal-backdrop" onClick={() => !pwLoading && setShowPwModal(false)}>
+          <div
+            className="modal-box bank-modal-box bk-pw-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bk-pw-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-icon" aria-hidden="true"><KeyRound size={28} /></div>
+            <h3 id="bk-pw-title" className="bank-modal-title">Change Password</h3>
             <form onSubmit={handleChangePassword} className="settings-form">
               <div className="input-group">
-                <label>Current Password</label>
+                <label htmlFor="bk-pw-current">Current Password</label>
                 <div className="password-wrap">
-                  <input className="input-field" type={showPwText ? "text" : "password"} placeholder="Your current password"
-                    value={curPass} onChange={(e) => setCurPass(e.target.value)} autoFocus />
-                  <button type="button" className="show-pass" onClick={() => setShowPwText(!showPwText)}>
+                  <input id="bk-pw-current" className="input-field" type={showPwText ? "text" : "password"} placeholder="Your current password"
+                    autoComplete="current-password" value={curPass} onChange={(e) => setCurPass(e.target.value)} autoFocus />
+                  <button type="button" className="show-pass" onClick={() => setShowPwText(!showPwText)}
+                    aria-label={showPwText ? "Hide passwords" : "Show passwords"} aria-pressed={showPwText}>
                     {showPwText ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
               </div>
               <div className="input-group">
-                <label>New Password</label>
-                <input className="input-field" type={showPwText ? "text" : "password"} placeholder="Min. 6 characters"
-                  value={newPass} onChange={(e) => setNewPass(e.target.value)} />
+                <label htmlFor="bk-pw-new">New Password</label>
+                <input id="bk-pw-new" className="input-field" type={showPwText ? "text" : "password"} placeholder="Min. 6 characters"
+                  autoComplete="new-password" value={newPass} onChange={(e) => setNewPass(e.target.value)} />
               </div>
               <div className="input-group">
-                <label>Confirm New Password</label>
-                <input className="input-field" type={showPwText ? "text" : "password"} placeholder="Repeat new password"
-                  value={confirmPass} onChange={(e) => setConfirmPass(e.target.value)} />
+                <label htmlFor="bk-pw-confirm">Confirm New Password</label>
+                <input id="bk-pw-confirm" className="input-field" type={showPwText ? "text" : "password"} placeholder="Repeat new password"
+                  autoComplete="new-password" value={confirmPass} onChange={(e) => setConfirmPass(e.target.value)} />
               </div>
-              {pwMsg && <p className={`settings-msg ${pwMsg.type}`}>{pwMsg.text}</p>}
+              {pwMsg && <p className={`settings-msg ${pwMsg.type}`} role={pwMsg.type === "err" ? "alert" : "status"}>{pwMsg.text}</p>}
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowPwModal(false)} disabled={pwLoading}>
                   {pwMsg?.type === "ok" ? "Close" : "Cancel"}
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={pwLoading}>
-                  {pwLoading ? <><RefreshCw size={13} className="spin" /> Saving…</> : "Update Password"}
+                  {pwLoading ? <><RefreshCw size={13} className="bk-spin" /> Saving…</> : "Update Password"}
                 </button>
               </div>
             </form>

@@ -15,7 +15,7 @@ import {
   Landmark,
   History,
 } from "lucide-react";
-import logoMark from "../../assets/logo-mark.webp";
+import BrandLogo from "../../components/BrandLogo/BrandLogo";
 import { BANK_OPTIONS } from "../../utils/bankOptions";
 import { useStudent } from "../../context/StudentContext";
 import "./AdminLogin.css";
@@ -34,12 +34,31 @@ async function apiPost(path, body) {
 // What DocLocker actually does, in the order a student's file moves through
 // it — shown on the brand panel instead of generic marketing copy.
 const FLOW = [
-  { icon: ScanText,    title: "Documents read for you",       text: "Passport, Aadhaar, PAN and marksheets fill the application automatically." },
-  { icon: ShieldCheck, title: "Names checked across every ID", text: "Mismatches are flagged before a bank ever sees the file." },
-  { icon: Landmark,    title: "Shared with the right lender",  text: "Bank officers see only the students they're given access to." },
+  { icon: ScanText,    tone: "blue",  title: "Documents read for you",       text: "Passport, Aadhaar, PAN and marksheets fill the application automatically." },
+  { icon: ShieldCheck, tone: "teal",  title: "Names checked across every ID", text: "Mismatches are flagged before a bank ever sees the file." },
+  { icon: Landmark,    tone: "amber", title: "Shared with the right lender",  text: "Bank officers see only the students they're given access to." },
 ];
 
-const LENDERS = BANK_OPTIONS.filter((b) => b.value !== "Others").slice(0, 6);
+const ALL_LENDERS = BANK_OPTIONS.filter((b) => b.value !== "Others");
+const LENDERS = ALL_LENDERS.slice(0, 6);
+const MORE_LENDERS = ALL_LENDERS.length - LENDERS.length;
+
+// Rendered in the brand panel on wide screens and under the card on phones.
+function LenderStrip({ className = "" }) {
+  return (
+    <div className={`al-lenders ${className}`.trim()}>
+      <p className="al-lenders-label">Lenders on DocLocker</p>
+      <ul className="al-lenders-row">
+        {LENDERS.map((b) => (
+          <li key={b.value} className="al-lender" title={b.label}>
+            <img src={b.logo} alt={b.label} />
+          </li>
+        ))}
+      </ul>
+      {MORE_LENDERS > 0 && <p className="al-lenders-more">and {MORE_LENDERS} more lending partners</p>}
+    </div>
+  );
+}
 
 function Field({ id, label, icon: Icon, type = "text", value, onChange, placeholder, autoComplete, autoFocus, trailing }) {
   return (
@@ -156,172 +175,162 @@ export default function AdminLogin() {
 
   return (
     <div className="al-page">
-      {/* ── Brand panel ───────────────────────────────────────────── */}
-      <aside className="al-brand" aria-label="About DocLocker">
-        <div className="al-brand-inner">
+      <header className="al-topbar">
+        {/* The brand panel carries the full lockup on wide screens */}
+        <BrandLogo size="sm" className="al-topbar-logo" />
+        <Link to="/" className="al-back">
+          <ArrowLeft size={16} aria-hidden="true" /> Back to home
+        </Link>
+      </header>
+
+      <div className="al-layout">
+        {/* ── Brand panel ───────────────────────────────────────────── */}
+        <aside className="al-brand" aria-label="About DocLocker">
+          <BrandLogo size="lg" tagline />
+
           <div className="al-hero">
-            <div className="al-mark-wrap">
-              <span className="al-mark-halo" aria-hidden="true" />
-              <img src={logoMark} alt="" className="al-mark" width="168" height="168" />
-            </div>
-            <h2 className="al-wordmark">
-              <span className="al-wordmark-doc">Doc</span><span className="al-wordmark-locker">Locker</span>
+            <p className="al-eyebrow"><ShieldCheck size={14} aria-hidden="true" /> Staff &amp; lender access</p>
+            <h2 className="al-headline">
+              Education loan files, <span>simplified</span>
             </h2>
-            <p className="al-tagline">
-              Study abroad. <em>Funded</em>, not delayed.
+            <p className="al-lede">
+              Review student documents, track every application and share verified files with lenders, all in one secure place.
             </p>
           </div>
 
-          <ol className="al-flow">
-            {FLOW.map(({ icon: Icon, title, text }, i) => (
-              <li key={title} className="al-flow-step" style={{ "--i": i }}>
-                <span className="al-flow-icon"><Icon size={18} /></span>
+          <ul className="al-flow">
+            {FLOW.map(({ icon: Icon, tone, title, text }, i) => (
+              <li key={title} className="al-flow-card" style={{ "--i": i }}>
+                <span className={`al-flow-icon al-flow-icon--${tone}`}><Icon size={20} aria-hidden="true" /></span>
                 <div>
                   <p className="al-flow-title">{title}</p>
                   <p className="al-flow-text">{text}</p>
                 </div>
               </li>
             ))}
-          </ol>
+          </ul>
 
-          <div className="al-lenders">
-            <p className="al-lenders-label">Lenders on DocLocker</p>
-            <div className="al-lenders-row">
-              {LENDERS.map((b) => (
-                <span key={b.value} className="al-lender" title={b.label}>
-                  <img src={b.logo} alt={b.label} loading="lazy" />
-                </span>
-              ))}
-            </div>
+          <LenderStrip />
+        </aside>
+
+        {/* ── Form panel ────────────────────────────────────────────── */}
+        <main className="al-main">
+          <div className="al-card">
+            {view === "login" && (
+              <form onSubmit={handleLogin} className="al-form" noValidate>
+                <h1 className="al-title">Welcome back</h1>
+                <p className="al-sub">Sign in to manage students, documents and loan applications.</p>
+
+                <Field
+                  id="al-name"
+                  label="Name"
+                  icon={User}
+                  value={loginName}
+                  onChange={setLoginName}
+                  placeholder="Your account name"
+                  autoComplete="username"
+                  autoFocus
+                />
+                <Field
+                  id="al-password"
+                  label="Password"
+                  icon={Lock}
+                  type={showLoginPass ? "text" : "password"}
+                  value={loginPass}
+                  onChange={setLoginPass}
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  trailing={<PasswordToggle shown={showLoginPass} onToggle={() => setShowLoginPass((s) => !s)} />}
+                />
+
+                {error && (
+                  <div className="al-error" role="alert">
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <button type="submit" className="al-submit" disabled={loading}>
+                  {loading
+                    ? <><RefreshCw size={17} className="spin" aria-hidden="true" /> Signing in…</>
+                    : <><LogIn size={17} aria-hidden="true" /> Sign in</>}
+                </button>
+
+                <p className="al-help">
+                  Advisors and bank officers only see their own students. Need an account? Ask your super admin.
+                </p>
+              </form>
+            )}
+
+            {view === "setup" && (
+              <form onSubmit={handleSetup} className="al-form" noValidate>
+                <span className="al-setup-badge"><Sparkles size={14} aria-hidden="true" /> First-time setup</span>
+                <h1 className="al-title">Set up DocLocker</h1>
+                <p className="al-sub">No accounts exist yet. Create the super admin account — you can add advisors and bank officers from Settings afterwards.</p>
+
+                <Field
+                  id="al-setup-name"
+                  label="Super admin name"
+                  icon={User}
+                  value={setupName}
+                  onChange={setSetupName}
+                  placeholder="e.g. Admin"
+                  autoComplete="username"
+                  autoFocus
+                />
+                <Field
+                  id="al-setup-password"
+                  label="Password"
+                  icon={Lock}
+                  type={showSetupPass ? "text" : "password"}
+                  value={setupPass}
+                  onChange={setSetupPass}
+                  placeholder="At least 6 characters"
+                  autoComplete="new-password"
+                  trailing={<PasswordToggle shown={showSetupPass} onToggle={() => setShowSetupPass((s) => !s)} />}
+                />
+                <Field
+                  id="al-setup-confirm"
+                  label="Confirm password"
+                  icon={Lock}
+                  type={showSetupPass ? "text" : "password"}
+                  value={setupConfirm}
+                  onChange={setSetupConfirm}
+                  placeholder="Repeat the password"
+                  autoComplete="new-password"
+                />
+
+                {error && (
+                  <div className="al-error" role="alert">
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <button type="submit" className="al-submit" disabled={loading}>
+                  {loading
+                    ? <><RefreshCw size={17} className="spin" aria-hidden="true" /> Creating…</>
+                    : <><Sparkles size={17} aria-hidden="true" /> Create super admin</>}
+                </button>
+
+                <button
+                  type="button"
+                  className="al-link-btn"
+                  onClick={() => { setView("login"); setError(""); }}
+                >
+                  <ArrowLeft size={14} aria-hidden="true" /> Back to sign in
+                </button>
+              </form>
+            )}
+
+            <p className="al-foot">
+              <History size={14} aria-hidden="true" /> Every sign-in is recorded in the audit log.
+            </p>
           </div>
-        </div>
-      </aside>
 
-      {/* ── Form panel ────────────────────────────────────────────── */}
-      <main className="al-main">
-        <Link to="/" className="al-back">
-          <ArrowLeft size={15} /> Back to home
-        </Link>
-
-        <div className="al-form-wrap">
-          {/* Compact brand shown only when the brand panel is hidden (mobile) */}
-          <div className="al-mobile-brand" aria-hidden="true">
-            <img src={logoMark} alt="" />
-            <span><span className="al-wordmark-doc-dark">Doc</span><span className="al-wordmark-locker">Locker</span></span>
-          </div>
-
-          {view === "login" && (
-            <form onSubmit={handleLogin} className="al-form" noValidate>
-              <h1 className="al-title">Welcome back</h1>
-              <p className="al-sub">Sign in to manage students, documents and loan applications.</p>
-
-              <Field
-                id="al-name"
-                label="Name"
-                icon={User}
-                value={loginName}
-                onChange={setLoginName}
-                placeholder="Your account name"
-                autoComplete="username"
-                autoFocus
-              />
-              <Field
-                id="al-password"
-                label="Password"
-                icon={Lock}
-                type={showLoginPass ? "text" : "password"}
-                value={loginPass}
-                onChange={setLoginPass}
-                placeholder="Enter your password"
-                autoComplete="current-password"
-                trailing={<PasswordToggle shown={showLoginPass} onToggle={() => setShowLoginPass((s) => !s)} />}
-              />
-
-              {error && (
-                <div className="al-error" role="alert">
-                  <AlertCircle size={16} />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <button type="submit" className="al-submit" disabled={loading}>
-                {loading
-                  ? <><RefreshCw size={17} className="spin" /> Signing in…</>
-                  : <><LogIn size={17} /> Sign in</>}
-              </button>
-
-              <p className="al-help">
-                Advisors and bank officers only see their own students. Need an account? Ask your super admin.
-              </p>
-            </form>
-          )}
-
-          {view === "setup" && (
-            <form onSubmit={handleSetup} className="al-form" noValidate>
-              <span className="al-setup-badge"><Sparkles size={14} /> First-time setup</span>
-              <h1 className="al-title">Set up DocLocker</h1>
-              <p className="al-sub">No accounts exist yet. Create the super admin account — you can add advisors and bank officers from Settings afterwards.</p>
-
-              <Field
-                id="al-setup-name"
-                label="Super admin name"
-                icon={User}
-                value={setupName}
-                onChange={setSetupName}
-                placeholder="e.g. Admin"
-                autoComplete="username"
-                autoFocus
-              />
-              <Field
-                id="al-setup-password"
-                label="Password"
-                icon={Lock}
-                type={showSetupPass ? "text" : "password"}
-                value={setupPass}
-                onChange={setSetupPass}
-                placeholder="At least 6 characters"
-                autoComplete="new-password"
-                trailing={<PasswordToggle shown={showSetupPass} onToggle={() => setShowSetupPass((s) => !s)} />}
-              />
-              <Field
-                id="al-setup-confirm"
-                label="Confirm password"
-                icon={Lock}
-                type={showSetupPass ? "text" : "password"}
-                value={setupConfirm}
-                onChange={setSetupConfirm}
-                placeholder="Repeat the password"
-                autoComplete="new-password"
-              />
-
-              {error && (
-                <div className="al-error" role="alert">
-                  <AlertCircle size={16} />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <button type="submit" className="al-submit" disabled={loading}>
-                {loading
-                  ? <><RefreshCw size={17} className="spin" /> Creating…</>
-                  : <><Sparkles size={17} /> Create super admin</>}
-              </button>
-
-              <button
-                type="button"
-                className="al-link-btn"
-                onClick={() => { setView("login"); setError(""); }}
-              >
-                <ArrowLeft size={14} /> Back to sign in
-              </button>
-            </form>
-          )}
-
-          <p className="al-foot">
-            <History size={13} /> Every sign-in is recorded in the audit log.
-          </p>
-        </div>
-      </main>
+          <LenderStrip className="al-lenders--compact" />
+        </main>
+      </div>
     </div>
   );
 }

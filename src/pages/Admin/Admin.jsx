@@ -7,7 +7,6 @@ import {
   CheckCircle,
   AlertCircle,
   RefreshCw,
-  UserPlus,
   Trash2,
   X,
   ExternalLink,
@@ -47,9 +46,12 @@ import {
   Landmark,
   LogIn,
   ChevronRight,
-  Bell,
   MoreVertical,
   Download,
+  MoreHorizontal,
+  UserRound,
+  FileClock,
+  BadgeCheck,
   Hourglass,
   Wallet,
   MinusCircle,
@@ -61,12 +63,12 @@ import DocumentViewer from "../../components/DocumentViewer/DocumentViewer";
 import useFileObjectUrl from "../../hooks/useFileObjectUrl";
 import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields } from "../../context/schemas";
 import { BANK_OPTIONS, getBankLogo } from "../../utils/bankOptions";
-import logoImg from "../../assets/logo.png";
-import heroImg from "../../assets/bg.png";
+import BrandLogo from "../../components/BrandLogo/BrandLogo";
 import "./Admin.css";
 import DocumentReader from "./DocumentReader";
 import { buildIdentityReport } from "../../utils/identityCheck";
 import { buildDocumentChecks } from "../../utils/documentChecks";
+import { getApplicationId } from "../../utils/applicationId";
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
 
@@ -84,9 +86,16 @@ function getOverallProgress(s) {
   return Math.min(100, Math.round((total / required) * 100));
 }
 
+function getInitials(name) {
+  const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  return (words[0][0] + (words.length > 1 ? words[words.length - 1][0] : "")).toUpperCase();
+}
+
 function getAvatarVariant(name) {
   const variants = ["a", "b", "c", "d", "e"];
-  const code = (name || "?").charCodeAt(0);
+  let code = 0;
+  for (const ch of String(name || "?")) code = (code * 31 + ch.charCodeAt(0)) % 9973;
   return variants[code % variants.length];
 }
 
@@ -750,7 +759,7 @@ function RecoverMetaModal({ student, onClose, onRestored }) {
         <div className="modal-icon"><ScanText size={26} /></div>
         <h3 className="bank-modal-title">Recover Meta from PDF</h3>
         <p className="bank-modal-desc">
-          Scans <strong>Student_Summary.pdf</strong> from Drive, uses AI to reconstruct the
+          Scans the student's <strong>Application Form</strong> PDF from Drive, uses AI to reconstruct the
           student's form data, then writes it back as <code>student_meta.json</code>.
         </p>
 
@@ -1692,7 +1701,7 @@ function FilesTab({ student }) {
   // getAllUploadedFiles reads. Listed separately here so staff can actually
   // find them without leaving the app to browse Drive by hand.
   const generated = [
-    student.summaryPdf && { key: "summary", name: "Application Summary", tag: "Auto-generated", ...student.summaryPdf },
+    student.summaryPdf && { key: "summary", name: "Application Form", tag: "Auto-generated", ...student.summaryPdf },
     student.eligibilityPdf && { key: "eligibility", name: "Eligibility Report", tag: "Auto-generated", ...student.eligibilityPdf },
   ].filter(Boolean);
 
@@ -2004,18 +2013,126 @@ function StudentPhoto({ fileId, onFail }) {
   return url ? <img ref={ref} src={url} alt="" onError={onFail} /> : <span ref={ref} className="student-photo-placeholder" />;
 }
 
-function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDelete, onOpenDrive, onViewReport, onSendToBank, onLoanStatusUpdate, onRecoverMeta, canEditConsultancy, onConsultancySave, consultancySuggestions, canEditAdvisor, onAdvisorSave, advisorOptions, isDuplicate }) {
+// Small progress ring for the Document Status column — fill is the student's
+// real share of required uploads.
+function DocRing({ pct }) {
+  const tone = pct === 100 ? "done" : pct >= 50 ? "high" : pct > 0 ? "mid" : "none";
+  return (
+    <svg viewBox="0 0 20 20" className={`adm-docring adm-docring--${tone}`} aria-hidden="true">
+      <circle cx="10" cy="10" r="7.5" className="adm-docring-track" />
+      <circle cx="10" cy="10" r="7.5" pathLength="100" strokeDasharray={`${pct} 100`} className="adm-docring-fill" />
+    </svg>
+  );
+}
+
+// Actions menu (row kebab, header overflow). Rendered position: fixed from the
+// trigger's rect so it is never clipped by the table's scroll container; it
+// follows the trigger on scroll/resize and closes on Escape or outside click.
+function ActionsMenu({ label, items, icon: TriggerIcon = MoreVertical, className = "adm-kebab" }) {
+  const [pos, setPos] = useState(null);
+  const open = pos !== null;
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
+
+  const close = useCallback((restoreFocus) => {
+    setPos(null);
+    if (restoreFocus) btnRef.current?.focus();
+  }, []);
+
+  const place = useCallback(() => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r || r.bottom < 0 || r.top > window.innerHeight) { setPos(null); return; }
+    const menuH = menuRef.current?.offsetHeight || items.length * 44 + 12;
+    const openUp = r.bottom + menuH + 8 > window.innerHeight && r.top > menuH + 8;
+    setPos({
+      right: Math.max(8, window.innerWidth - r.right),
+      top: openUp ? undefined : r.bottom + 6,
+      bottom: openUp ? window.innerHeight - r.top + 6 : undefined,
+    });
+  }, [items.length]);
+
+  const toggle = (e) => {
+    e.stopPropagation();
+    if (open) close();
+    else place();
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current?.querySelector("button")?.focus({ preventScroll: true });
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); close(true); return; }
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      e.preventDefault();
+      const btns = Array.from(menuRef.current?.querySelectorAll("button") || []);
+      const i = btns.indexOf(document.activeElement);
+      const next = e.key === "ArrowDown" ? (i + 1) % btns.length : (i - 1 + btns.length) % btns.length;
+      btns[next]?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, close, place]);
+
+  return (
+    <div className="adm-rowmenu" onClick={(e) => e.stopPropagation()}>
+      <button
+        ref={btnRef}
+        type="button"
+        className={className}
+        aria-label={label}
+        title={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={toggle}
+      >
+        <TriggerIcon size={17} />
+      </button>
+      {open && (
+        <>
+          <div className="adm-rowmenu-scrim" onClick={() => close()} />
+          <div
+            ref={menuRef}
+            role="menu"
+            className="adm-rowmenu-list"
+            style={{ top: pos.top, bottom: pos.bottom, right: pos.right }}
+          >
+            {items.map(({ label: itemLabel, icon: Icon, onSelect, danger }) => (
+              <button
+                key={itemLabel}
+                type="button"
+                role="menuitem"
+                className={danger ? "is-danger" : undefined}
+                onClick={(e) => { close(); onSelect(e); }}
+              >
+                <Icon size={15} /> {itemLabel}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDelete, onOpenDrive, onViewReport, onSendToBank, onLoanStatusUpdate, onRecoverMeta, canEditConsultancy, onConsultancySave, consultancySuggestions, canEditAdvisor, onAdvisorSave, advisorOptions, isDuplicate, showAdvisor }) {
   const [activeTab, setActiveTab] = useState("personal");
-  const [moreOpen, setMoreOpen] = useState(false);
   const [photoFailed, setPhotoFailed] = useState(false);
 
   const totalUploads = getTotalUploads(student);
+  const required = getTotalRequiredFields(student.coApplicants || 1, student.personalInfo || {});
   const progress = getOverallProgress(student);
-  const progClass = getProgressClass(progress);
   const avatarVariant = getAvatarVariant(student.name);
   const files = getAllUploadedFiles(student.uploads);
-  const consultancy = student.personalInfo?.consultantNameLoc || "";
   const identity = identityReportFor(student);
+  const applicationId = getApplicationId(student);
+  const destination = (student.personalInfo?.destinationCountry || "").trim();
+  const detailId = `adm-detail-${String(studentKey(student)).replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 
   // The Govt ID / KYC section's "Passport Size Photo" upload — same field
   // the student's own portal collects. Only tried as an <img> when its
@@ -2032,122 +2149,112 @@ function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDel
 
   const updated = student.updatedAt ? new Date(student.updatedAt) : null;
 
+  const menuItems = [
+    { label: isOpen ? "Hide details" : "View details", icon: Eye, onSelect: onToggle },
+    { label: "Eligibility report", icon: BarChart3, onSelect: onViewReport },
+    { label: "Bank access", icon: Send, onSelect: onSendToBank },
+    { label: "Update loan status", icon: Banknote, onSelect: onLoanStatusUpdate },
+    ...(student.storage !== "railway" ? [{ label: "Open Drive", icon: ExternalLink, onSelect: onOpenDrive }] : []),
+    { label: "Recover meta", icon: ScanText, onSelect: onRecoverMeta },
+    { label: "Delete student", icon: Trash2, onSelect: onDelete, danger: true },
+  ];
+
   return (
-    <div className={`student-block${isOpen ? " open" : ""}${selected ? " row-selected" : ""}`}>
-      <div className="student-row" onClick={onToggle}>
-        <div className="student-cell-check" onClick={(e) => e.stopPropagation()}>
+    <div className={`adm-rowblock${isOpen ? " is-open" : ""}${selected ? " is-selected" : ""}`}>
+      <div className={`adm-row${showAdvisor ? " adm-row--advisor" : ""}`} onClick={onToggle}>
+        <div className="adm-cell adm-cell--check" onClick={(e) => e.stopPropagation()}>
           <input type="checkbox" checked={selected} onChange={onToggleSelect} aria-label={`Select ${student.name}`} />
         </div>
 
-        <div className="student-cell-name">
-          <div className={`student-avatar${hasPhoto ? " has-photo" : ` avatar-${avatarVariant}`}`}>
+        <div className="adm-cell adm-cell--student">
+          <span className={`adm-avatar${hasPhoto ? " has-photo" : ` avatar-${avatarVariant}`}`} aria-hidden="true">
             {hasPhoto ? (
               <StudentPhoto fileId={photoUpload.id} onFail={() => setPhotoFailed(true)} />
             ) : (
-              <User size={16} />
+              getInitials(student.name)
             )}
-          </div>
-          <div className="student-info">
-            <span className="student-name">{student.name || "Unknown Student"}</span>
-            <span className="student-contact">{student.email || student.phone || "No contact info"}</span>
-            {student._parseError && (
-              <span
-                className="student-meta-error-badge"
-                title={`This student's data file is unreadable and could not be loaded: ${student._parseError}. Filters, progress, and details may be inaccurate until it's fixed (try Recover Meta).`}
-              >
-                <AlertTriangle size={11} /> Data unreadable
-              </span>
-            )}
-            {isDuplicate && (
-              <span
-                className="student-meta-error-badge student-duplicate-badge"
-                title="Another student record shares this same email or phone number — likely a duplicate Drive folder from a double submission. Check both records before deleting either one."
-              >
-                <AlertTriangle size={11} /> Possible duplicate
-              </span>
-            )}
-            {(identity.overall === "mismatch" || identity.overall === "partial") && (
-              <span
-                className={`student-meta-error-badge${identity.overall === "partial" ? " student-duplicate-badge" : ""}`}
-                title={`Details differ between this student's documents:\n• ${identity.issues.join("\n• ")}`}
-              >
-                <AlertTriangle size={11} /> {identity.overall === "mismatch" ? "Name/DOB mismatch" : "Details to check"}
+          </span>
+          <div className="adm-student-text">
+            <button
+              type="button"
+              className="adm-student-name"
+              aria-expanded={isOpen}
+              aria-controls={isOpen ? detailId : undefined}
+              onClick={(e) => { e.stopPropagation(); onToggle(); }}
+            >
+              {student.name || "Unknown Student"}
+            </button>
+            <span className="adm-student-contact">{student.email || student.phone || "No contact info"}</span>
+            {(student._parseError || isDuplicate || identity.overall === "mismatch" || identity.overall === "partial") && (
+              <span className="adm-flags">
+                {student._parseError && (
+                  <span
+                    className="adm-flag adm-flag--danger"
+                    title={`This student's data file is unreadable and could not be loaded: ${student._parseError}. Filters, progress, and details may be inaccurate until it's fixed (try Recover Meta).`}
+                  >
+                    <AlertTriangle size={11} /> Data unreadable
+                  </span>
+                )}
+                {isDuplicate && (
+                  <span
+                    className="adm-flag adm-flag--warn"
+                    title="Another student record shares this same email or phone number — likely a duplicate Drive folder from a double submission. Check both records before deleting either one."
+                  >
+                    <AlertTriangle size={11} /> Possible duplicate
+                  </span>
+                )}
+                {(identity.overall === "mismatch" || identity.overall === "partial") && (
+                  <span
+                    className={`adm-flag ${identity.overall === "partial" ? "adm-flag--warn" : "adm-flag--danger"}`}
+                    title={`Details differ between this student's documents:\n• ${identity.issues.join("\n• ")}`}
+                  >
+                    <AlertTriangle size={11} /> {identity.overall === "mismatch" ? "Name/DOB mismatch" : "Details to check"}
+                  </span>
+                )}
               </span>
             )}
           </div>
         </div>
 
-        <div className="student-cell-text">{consultancy || <span className="cell-empty">—</span>}</div>
-        <div className="student-cell-text">{student.advisor || <span className="cell-empty">—</span>}</div>
-
-        <div className="student-cell-status">
+        <div className="adm-cell adm-cell--appid" data-label="Application ID">
+          {applicationId || <span className="adm-empty-val">—</span>}
+        </div>
+        <div className="adm-cell adm-cell--dest" data-label="Destination">
+          {destination || <span className="adm-empty-val">—</span>}
+        </div>
+        {showAdvisor && (
+          <div className="adm-cell adm-cell--advisor" data-label="Advisor">
+            {student.advisor || <span className="adm-empty-val">—</span>}
+          </div>
+        )}
+        <div
+          className="adm-cell adm-cell--docs"
+          data-label="Documents"
+          title={`${progress}% complete · ${totalUploads} file${totalUploads === 1 ? "" : "s"} uploaded`}
+        >
+          <DocRing pct={progress} />
+          <span>{Math.min(totalUploads, required)}/{required}</span>
+        </div>
+        <div className="adm-cell adm-cell--loan" data-label="Loan Status">
           <LoanStatusBadge status={student.loanStatus} />
         </div>
-
-        <div className={`student-cell-progress ${progClass}`}>
-          <div className="progress-track">
-            <div className="progress-fill" style={{ width: `${progress}%` }} />
-          </div>
-          <span className="progress-pct">{progress}%</span>
-        </div>
-
-        <div className="student-cell-files">
-          <FileText size={13} />
-          {totalUploads}
-        </div>
-
-        <div className="student-cell-updated">
+        <div className="adm-cell adm-cell--updated" data-label="Updated On">
           {updated ? (
-            <>
+            <span className="adm-updated">
               <span>{updated.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
-              <span className="cell-updated-time">{updated.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
-            </>
+              <span className="adm-updated-time">{updated.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
+            </span>
           ) : (
-            <span className="cell-empty">—</span>
+            <span className="adm-empty-val">—</span>
           )}
         </div>
-
-        <div className="student-cell-actions" onClick={(e) => e.stopPropagation()}>
-          <button className="icon-btn" title="View" onClick={onToggle}>
-            <Eye size={16} />
-          </button>
-          <button className="icon-btn" title="Analytics" onClick={onViewReport}>
-            <BarChart3 size={16} />
-          </button>
-          <button className="icon-btn" title="Send to bank" onClick={onSendToBank}>
-            <Send size={16} />
-          </button>
-          <button className="icon-btn del-btn" title="Delete" onClick={onDelete}>
-            <Trash2 size={16} />
-          </button>
-          <div className="row-more-wrap">
-            <button className="icon-btn" title="More" onClick={() => setMoreOpen((o) => !o)}>
-              <MoreVertical size={16} />
-            </button>
-            {moreOpen && (
-              <>
-                <div className="row-more-scrim" onClick={() => setMoreOpen(false)} />
-                <div className="row-more-menu">
-                  <button onClick={(e) => { setMoreOpen(false); onLoanStatusUpdate(e); }}>
-                    <Banknote size={14} /> Update Loan Status
-                  </button>
-                  {student.storage !== "railway" && (
-                    <button onClick={(e) => { setMoreOpen(false); onOpenDrive(e); }}>
-                      <ExternalLink size={14} /> Open Drive
-                    </button>
-                  )}
-                  <button onClick={(e) => { setMoreOpen(false); onRecoverMeta(e); }}>
-                    <ScanText size={14} /> Recover Meta
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+        <div className="adm-cell adm-cell--actions">
+          <ActionsMenu label={`Actions for ${student.name || "student"}`} items={menuItems} />
         </div>
       </div>
 
       {isOpen && (
-        <div className="student-detail">
+        <div className="student-detail" id={detailId}>
           <div className="detail-inner">
             <div className="detail-tabs">
               {tabs.map((tab) => (
@@ -2201,7 +2308,7 @@ function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDel
                 <button className="btn btn-secondary btn-sm" onClick={onSendToBank}>
                   <Send size={13} /> Bank Access
                 </button>
-                <button className="btn btn-recover btn-sm" onClick={onRecoverMeta} title="Recover meta JSON from Summary PDF">
+                <button className="btn btn-recover btn-sm" onClick={onRecoverMeta} title="Recover the student's data from their Application Form PDF">
                   <ScanText size={13} /> Recover Meta
                 </button>
               </div>
@@ -2410,7 +2517,6 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged, admi
   // Add form
   const [addBank, setAddBank] = useState("");
   const [addName, setAddName] = useState("");
-  const [addEmail, setAddEmail] = useState("");
   const [addPass, setAddPass] = useState("");
   const [addShowPass, setAddShowPass] = useState(false);
   const [addMsg, setAddMsg] = useState(null);
@@ -2449,6 +2555,8 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged, admi
     finally { setBankersLoading(false); }
   }, []);
 
+  // Load on open — the fetch sets state asynchronously, not in the effect body.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchBankers(); }, [fetchBankers]);
 
   const fetchRequests = useCallback(async () => {
@@ -2476,6 +2584,7 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged, admi
   // Keep selected banker valid when filter changes
   useEffect(() => {
     if (selectedName && !visibleBankers.find((b) => b.name === selectedName)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-off correction after the filter changes
       setSelectedName(visibleBankers[0]?.name || null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2630,7 +2739,7 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged, admi
 
   const openAdd = () => {
     setPanel("add"); setAddMsg(null);
-    setAddBank(""); setAddName(""); setAddEmail(""); setAddPass("");
+    setAddBank(""); setAddName(""); setAddPass("");
   };
 
   return (
@@ -3434,6 +3543,26 @@ function AdminSidebar({
   pendingBankerRequests = 0,
 }) {
   const [expanded, setExpanded] = useState(null);
+  const drawerRef = useRef(null);
+  const roleLabel = adminRole === "superadmin" ? "Super Admin" : "Advisor";
+  const initials = getInitials(adminName);
+
+  // Drawer mode (below the desktop breakpoint): Escape closes it, focus moves
+  // into it on open and the page behind stops scrolling.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e) => { if (e.key === "Escape") onCloseMobile?.(); };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    drawerRef.current?.querySelector("button")?.focus();
+    const drawer = drawerRef.current;
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+      if (drawer?.contains(document.activeElement)) document.querySelector(".adm-menu-btn")?.focus();
+    };
+  }, [mobileOpen, onCloseMobile]);
 
   const goStudents = (apply) => {
     setSection("students");
@@ -3443,7 +3572,7 @@ function AdminSidebar({
 
   const NAV_ITEMS = [
     { id: "dashboard", label: "Dashboard", icon: LayoutGrid, roles: ["superadmin", "advisor"] },
-    { id: "students",  label: "Students",  icon: Users,      roles: ["superadmin", "advisor"] },
+    { id: "students",  label: adminRole === "advisor" ? "My Students" : "Students", icon: Users, roles: ["superadmin", "advisor"] },
     { id: "advisors",  label: "Advisors",  icon: UserCheck,  roles: ["superadmin"] },
     {
       id: "loanApps", label: "Loan Applications", icon: FileText, roles: ["superadmin", "advisor"],
@@ -3464,8 +3593,8 @@ function AdminSidebar({
     {
       id: "reports", label: "Reports", icon: BarChart3, roles: ["superadmin"],
       subItems: [
-        { label: "Audit Log", onSelect: () => { setSection("audit"); onCloseMobile?.(); } },
-        { label: "Bank Activity", onSelect: () => { setSection("bankActivity"); onCloseMobile?.(); } },
+        { label: "Audit Log", active: section === "audit", onSelect: () => { setSection("audit"); onCloseMobile?.(); } },
+        { label: "Bank Activity", active: section === "bankActivity", onSelect: () => { setSection("bankActivity"); onCloseMobile?.(); } },
       ],
     },
   ];
@@ -3473,47 +3602,61 @@ function AdminSidebar({
 
   return (
     <>
-      {mobileOpen && <div className="admin-sidebar-scrim" onClick={onCloseMobile} />}
-      <aside className={`admin-sidebar${mobileOpen ? " is-open" : ""}`}>
-        <div className="admin-sidebar-brand">
-          <div className="admin-sidebar-brand-icon"><img src={logoImg} alt="" /></div>
-          <div className="admin-sidebar-brand-text">
-            <span className="admin-sidebar-brand-name">DocLocker</span>
-            <span className="admin-sidebar-brand-tag">Admin Console</span>
+      {mobileOpen && <div className="adm-scrim" onClick={onCloseMobile} aria-hidden="true" />}
+      <aside
+        ref={drawerRef}
+        id="adm-sidebar"
+        className={`adm-sidebar${mobileOpen ? " is-open" : ""}`}
+        aria-label="Admin navigation"
+      >
+        <div className="adm-sidebar-top">
+          <div className="adm-sidebar-brand">
+            <BrandLogo size="sm" />
+            <button type="button" className="adm-sidebar-close" onClick={onCloseMobile} aria-label="Close menu">
+              <X size={18} />
+            </button>
+          </div>
+          <div className="adm-sidebar-role">
+            <span className="adm-avatar adm-avatar--xs" aria-hidden="true">{initials}</span>
+            <span>{roleLabel}</span>
           </div>
         </div>
 
-        <nav className="admin-sidebar-nav">
-          <p className="admin-sidebar-nav-label">Workspace</p>
+        <nav className="adm-nav" aria-label="Sections">
           {visibleNav.map(({ id, label, icon: Icon, subItems }) => {
-            const isActiveSection = id === "reports" ? (section === "audit" || section === "bankActivity") : section === id;
+            const isActive = id === "reports" ? (section === "audit" || section === "bankActivity") : section === id;
             const isExpanded = expanded === id;
             return (
-              <div key={id}>
+              <div key={id} className="adm-nav-group">
                 <button
-                  className={`admin-sidebar-link${isActiveSection && !subItems ? " active" : ""}`}
+                  type="button"
+                  className={`adm-nav-link${isActive && !subItems ? " is-active" : ""}${isActive && subItems ? " is-current" : ""}`}
+                  aria-current={isActive && !subItems ? "page" : undefined}
+                  aria-expanded={subItems ? isExpanded : undefined}
                   onClick={() => {
                     if (subItems) setExpanded(isExpanded ? null : id);
                     else { setSection(id); onCloseMobile?.(); }
                   }}
                 >
-                  <Icon size={18} />
-                  <span className="admin-sidebar-link-label">{label}</span>
+                  <Icon size={19} className="adm-nav-icon" />
+                  <span className="adm-nav-label">{label}</span>
                   {id === "banks" && pendingBankerRequests > 0 && (
-                    <span className="admin-sidebar-link-badge" title={`${pendingBankerRequests} banker access request${pendingBankerRequests === 1 ? "" : "s"} awaiting review`}>
+                    <span className="adm-nav-badge" title={`${pendingBankerRequests} banker access request${pendingBankerRequests === 1 ? "" : "s"} awaiting review`}>
                       {pendingBankerRequests > 99 ? "99+" : pendingBankerRequests}
                     </span>
                   )}
-                  {subItems ? (
-                    <ChevronRight size={14} className={`admin-sidebar-link-chevron${isExpanded ? " is-expanded" : ""}`} />
-                  ) : (
-                    isActiveSection && <span className="admin-sidebar-link-dot" />
-                  )}
+                  {subItems && <ChevronDown size={15} className={`adm-nav-chevron${isExpanded ? " is-expanded" : ""}`} />}
                 </button>
                 {subItems && isExpanded && (
-                  <div className="admin-sidebar-sublinks">
+                  <div className="adm-nav-sub">
                     {subItems.map((s) => (
-                      <button key={s.label} className="admin-sidebar-sublink" onClick={s.onSelect}>
+                      <button
+                        key={s.label}
+                        type="button"
+                        className={`adm-nav-sublink${s.active ? " is-active" : ""}`}
+                        aria-current={s.active ? "page" : undefined}
+                        onClick={s.onSelect}
+                      >
                         {s.label}
                       </button>
                     ))}
@@ -3523,26 +3666,24 @@ function AdminSidebar({
             );
           })}
 
-          <p className="admin-sidebar-nav-label">Manage</p>
-          <button className="admin-sidebar-link" onClick={() => { onOpenSettings(); onCloseMobile?.(); }}>
-            <Settings size={18} />
-            <span>Settings</span>
-            <ArrowUpRight size={13} className="admin-sidebar-link-ext" />
+          <div className="adm-nav-divider" role="separator" />
+          <button type="button" className="adm-nav-link" onClick={() => { onOpenSettings(); onCloseMobile?.(); }}>
+            <Settings size={19} className="adm-nav-icon" />
+            <span className="adm-nav-label">Settings</span>
           </button>
         </nav>
 
-        <div className="admin-sidebar-footer">
-          <div className="admin-sidebar-user">
-            <div className="admin-sidebar-user-avatar">{(adminName || "?")[0].toUpperCase()}</div>
-            <div className="admin-sidebar-user-info">
-              <span className="admin-sidebar-user-name">{adminName}</span>
-              <span className="admin-sidebar-user-role">{adminRole === "superadmin" ? "Super Admin" : "Advisor"}</span>
-            </div>
+        <div className="adm-sidebar-footer">
+          <div className="adm-user-card">
+            <span className="adm-avatar adm-avatar--lg" aria-hidden="true">{initials}</span>
+            <span className="adm-user-text">
+              <span className="adm-user-name">{adminName || roleLabel}</span>
+              <span className="adm-user-role">{roleLabel}</span>
+            </span>
           </div>
-
-          <button className="admin-sidebar-logout" onClick={onLogout}>
-            <LogOut size={16} />
-            <span>Logout</span>
+          <button type="button" className="adm-logout" onClick={onLogout}>
+            <LogOut size={17} />
+            <span>Log out</span>
           </button>
         </div>
       </aside>
@@ -3550,62 +3691,23 @@ function AdminSidebar({
   );
 }
 
-/* ─── Top header bar: global quick-search + notifications + account ─── */
+/* ─── Compact top bar below the desktop breakpoint: menu + logo ─── */
 
-function AdminTopbar({ search, setSearch, section, setSection, adminName, adminRole, onOpenSettings, onLogout }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-
+function AdminMobileBar({ onOpenMenu, menuOpen }) {
   return (
-    <div className="admin-topbar">
-      <label className="admin-topbar-search">
-        <Search size={16} />
-        <input
-          type="text"
-          placeholder="Search by student name, email or phone…"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            if (e.target.value && section !== "students") setSection("students");
-          }}
-        />
-        {!search && <kbd className="admin-topbar-kbd">/</kbd>}
-        {search && (
-          <button type="button" className="admin-topbar-search-clear" onClick={() => setSearch("")} aria-label="Clear search">
-            <X size={13} />
-          </button>
-        )}
-      </label>
-
-      <div className="admin-topbar-actions">
-        <button type="button" className="admin-topbar-icon-btn" title="Notifications" aria-label="Notifications">
-          <Bell size={18} />
-        </button>
-        <div className="admin-topbar-divider" />
-        <div className="admin-topbar-user-wrap">
-          <button type="button" className="admin-topbar-user" onClick={() => setMenuOpen((o) => !o)}>
-            <div className="admin-topbar-avatar">{(adminName || "?")[0].toUpperCase()}</div>
-            <div className="admin-topbar-user-text">
-              <span className="admin-topbar-user-name">{adminName}</span>
-              <span className="admin-topbar-user-role">{adminRole === "superadmin" ? "Super Admin" : "Advisor"}</span>
-            </div>
-            <ChevronDown size={14} />
-          </button>
-          {menuOpen && (
-            <>
-              <div className="admin-topbar-menu-scrim" onClick={() => setMenuOpen(false)} />
-              <div className="admin-topbar-menu">
-                <button onClick={() => { onOpenSettings(); setMenuOpen(false); }}>
-                  <Settings size={14} /> Settings
-                </button>
-                <button className="danger" onClick={() => { onLogout(); setMenuOpen(false); }}>
-                  <LogOut size={14} /> Logout
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    <header className="adm-mobilebar">
+      <button
+        type="button"
+        className="adm-icon-btn adm-menu-btn"
+        onClick={onOpenMenu}
+        aria-label="Open menu"
+        aria-controls="adm-sidebar"
+        aria-expanded={menuOpen}
+      >
+        <Menu size={20} />
+      </button>
+      <BrandLogo size="sm" />
+    </header>
   );
 }
 
@@ -3912,7 +4014,7 @@ const BANK_ACTIVITY_ACTION_LABELS = {
   ...AUDIT_ACTION_LABELS,
   "document.upload": "Uploaded a document",
   "student.save": "Saved application details",
-  "summary.generate": "Generated application summary",
+  "summary.generate": "Generated application form",
 };
 function bankActivityActionLabel(action) {
   return BANK_ACTIVITY_ACTION_LABELS[action] || action;
@@ -4122,6 +4224,8 @@ export default function Admin() {
 
   const [section, setSection] = useState("dashboard");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Frozen at mount rather than read fresh on every render — a "this week"
   // stat doesn't need millisecond accuracy, and calling Date.now() directly
@@ -4318,10 +4422,13 @@ export default function Admin() {
     if (url) window.open(url, "_blank");
   };
 
+  // A full page load to the home page: it gets past this route's guard
+  // (which would otherwise bounce to the sign-in page) and drops every
+  // piece of student data still held in memory.
   const handleLogout = () => {
     clearStudent();
     logoutAdmin();
-    navigate("/");
+    window.location.replace("/");
   };
 
   // Flags students sharing a non-empty email or phone with another student —
@@ -4402,13 +4509,15 @@ export default function Admin() {
       !search ||
       (s.name || "").toLowerCase().includes(q) ||
       (s.email || "").toLowerCase().includes(q) ||
-      (s.phone || "").includes(q);
+      (s.phone || "").includes(q) ||
+      getApplicationId(s).toLowerCase().includes(q);
     const p = getOverallProgress(s);
     const matchesFilter =
       filter === "all" ||
       (filter === "complete" && p === 100) ||
       (filter === "progress" && p > 0 && p < 100) ||
-      (filter === "notStarted" && p === 0);
+      (filter === "notStarted" && p === 0) ||
+      (filter === "incomplete" && p < 100);
     const matchesLoanStatus =
       loanStatusFilter === "all" ||
       (loanStatusFilter === "pending" && (!s.loanStatus || s.loanStatus === "pending")) ||
@@ -4520,26 +4629,61 @@ export default function Admin() {
 
   if (!isAdmin) return null;
 
-  const roleEyebrow = adminRole === "advisor" ? `Advisor — ${adminAdvisorName}` : "Super Admin";
+  const isAdvisor = adminRole === "advisor";
   const SECTION_META = {
     dashboard: {
-      title: "Admin Dashboard",
-      sub: adminRole === "advisor"
-        ? `Showing students assigned to ${adminAdvisorName} only.`
+      title: isAdvisor ? "My Students" : "Dashboard",
+      sub: isAdvisor
+        ? "Manage your students and track their loan applications."
         : "Manage all students, applications and documents from one place.",
     },
     students: {
-      eyebrow: roleEyebrow,
-      title: "Students",
-      sub: adminRole === "advisor" ? `Advisor: ${adminAdvisorName} — showing your students only` : "Search, filter, and manage every student file",
+      title: isAdvisor ? "My Students" : "Students",
+      sub: isAdvisor ? "Search, filter and manage the students assigned to you." : "Search, filter, and manage every student file.",
     },
-    advisors: { eyebrow: roleEyebrow, title: "Advisors", sub: "Workload and progress by advisor" },
-    banks:    { eyebrow: roleEyebrow, title: "Banks & Lenders", sub: "Manage loan officers and control which students each one can see" },
-    docReader: { eyebrow: roleEyebrow, title: "Document Reader", sub: "Extract structured data from a 10th or 12th certificate, passport, Aadhaar or PAN card in seconds" },
-    audit:    { eyebrow: roleEyebrow, title: "Audit Log", sub: "Who did what, and when" },
-    bankActivity: { eyebrow: roleEyebrow, title: "Bank Activity", sub: "Student, advisor, and banker actions, grouped by lender" },
+    advisors: { title: "Advisors", sub: "Workload and progress by advisor" },
+    banks:    { title: "Banks & Lenders", sub: "Manage loan officers and control which students each one can see" },
+    docReader: { title: "Document Reader", sub: "Extract structured data from a 10th or 12th certificate, passport, Aadhaar or PAN card in seconds" },
+    audit:    { title: "Audit Log", sub: "Who did what, and when" },
+    bankActivity: { title: "Bank Activity", sub: "Student, advisor, and banker actions, grouped by lender" },
   };
   const activeMeta = SECTION_META[section] || SECTION_META.dashboard;
+  const showStudents = section === "dashboard" || section === "students";
+  const showAdvisorCol = !isAdvisor;
+
+  // Quick-filter pills: each is a preset over the existing document-progress
+  // and loan-status filters, so the full Filter panel stays in sync.
+  const pendingDocs = stats.inProgress + stats.notStarted;
+  const QUICK_TABS = [
+    { id: "all", label: "All Students", count: stats.total, doc: "all", loan: "all" },
+    { id: "pendingDocs", label: "Pending Docs", count: pendingDocs, doc: "incomplete", loan: "all" },
+    { id: "inprocess", label: "In Process", count: loanStats.inprocess, doc: "all", loan: "inprocess" },
+    { id: "sanctioned", label: "Sanctioned", count: loanStats.sanctioned, doc: "all", loan: "sanctioned" },
+  ];
+  const activeQuickTab = QUICK_TABS.find((t) => t.doc === filter && t.loan === loanStatusFilter)?.id || null;
+  const activeFilterCount =
+    [filter !== "all", loanStatusFilter !== "all", !!consultancyFilter, advisorFilter !== "all", bankerFilter !== "all"].filter(Boolean).length
+    - (activeQuickTab && activeQuickTab !== "all" ? 1 : 0);
+  const clearAllFilters = () => {
+    setFilter("all");
+    setLoanStatusFilter("all");
+    setConsultancyFilter("");
+    setAdvisorFilter("all");
+    setBankerFilter("all");
+  };
+
+  const KPIS = [
+    { label: "Total Students", value: stats.total, icon: UserRound, tone: "blue" },
+    { label: "Pending Documents", value: pendingDocs, icon: FileClock, tone: "orange" },
+    { label: "In Process", value: loanStats.inprocess, icon: RefreshCw, tone: "indigo" },
+    { label: "Sanctioned", value: loanStats.sanctioned, icon: BadgeCheck, tone: "teal" },
+  ];
+
+  const headerMenuItems = [
+    ...(rootUrl ? [{ label: "Open root Drive", icon: FolderOpen, onSelect: () => window.open(rootUrl, "_blank", "noreferrer") }] : []),
+    { label: "Banker access", icon: Send, onSelect: () => setSection("banks") },
+    { label: "Settings", icon: Settings, onSelect: () => setShowSettings(true) },
+  ];
 
   return (
     <div className="admin-shell">
@@ -4551,80 +4695,46 @@ export default function Admin() {
         onOpenSettings={() => setShowSettings(true)}
         onLogout={handleLogout}
         mobileOpen={mobileNavOpen}
-        onCloseMobile={() => setMobileNavOpen(false)}
+        onCloseMobile={closeMobileNav}
         setLoanStatusFilter={setLoanStatusFilter}
         setDocFilter={setFilter}
         pendingBankerRequests={pendingBankerRequests}
       />
 
     <div className="admin-page admin-page--shell">
-      {/* Same ambient background stack as the Home page (art + color fields +
-          grid + veil) — fixed rather than absolute since this page actually
-          scrolls, unlike Home's hero. */}
-      <div className="admin-bg" aria-hidden="true">
-        <span className="admin-bg__art" style={{ backgroundImage: `url(${heroImg})` }} />
-        <span className="admin-bg__field admin-bg__field--indigo" />
-        <span className="admin-bg__field admin-bg__field--amber" />
-        <span className="admin-bg__grid" />
-        <span className="admin-bg__veil" />
-      </div>
+      <AdminMobileBar onOpenMenu={() => setMobileNavOpen(true)} menuOpen={mobileNavOpen} />
 
-      <AdminTopbar
-        search={search}
-        setSearch={setSearch}
-        section={section}
-        setSection={setSection}
-        adminName={adminName}
-        adminRole={adminRole}
-        onOpenSettings={() => setShowSettings(true)}
-        onLogout={handleLogout}
-      />
-      <div className="admin-container">
-        {/* Header */}
-        <div className="admin-header animate-fade-in">
-          <div className="admin-header-left">
-            <div className="admin-title-row">
-              <button className="admin-mobile-nav-toggle" onClick={() => setMobileNavOpen(true)} aria-label="Open menu">
-                <Menu size={18} />
+      <main className="admin-container">
+        <div className="adm-header">
+          <div className="adm-header-text">
+            <h1 className="adm-title">{activeMeta.title}</h1>
+            <p className="adm-sub">{activeMeta.sub}</p>
+          </div>
+
+          {showStudents && (
+            <div className="adm-header-actions">
+              <button
+                type="button"
+                className="adm-icon-btn adm-icon-btn--outline"
+                onClick={loadStudents}
+                disabled={loading}
+                aria-label="Refresh students"
+                title="Refresh students"
+              >
+                <RefreshCw size={18} className={loading ? "spin" : ""} />
               </button>
-              <div>
-                <p className="admin-eyebrow">
-                  {section === "dashboard" ? `Welcome back${adminName ? `, ${adminName.split(" ")[0]}` : ""}` : activeMeta.eyebrow}
-                </p>
-                <h1 className="admin-title">{activeMeta.title}</h1>
-                <p className="admin-sub">{activeMeta.sub}</p>
-              </div>
+              <ActionsMenu
+                label="More actions"
+                items={headerMenuItems}
+                icon={MoreHorizontal}
+                className="adm-icon-btn adm-icon-btn--outline"
+              />
+              <button type="button" className="adm-btn adm-btn--primary adm-add-btn" onClick={() => navigate("/")}>
+                <Plus size={18} />
+                <span>Add Student</span>
+              </button>
             </div>
-          </div>
-
-          <div className="header-actions">
-            {(section === "dashboard" || section === "students") && (
-              <>
-                <button className="btn btn-secondary btn-sm" onClick={loadStudents} disabled={loading}>
-                  <RefreshCw size={16} className={loading ? "spin" : ""} />
-                  <span className="btn-label">Refresh</span>
-                </button>
-                <button className="btn btn-secondary btn-sm" onClick={() => navigate("/")}>
-                  <UserPlus size={16} />
-                  <span className="btn-label">Add Student</span>
-                </button>
-                {rootUrl && (
-                  <a className="btn btn-primary btn-sm" href={rootUrl} target="_blank" rel="noreferrer">
-                    <FolderOpen size={16} />
-                    <span className="btn-label">Root Drive</span>
-                  </a>
-                )}
-                <button className="btn btn-secondary btn-sm" onClick={() => setSection("banks")}>
-                  <Send size={16} />
-                  <span className="btn-label">Banker Access</span>
-                </button>
-                <button className="btn btn-secondary btn-sm" onClick={() => setShowSettings(true)}>
-                  <Settings size={16} />
-                  <span className="btn-label">Settings</span>
-                </button>
-              </>
-            )}
-          </div>
+          )}
         </div>
 
         {section === "dashboard" && (
@@ -4635,25 +4745,17 @@ export default function Admin() {
               onOpen={() => { setSection("banks"); setBankPanel("requests"); }}
             />
 
-            {/* Financing partner banks — full width, scrolling strip */}
-            <PartnerBanksShowcase />
-
-            <div className="dashboard-grid">
-              {/* 3/4: Document Progress on top, Loan Application Status below */}
-              <div className="dashboard-grid-main">
-                <StatsPanel
-                  stats={stats}
-                  loanStats={loanStats}
-                  filter={filter}
-                  setFilter={setFilter}
-                  loanStatusFilter={loanStatusFilter}
-                  setLoanStatusFilter={setLoanStatusFilter}
-                />
-              </div>
-
-              {/* Remaining 1/4: the live activity log, running the full height */}
-              {adminRole === "superadmin" && <LiveActivityFeed />}
-            </div>
+            <section className="adm-kpis" aria-label="Key figures">
+              {KPIS.map(({ label, value, icon: Icon, tone }) => (
+                <div key={label} className={`adm-kpi adm-tone-${tone}`}>
+                  <span className="adm-kpi-icon" aria-hidden="true"><Icon size={22} /></span>
+                  <span className="adm-kpi-text">
+                    <span className="adm-kpi-value">{loading && students.length === 0 ? "–" : value}</span>
+                    <span className="adm-kpi-label">{label}</span>
+                  </span>
+                </div>
+              ))}
+            </section>
           </>
         )}
 
@@ -4682,241 +4784,300 @@ export default function Admin() {
 
         {section === "docReader" && <DocumentReader />}
 
-        {(section === "dashboard" || section === "students") && (
-        <>
-        {/* Toolbar */}
-        <div className="admin-toolbar">
-          <div className="toolbar-filter">
-            {[
-              { id: "all", label: "All" },
-              { id: "complete", label: "Complete" },
-              { id: "progress", label: "In Progress" },
-              { id: "notStarted", label: "Not Started" },
-            ].map((f) => (
+        {showStudents && (
+        <section className="adm-students" aria-label="Students">
+          <div className="adm-tabs" role="group" aria-label="Quick filters">
+            {QUICK_TABS.map((t) => (
               <button
-                key={f.id}
-                className={`filter-chip${filter === f.id ? " active" : ""}`}
-                onClick={() => setFilter(f.id)}
+                key={t.id}
+                type="button"
+                className={`adm-tab${activeQuickTab === t.id ? " is-active" : ""}`}
+                aria-pressed={activeQuickTab === t.id}
+                onClick={() => { setFilter(t.doc); setLoanStatusFilter(t.loan); }}
               >
-                {f.label}
+                {t.label} <span className="adm-tab-count">({t.count})</span>
               </button>
             ))}
           </div>
 
-          <div className="toolbar-dropdowns">
-            {/* Consultancy filter — visible to both advisor and superadmin */}
-            <select
-              className={`advisor-filter-select consultancy-filter-select${consultancyFilter ? " has-value" : ""}`}
-              value={consultancyFilter}
-              onChange={(e) => setConsultancyFilter(e.target.value)}
-              aria-label="Filter students by consultancy"
-            >
-              <option value="">All Consultancies</option>
-              {consultancyList.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-              <option value="__none__">— No consultancy set —</option>
-            </select>
-
-            {adminRole !== "advisor" && advisorList.length > 0 && (
-              <select
-                className="advisor-filter-select"
-                value={advisorFilter}
-                onChange={(e) => setAdvisorFilter(e.target.value)}
-              >
-                <option value="all">All Advisors</option>
-                {advisorList.map((a) => (
-                  <option key={a} value={a}>{a}</option>
-                ))}
-              </select>
-            )}
-
-            {bankers.length > 0 && (
-              <select
-                className="advisor-filter-select banker-filter-select"
-                value={bankerFilter}
-                onChange={(e) => setBankerFilter(e.target.value)}
-              >
-                <option value="all">All Bankers</option>
-                {bankers.map((b) => (
-                  <option key={b.name} value={b.name}>{b.name}</option>
-                ))}
-              </select>
-            )}
-
-            <select
-              className="advisor-filter-select loan-status-filter-select"
-              value={loanStatusFilter}
-              onChange={(e) => setLoanStatusFilter(e.target.value)}
-            >
-              <option value="all">All Loan Status</option>
-              <option value="pending">Pending</option>
-              <option value="inprocess">In Process</option>
-              <option value="sanctioned">Sanctioned</option>
-              <option value="disbursed">Disbursed</option>
-              <option value="rejected">Rejected</option>
-              <option value="dropped">Dropped</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Error banner */}
-        {error && (
-          <div className="admin-error animate-fade-in">
-            <AlertCircle size={15} />
-            {error}
-            <button className="close-err" onClick={() => setError("")}><X size={13} /></button>
-          </div>
-        )}
-
-        {/* Table */}
-        {selectedKeys.size > 0 && (
-          <div className="bulk-toolbar animate-fade-in">
-            <span className="bulk-toolbar-count">Selected: {selectedKeys.size}</span>
-            <div className="bulk-toolbar-actions">
-              <button className="btn btn-secondary btn-sm" onClick={handleBulkDownload} disabled={bulkBusy}>
-                <Download size={13} /> <span className="btn-label">Download</span>
-              </button>
-              <button className="btn btn-danger btn-sm" onClick={handleBulkDelete} disabled={bulkBusy}>
-                <Trash2 size={13} /> <span className="btn-label">{bulkBusy ? "Working…" : "Delete"}</span>
-              </button>
-            </div>
-            <button className="bulk-toolbar-clear" onClick={() => setSelectedKeys(new Set())}>
-              <X size={14} />
-            </button>
-          </div>
-        )}
-
-        <div className="table-section-head">
-          <p className="table-section-title">
-            Students <span className="table-section-count">{filtered.length}</span>
-          </p>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={handleExportCsv} disabled={filtered.length === 0}>
-            <Download size={14} /> <span className="btn-label">Export</span>
-          </button>
-        </div>
-
-        <div className="admin-table-wrap animate-fade-in">
-        <div className="admin-table-scroll">
-          <div className="table-head">
-            <div className="th th-check">
-              <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} aria-label="Select all students on this page" />
-            </div>
-            <div className="th th-name">Student</div>
-            <div className="th th-consultancy">Consultancy</div>
-            <div className="th th-advisor">Advisor</div>
-            <div className="th th-status">Loan Status</div>
-            <div className="th th-progress">Document Progress</div>
-            <div className="th th-files">Files</div>
-            <div className="th th-updated">Updated On</div>
-            <div className="th th-actions">Actions</div>
-          </div>
-
-          {loading ? (
-            <div className="admin-loading">
-              <div className="loading-dots"><span /><span /><span /></div>
-              Loading students…
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="admin-empty">
-              <div className="admin-empty-icon"><Users size={28} /></div>
-              <h3>
-                {search || filter !== "all" || consultancyFilter
-                  ? "No students match"
-                  : adminRole === "advisor"
-                    ? "No students assigned yet"
-                    : "No students yet"}
-              </h3>
-              <p>
-                {consultancyFilter === "__none__"
-                  ? "Every student has a consultancy set."
-                  : consultancyFilter
-                    ? `No students found for consultancy "${consultancyFilter}".`
-                    : search || filter !== "all"
-                      ? "Try adjusting your search or filter."
-                      : adminRole === "advisor"
-                        ? `No students have selected ${adminAdvisorName} as their advisor yet.`
-                        : "Add a student to get started."}
-              </p>
-              {(search || filter !== "all" || consultancyFilter) && (
-                <button
-                  className="btn btn-secondary btn-sm"
-                  style={{ marginTop: 8 }}
-                  onClick={() => { setSearch(""); setFilter("all"); setConsultancyFilter(""); }}
-                >
-                  Clear filters
+          <div className="adm-toolbar">
+            <label className="adm-search">
+              <span className="sr-only">Search students</span>
+              <Search size={18} aria-hidden="true" />
+              <input
+                type="search"
+                placeholder="Search name, email, phone, app ID…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search && (
+                <button type="button" className="adm-search-clear" onClick={() => setSearch("")} aria-label="Clear search">
+                  <X size={14} />
                 </button>
               )}
+            </label>
+            <div className="adm-toolbar-btns">
+              <button
+                type="button"
+                className={`adm-btn adm-btn--outline${filtersOpen ? " is-pressed" : ""}`}
+                aria-expanded={filtersOpen}
+                aria-controls="adm-filter-panel"
+                onClick={() => setFiltersOpen((o) => !o)}
+              >
+                <Filter size={17} />
+                <span>Filter</span>
+                {activeFilterCount > 0 && <span className="adm-btn-badge" aria-label={`${activeFilterCount} active`}>{activeFilterCount}</span>}
+                <ChevronDown size={15} className={`adm-btn-chevron${filtersOpen ? " is-open" : ""}`} />
+              </button>
+              <button
+                type="button"
+                className="adm-btn adm-btn--outline"
+                onClick={handleExportCsv}
+                disabled={filtered.length === 0}
+                title="Download the students currently shown as a CSV file"
+              >
+                <Upload size={17} />
+                <span>Export</span>
+              </button>
             </div>
-          ) : (
-            <div className="student-list">
-              {paginated.map((s) => {
-                const k = studentKey(s);
-                return (
-                  <StudentRow
-                    key={k}
-                    student={s}
-                    isOpen={expandedKey === k}
-                    onToggle={() => setExpandedKey((cur) => (cur === k ? null : k))}
-                    selected={selectedKeys.has(k)}
-                    onToggleSelect={() => toggleSelectOne(k)}
-                    onDelete={(e) => { if (e) e.stopPropagation(); setConfirmDelete(s); }}
-                    onOpenDrive={(e) => { if (e) e.stopPropagation(); openDriveFolder(s); }}
-                    onViewReport={(e) => { if (e) e.stopPropagation(); setReportStudent(s); }}
-                    onSendToBank={(e) => { if (e) e.stopPropagation(); setBankStudent(s); }}
-                    onLoanStatusUpdate={(e) => { if (e) e.stopPropagation(); setLoanStatusStudent(s); }}
-                    onRecoverMeta={(e) => { if (e) e.stopPropagation(); setRecoverStudent(s); }}
-                    canEditConsultancy={adminRole === "advisor" || adminRole === "superadmin"}
-                    onConsultancySave={(value) => handleConsultancySave(s, value)}
-                    consultancySuggestions={consultancyList}
-                    canEditAdvisor={adminRole === "superadmin"}
-                    onAdvisorSave={(value) => handleAdvisorSave(s, value)}
-                    advisorOptions={allAdvisors}
-                    isDuplicate={isDuplicateStudent(s)}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </div>
+          </div>
 
-          {!loading && filtered.length > 0 && (
-            <div className="table-pagination">
-              <span className="table-pagination-summary">
-                Showing {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)} of {filtered.length} students
-              </span>
-              <div className="table-pagination-controls">
-                <button className="pg-btn" aria-label="Previous page" disabled={safePage === 1} onClick={() => setPage(safePage - 1)}>
-                  <ChevronLeft size={16} />
-                </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1)
-                  .filter((n) => n === 1 || n === totalPages || Math.abs(n - safePage) <= 1)
-                  .map((n, i, arr) => (
-                    <span key={n} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      {i > 0 && arr[i - 1] !== n - 1 && <span className="pg-ellipsis">…</span>}
-                      <button className={`pg-btn pg-num${n === safePage ? " active" : ""}`} onClick={() => setPage(n)}>{n}</button>
-                    </span>
-                  ))}
-                <button className="pg-btn" aria-label="Next page" disabled={safePage === totalPages} onClick={() => setPage(safePage + 1)}>
-                  <ChevronRight size={16} />
-                </button>
-                <select
-                  className="pg-size-select"
-                  aria-label="Students per page"
-                  value={pageSize}
-                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                >
-                  <option value={10}>10 / page</option>
-                  <option value={20}>20 / page</option>
-                  <option value={50}>50 / page</option>
+          {filtersOpen && (
+            <div className="adm-filter-panel" id="adm-filter-panel">
+              <label className="adm-field">
+                <span>Document progress</span>
+                <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+                  <option value="all">All</option>
+                  <option value="complete">Completed</option>
+                  <option value="progress">In progress</option>
+                  <option value="notStarted">Not started</option>
+                  <option value="incomplete">Pending (not complete)</option>
                 </select>
-              </div>
+              </label>
+              <label className="adm-field">
+                <span>Loan status</span>
+                <select value={loanStatusFilter} onChange={(e) => setLoanStatusFilter(e.target.value)}>
+                  <option value="all">All loan status</option>
+                  <option value="pending">Pending</option>
+                  <option value="inprocess">In Process</option>
+                  <option value="sanctioned">Sanctioned</option>
+                  <option value="disbursed">Disbursed</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="dropped">Dropped</option>
+                </select>
+              </label>
+              <label className="adm-field">
+                <span>Consultancy</span>
+                <select value={consultancyFilter} onChange={(e) => setConsultancyFilter(e.target.value)}>
+                  <option value="">All consultancies</option>
+                  {consultancyList.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                  <option value="__none__">No consultancy set</option>
+                </select>
+              </label>
+              {!isAdvisor && advisorList.length > 0 && (
+                <label className="adm-field">
+                  <span>Advisor</span>
+                  <select value={advisorFilter} onChange={(e) => setAdvisorFilter(e.target.value)}>
+                    <option value="all">All advisors</option>
+                    {advisorList.map((a) => (
+                      <option key={a} value={a}>{a}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {bankers.length > 0 && (
+                <label className="adm-field">
+                  <span>Shared with banker</span>
+                  <select value={bankerFilter} onChange={(e) => setBankerFilter(e.target.value)}>
+                    <option value="all">All bankers</option>
+                    {bankers.map((b) => (
+                      <option key={b.name} value={b.name}>{b.name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <button type="button" className="adm-btn adm-btn--ghost adm-filter-reset" onClick={clearAllFilters}>
+                Reset filters
+              </button>
             </div>
           )}
-        </div>
-        </>
+
+          {error && (
+            <div className="admin-error animate-fade-in" role="alert">
+              <AlertCircle size={15} />
+              {error}
+              <button className="close-err" onClick={() => setError("")} aria-label="Dismiss error"><X size={13} /></button>
+            </div>
+          )}
+
+          {selectedKeys.size > 0 && (
+            <div className="bulk-toolbar animate-fade-in">
+              <span className="bulk-toolbar-count">Selected: {selectedKeys.size}</span>
+              <div className="bulk-toolbar-actions">
+                <button className="btn btn-secondary btn-sm" onClick={handleBulkDownload} disabled={bulkBusy}>
+                  <Download size={13} /> <span className="btn-label">Download</span>
+                </button>
+                <button className="btn btn-danger btn-sm" onClick={handleBulkDelete} disabled={bulkBusy}>
+                  <Trash2 size={13} /> <span className="btn-label">{bulkBusy ? "Working…" : "Delete"}</span>
+                </button>
+              </div>
+              <button className="bulk-toolbar-clear" onClick={() => setSelectedKeys(new Set())} aria-label="Clear selection">
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
+          <div className="adm-table">
+            <div className="adm-table-scroll">
+              <div className={`adm-thead${showAdvisorCol ? " adm-row--advisor" : ""}`}>
+                <div className="adm-th adm-th--check">
+                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} aria-label="Select all students on this page" />
+                  <span className="adm-th-mobile">Select all on this page</span>
+                </div>
+                <div className="adm-th">Student Name</div>
+                <div className="adm-th">Application ID</div>
+                <div className="adm-th">Destination</div>
+                {showAdvisorCol && <div className="adm-th adm-th--advisor">Advisor</div>}
+                <div className="adm-th">Document Status</div>
+                <div className="adm-th">Loan Status</div>
+                <div className="adm-th">Updated On</div>
+                <div className="adm-th adm-th--actions">Actions</div>
+              </div>
+
+              {loading ? (
+                <div className="admin-loading">
+                  <div className="loading-dots"><span /><span /><span /></div>
+                  Loading students…
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="admin-empty">
+                  <div className="admin-empty-icon"><Users size={28} /></div>
+                  <h3>
+                    {search || filter !== "all" || consultancyFilter || loanStatusFilter !== "all"
+                      ? "No students match"
+                      : isAdvisor
+                        ? "No students assigned yet"
+                        : "No students yet"}
+                  </h3>
+                  <p>
+                    {consultancyFilter === "__none__"
+                      ? "Every student has a consultancy set."
+                      : consultancyFilter
+                        ? `No students found for consultancy "${consultancyFilter}".`
+                        : search || filter !== "all" || loanStatusFilter !== "all"
+                          ? "Try adjusting your search or filter."
+                          : isAdvisor
+                            ? `No students have selected ${adminAdvisorName} as their advisor yet.`
+                            : "Add a student to get started."}
+                  </p>
+                  {(search || filter !== "all" || consultancyFilter || loanStatusFilter !== "all") && (
+                    <button
+                      className="adm-btn adm-btn--outline"
+                      onClick={() => { setSearch(""); clearAllFilters(); }}
+                    >
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="adm-tbody">
+                  {paginated.map((s) => {
+                    const k = studentKey(s);
+                    return (
+                      <StudentRow
+                        key={k}
+                        student={s}
+                        isOpen={expandedKey === k}
+                        onToggle={() => setExpandedKey((cur) => (cur === k ? null : k))}
+                        selected={selectedKeys.has(k)}
+                        onToggleSelect={() => toggleSelectOne(k)}
+                        onDelete={(e) => { if (e) e.stopPropagation(); setConfirmDelete(s); }}
+                        onOpenDrive={(e) => { if (e) e.stopPropagation(); openDriveFolder(s); }}
+                        onViewReport={(e) => { if (e) e.stopPropagation(); setReportStudent(s); }}
+                        onSendToBank={(e) => { if (e) e.stopPropagation(); setBankStudent(s); }}
+                        onLoanStatusUpdate={(e) => { if (e) e.stopPropagation(); setLoanStatusStudent(s); }}
+                        onRecoverMeta={(e) => { if (e) e.stopPropagation(); setRecoverStudent(s); }}
+                        canEditConsultancy={adminRole === "advisor" || adminRole === "superadmin"}
+                        onConsultancySave={(value) => handleConsultancySave(s, value)}
+                        consultancySuggestions={consultancyList}
+                        canEditAdvisor={adminRole === "superadmin"}
+                        onAdvisorSave={(value) => handleAdvisorSave(s, value)}
+                        advisorOptions={allAdvisors}
+                        isDuplicate={isDuplicateStudent(s)}
+                        showAdvisor={showAdvisorCol}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {!loading && filtered.length > 0 && (
+              <div className="table-pagination">
+                <span className="table-pagination-summary">
+                  Showing {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)} of {filtered.length} students
+                </span>
+                <div className="table-pagination-controls">
+                  <button className="pg-btn" aria-label="Previous page" disabled={safePage === 1} onClick={() => setPage(safePage - 1)}>
+                    <ChevronLeft size={16} />
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((n) => n === 1 || n === totalPages || Math.abs(n - safePage) <= 1)
+                    .map((n, i, arr) => (
+                      <span key={n} className="pg-num-wrap">
+                        {i > 0 && arr[i - 1] !== n - 1 && <span className="pg-ellipsis">…</span>}
+                        <button
+                          className={`pg-btn pg-num${n === safePage ? " active" : ""}`}
+                          aria-label={`Page ${n}`}
+                          aria-current={n === safePage ? "page" : undefined}
+                          onClick={() => setPage(n)}
+                        >
+                          {n}
+                        </button>
+                      </span>
+                    ))}
+                  <button className="pg-btn" aria-label="Next page" disabled={safePage === totalPages} onClick={() => setPage(safePage + 1)}>
+                    <ChevronRight size={16} />
+                  </button>
+                  <select
+                    className="pg-size-select"
+                    aria-label="Students per page"
+                    value={pageSize}
+                    onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                  >
+                    <option value={10}>10 / page</option>
+                    <option value={20}>20 / page</option>
+                    <option value={50}>50 / page</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
         )}
-      </div>
+
+        {section === "dashboard" && (
+          <section className="adm-overview" aria-labelledby="adm-overview-title">
+            <h2 className="adm-section-title" id="adm-overview-title">Overview</h2>
+            <div className="dashboard-grid">
+              <div className="dashboard-grid-main">
+                <StatsPanel
+                  stats={stats}
+                  loanStats={loanStats}
+                  filter={filter}
+                  setFilter={setFilter}
+                  loanStatusFilter={loanStatusFilter}
+                  setLoanStatusFilter={setLoanStatusFilter}
+                />
+              </div>
+              {adminRole === "superadmin" && <LiveActivityFeed />}
+            </div>
+            <PartnerBanksShowcase />
+          </section>
+        )}
+      </main>
     </div>
 
       {/* Loan Status Modal */}

@@ -1,20 +1,28 @@
-import { useState, useRef, useEffect } from "react";
+import { createElement, useState, useRef, useEffect, useId } from "react";
 import {
-  Upload,
-  CheckCircle,
-  AlertCircle,
-  AlertTriangle,
-  Loader,
+  CloudUpload,
+  CircleCheck,
+  CircleAlert,
+  TriangleAlert,
+  LoaderCircle,
   FileText,
   Eye,
   X,
   Sparkles,
   ShieldAlert,
+  ShieldCheck,
+  RefreshCw,
+  Camera,
+  Clock3,
+  Info,
+  Circle,
 } from "lucide-react";
 import { uploadDocument } from "../../utils/driveApi";
+import { iconFor, splitLabel, statusFromExtraction } from "./docMeta";
 import "./FileUploadBox.css";
 
 const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
+const MAX_LABEL = "25 MB";
 
 // File types our document model can read. Word documents still go through
 // the old Drive OCR path.
@@ -84,25 +92,44 @@ function getAllowedExts(field) {
     .filter(Boolean);
 }
 
-// Turns a stored extraction into the status shown on the card, so a
-// reloaded page still says whether the document was read.
-function statusFromExtraction(extraction) {
-  if (!extraction) return null;
-  if (["certificate", "ssc"].includes(extraction.docType) && extraction.checks?.supported === false) return "unsupported";
-  const s = extraction.review?.status;
-  if (s === "manual_required") return "manual";
-  if (s === "review_recommended") return "review";
-  return "read";
+// ".pdf,.jpg,.jpeg,.png,.doc,.docx" → "PDF, JPG, PNG, DOC or DOCX"
+function formatTypes(field) {
+  const exts = getAllowedExts(field)
+    .map((e) => (e === "jpeg" ? "jpg" : e).toUpperCase())
+    .filter((e, i, arr) => arr.indexOf(e) === i);
+  if (exts.length <= 1) return exts.join("");
+  return `${exts.slice(0, -1).join(", ")} or ${exts[exts.length - 1]}`;
+}
+
+const acceptsImages = (field) => getAllowedExts(field).some((e) => ["jpg", "jpeg", "png"].includes(e));
+
+function formatBytes(n) {
+  if (!n && n !== 0) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// Plain-language wording for failures the student can act on.
+function friendlyError(e) {
+  if (e?.rejected) return e.message || "This file doesn't match this document.";
+  if (e?.name === "TimeoutError" || e?.name === "AbortError") {
+    return "The upload took too long. Check your connection and try again.";
+  }
+  if (e instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(e?.message || "")) {
+    return "We couldn't reach the server. Check your internet connection and try again.";
+  }
+  return e?.message || "Upload failed. Please try again.";
 }
 
 const READ_MESSAGES = {
-  reading:     { icon: Loader,        text: "Reading your document…" },
-  read:        { icon: Sparkles,      text: "Details read — your profile has been filled in" },
-  review:      { icon: AlertTriangle, text: "Read — a few details are highlighted for you to check" },
-  manual:      { icon: AlertCircle,   text: "Some details couldn't be read — please check your profile" },
-  unsupported: { icon: AlertTriangle, text: "This board's format isn't supported yet — used basic text reading instead" },
-  failed:      { icon: AlertCircle,   text: "Couldn't read this automatically — please fill your details manually" },
-  unverified:  { icon: AlertTriangle, text: "Uploaded — we couldn't check it automatically, so please fill in your details" },
+  reading:     { icon: LoaderCircle,  tone: "info",    text: "Reading your document…" },
+  read:        { icon: Sparkles,      tone: "success", text: "Details read — your profile has been filled in" },
+  review:      { icon: TriangleAlert, tone: "warning", text: "Read — a few details are highlighted for you to check" },
+  manual:      { icon: CircleAlert,   tone: "warning", text: "Some details couldn't be read — please check your profile" },
+  unsupported: { icon: TriangleAlert, tone: "warning", text: "This board's format isn't supported yet — used basic text reading instead" },
+  failed:      { icon: CircleAlert,   tone: "error",   text: "Couldn't read this automatically — please fill your details manually" },
+  unverified:  { icon: Info,          tone: "info",    text: "Uploaded — we couldn't check it automatically, so please fill in your details" },
 };
 
 function ReadStatus({ status, error }) {
@@ -110,52 +137,222 @@ function ReadStatus({ status, error }) {
   const m = READ_MESSAGES[status];
   const Icon = m.icon;
   return (
-    <div className={`reader-status reader-${status}`} role="status">
-      <Icon size={13} className={status === "reading" ? "spin" : undefined} />
+    <p className={`doc-note doc-note--${m.tone}`}>
+      <Icon size={14} className={status === "reading" ? "doc-spin" : undefined} aria-hidden="true" />
       <span>{status === "failed" && error ? `${m.text} (${error})` : m.text}</span>
-    </div>
+    </p>
   );
 }
 
-// ── Single-file upload box (original behaviour) ────────────────────────────────
-function SingleUploadBox({ field, studentName, studentIdentifier, subFolder, onUploaded, uploadedFiles, extraction, onExtracted }) {
-  const [dragging, setDragging]       = useState(false);
+// The badge in the card's top-right corner. Wording follows what the server
+// actually confirmed: "Verified" only when our reader checked the document
+// type and read it cleanly.
+const BADGES = {
+  uploading: { tone: "info",    icon: LoaderCircle,  text: "Uploading", spin: true },
+  checking:  { tone: "info",    icon: LoaderCircle,  text: "Checking", spin: true },
+  verified:  { tone: "success", icon: ShieldCheck,   text: "Verified" },
+  uploaded:  { tone: "success", icon: CircleCheck,   text: "Uploaded" },
+  review:    { tone: "warning", icon: TriangleAlert, text: "Check details" },
+  pages:     { tone: "warning", icon: Clock3,        text: "Page needed" },
+  rejected:  { tone: "error",   icon: ShieldAlert,   text: "Not accepted" },
+  failed:    { tone: "error",   icon: CircleAlert,   text: "Upload failed" },
+};
+
+function StatusBadge({ kind, text }) {
+  if (!kind) return null;
+  const b = BADGES[kind];
+  const Icon = b.icon;
+  return (
+    <span className={`doc-badge doc-badge--${b.tone}`}>
+      <Icon size={13} className={b.spin ? "doc-spin" : undefined} aria-hidden="true" />
+      {text || b.text}
+    </span>
+  );
+}
+
+function badgeForRead(readStatus) {
+  if (readStatus === "read") return "verified";
+  if (readStatus === "review" || readStatus === "manual") return "review";
+  return "uploaded";
+}
+
+// Card chrome shared by single and multi-file slots.
+function CardHeader({ field, titleId, badge, badgeText }) {
+  const { title, note } = splitLabel(field.label);
+  return (
+    <header className="doc-card__head">
+      <span className="doc-card__icon" aria-hidden="true">
+        {createElement(iconFor(field.id), { size: 20, strokeWidth: 1.8 })}
+      </span>
+      <div className="doc-card__titles">
+        <h4 className="doc-card__title" id={titleId}>{title}</h4>
+        <div className="doc-card__meta">
+          {field.optional ? (
+            <span className="doc-chip">Optional</span>
+          ) : (
+            <span className="doc-chip doc-chip--required">Required</span>
+          )}
+          {field.reader && (
+            <span className="doc-chip doc-chip--ai" title="Your details are read from this document automatically">
+              <Sparkles size={11} aria-hidden="true" /> Auto-fill
+            </span>
+          )}
+        </div>
+        {note && !field.reader && <p className="doc-card__sub">{note}</p>}
+      </div>
+      <div className="doc-card__status" aria-live="polite">
+        <StatusBadge kind={badge} text={badgeText} />
+      </div>
+    </header>
+  );
+}
+
+// Drop target + browse + (on touch devices) camera capture.
+function DropArea({ field, onFiles, disabled, multiple, prompt, hintId }) {
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef(null);
+  const cameraRef = useRef(null);
+  const open = () => { if (!disabled) inputRef.current?.click(); };
+
+  return (
+    <>
+      <div
+        className={`doc-drop${dragging ? " is-dragging" : ""}${disabled ? " is-disabled" : ""}`}
+        role="button"
+        tabIndex={disabled ? -1 : 0}
+        aria-label={`${prompt}: ${splitLabel(field.label).title}`}
+        aria-describedby={hintId}
+        aria-disabled={disabled || undefined}
+        onClick={open}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
+        }}
+        onDragOver={(e) => { e.preventDefault(); if (!disabled) setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          if (!disabled && e.dataTransfer.files?.length) onFiles(e.dataTransfer.files);
+        }}
+      >
+        <CloudUpload size={22} strokeWidth={1.8} className="doc-drop__icon" aria-hidden="true" />
+        <span className="doc-drop__title">
+          {dragging ? "Drop to upload" : prompt}
+        </span>
+        <span className="doc-drop__hint" id={hintId}>
+          {formatTypes(field)} · Max {MAX_LABEL}{multiple ? " each" : ""}
+          {field.multiple && !field.pages ? (field.maxFiles ? ` · Up to ${field.maxFiles} files` : " · Multiple files OK") : ""}
+        </span>
+      </div>
+      {acceptsImages(field) && (
+        <button type="button" className="doc-camera" onClick={() => cameraRef.current?.click()} disabled={disabled}>
+          <Camera size={16} aria-hidden="true" /> Take a photo
+        </button>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept={field.accept}
+        multiple={multiple}
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={(e) => { if (e.target.files?.length) onFiles(e.target.files); e.target.value = ""; }}
+      />
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={(e) => { if (e.target.files?.length) onFiles(e.target.files); e.target.value = ""; }}
+      />
+    </>
+  );
+}
+
+function FileThumb({ previewUrl, name }) {
+  const [failed, setFailed] = useState(false);
+  if (previewUrl && !failed) {
+    return <img className="doc-file__thumb" src={previewUrl} alt="" onError={() => setFailed(true)} />;
+  }
+  const isPdf = /\.pdf$/i.test(name || "");
+  return (
+    <span className={`doc-file__thumb doc-file__thumb--icon${isPdf ? " is-pdf" : ""}`} aria-hidden="true">
+      <FileText size={18} strokeWidth={1.8} />
+      <span>{(name || "").split(".").pop()?.slice(0, 4).toUpperCase()}</span>
+    </span>
+  );
+}
+
+// In-session preview of an image the student just picked. Lives only in
+// memory (an object URL) — never stored, never sent anywhere.
+function usePreviewUrls() {
+  const urls = useRef(new Set());
+  useEffect(() => {
+    const set = urls.current;
+    return () => { set.forEach((u) => URL.revokeObjectURL(u)); set.clear(); };
+  }, []);
+  return {
+    make(file) {
+      if (!file?.type?.startsWith("image/")) return null;
+      const u = URL.createObjectURL(file);
+      urls.current.add(u);
+      return u;
+    },
+    release(u) {
+      if (!u) return;
+      URL.revokeObjectURL(u);
+      urls.current.delete(u);
+    },
+  };
+}
+
+// ── Single-file upload card ───────────────────────────────────────────────────
+function SingleUploadBox({ anchorId, field, studentName, studentIdentifier, subFolder, onUploaded, uploadedFiles, extraction, onExtracted }) {
   const [uploading, setUploading]     = useState(false);
   const [progress, setProgress]       = useState(0);
   const [error, setError]             = useState("");
-  const [localResult, setLocalResult] = useState(null);
-  const [reUploading, setReUploading] = useState(false);
-  const [read, setRead]               = useState({ status: null, error: "" });
   const [rejected, setRejected]       = useState(false);
-  const inputRef = useRef(null);
+  const [invalid, setInvalid]         = useState(false);
+  const [retryFile, setRetryFile]     = useState(null);
+  const [localResult, setLocalResult] = useState(null);
+  const [local, setLocal]             = useState({ previewUrl: null, size: null });
+  const [read, setRead]               = useState({ status: null, error: "" });
+  const replaceRef = useRef(null);
+  const previews = usePreviewUrls();
+  const titleId = useId();
+  const hintId = useId();
+  const errorId = useId();
 
-  // reUploading overrides the prop so the drop-zone (with progress bar) is shown
-  // while the replacement file is being uploaded.
-  const isUploaded = !reUploading && (localResult || uploadedFiles[field.id]);
+  const uploaded = localResult || uploadedFiles[field.id];
+  const isUploaded = !uploading && uploaded;
   const readStatus = read.status || (isUploaded ? statusFromExtraction(extraction) : null);
 
   const handleFile = async (file) => {
-    if (!file) return;
+    if (!file || uploading) return;
     setError("");
     setRejected(false);
-    setUploading(true);
-    setProgress(0);
+    setInvalid(false);
+    setRetryFile(null);
     setRead({ status: null, error: "" });
 
     const ext = file.name.split(".").pop().toLowerCase();
     if (!getAllowedExts(field).includes(ext)) {
-      setError(`Invalid file type. Allowed: ${field.accept}`);
-      setUploading(false);
-      setReUploading(false);
+      setError(`This file type isn't accepted here. Please choose a ${formatTypes(field)} file.`);
+      setInvalid(true);
       return;
     }
     if (file.size > MAX_BYTES) {
-      setError("File too large. Max 25 MB.");
-      setUploading(false);
-      setReUploading(false);
+      setError(`This file is ${formatBytes(file.size)}. The limit is ${MAX_LABEL} — please choose a smaller file.`);
+      setInvalid(true);
       return;
     }
 
+    setUploading(true);
+    setProgress(0);
     const compressed = await compressImage(file);
     const willRead = canRead(field, compressed);
     let result;
@@ -171,103 +368,145 @@ function SingleUploadBox({ field, studentName, studentIdentifier, subFolder, onU
         skipOcr: willRead && !field.keepOcr,
       });
     } catch (e) {
-      setError(e.message || "Upload failed. Please try again.");
+      setError(friendlyError(e));
       setRejected(Boolean(e.rejected));
+      setRetryFile(e.rejected ? null : file);
       setUploading(false);
-      setReUploading(false);
       return;
     }
 
     const record = uploadRecord(result);
+    previews.release(local.previewUrl);
+    setLocal({ previewUrl: previews.make(compressed), size: compressed.size });
     setUploading(false);
-    setReUploading(false);
     setLocalResult(record);
     onUploaded(field.id, record);
     setRead(applyReaderResult(field, result, onExtracted));
   };
 
-  return (
-    <div
-      className={["upload-box", isUploaded ? "uploaded" : "", uploading ? "uploading" : "", dragging ? "dragging" : ""].filter(Boolean).join(" ")}
-    >
-      <div className="upload-box-header">
-        <div className="upload-label">
-          <span>{field.label}</span>
-          {!field.optional && <span className="required-dot" title="Required">*</span>}
-          {field.optional && <span className="optional-tag">Optional</span>}
-          {field.reader && <span className="reader-tag" title="Your details are read from this document automatically"><Sparkles size={10} /> Auto-fill</span>}
-        </div>
-        {isUploaded && (
-          <div className="upload-status-badge">
-            <CheckCircle size={13} />
-            <span>{isUploaded._demo ? "Saved (demo)" : "Uploaded ✓"}</span>
-          </div>
-        )}
-      </div>
+  const pickFiles = (files) => handleFile(files[0]);
 
-      {isUploaded ? (
-        <div className="uploaded-info">
-          <FileText size={16} />
-          <span className="renamed-name">{isUploaded.name}</span>
-          <div className="uploaded-actions">
-            {isUploaded.webViewLink && (
-              <a href={isUploaded.webViewLink} target="_blank" rel="noreferrer" className="view-link">
-                <Eye size={13} /> View in Drive
+  let badge = null;
+  if (uploading) badge = field.reader ? "checking" : "uploading";
+  else if (error && !isUploaded) badge = rejected ? "rejected" : "failed";
+  else if (isUploaded) badge = badgeForRead(readStatus);
+
+  const state = uploading ? "busy" : error ? "error" : isUploaded ? (badge === "review" ? "attention" : "done") : "empty";
+
+  return (
+    <article id={anchorId} tabIndex={anchorId ? -1 : undefined} className={`doc-card is-${state}`} aria-labelledby={titleId} aria-describedby={error ? errorId : undefined}>
+      <CardHeader field={field} titleId={titleId} badge={badge} />
+
+      {uploading ? (
+        <div className="doc-progress" role="status">
+          <div className="doc-progress__label">
+            <LoaderCircle size={16} className="doc-spin" aria-hidden="true" />
+            <span>{field.reader ? "Checking your document…" : "Uploading your document…"}</span>
+            {!field.reader && <span className="doc-progress__pct">{progress}%</span>}
+          </div>
+          <div
+            className={`doc-bar${field.reader ? " is-indeterminate" : ""}`}
+            role="progressbar"
+            aria-label="Upload progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={field.reader ? undefined : progress}
+          >
+            <span style={field.reader ? undefined : { width: `${progress}%` }} />
+          </div>
+          {field.reader && <p className="doc-progress__sub">We check it&apos;s the right document before saving it.</p>}
+        </div>
+      ) : isUploaded ? (
+        <div className="doc-file">
+          <FileThumb previewUrl={local.previewUrl} name={uploaded.name} />
+          <div className="doc-file__body">
+            <span className="doc-file__name" title={uploaded.name}>{uploaded.name}</span>
+            <span className="doc-file__meta">
+              {uploaded._demo ? "Saved (demo)" : "Saved to your file"}
+              {local.size ? ` · ${formatBytes(local.size)}` : ""}
+            </span>
+          </div>
+          <div className="doc-file__actions">
+            {uploaded.webViewLink && (
+              <a href={uploaded.webViewLink} target="_blank" rel="noreferrer" className="doc-icon-btn" aria-label={`View ${uploaded.name} (opens in a new tab)`} title="View">
+                <Eye size={16} aria-hidden="true" />
               </a>
             )}
-            <button className="re-upload-btn" onClick={() => { setLocalResult(null); setReUploading(true); setError(""); inputRef.current?.click(); }}>
-              Re-upload
+            <button type="button" className="doc-icon-btn" onClick={() => replaceRef.current?.click()} aria-label={`Replace ${uploaded.name}`} title="Replace">
+              <RefreshCw size={16} aria-hidden="true" />
             </button>
           </div>
+          <input
+            ref={replaceRef}
+            type="file"
+            accept={field.accept}
+            className="sr-only"
+            tabIndex={-1}
+            aria-hidden="true"
+            onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = ""; }}
+          />
         </div>
       ) : (
-        <div
-          className="drop-zone"
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files[0]); }}
-          onClick={() => !uploading && inputRef.current?.click()}
-        >
-          {uploading ? (
-            <div className="upload-progress">
-              <Loader size={20} className="spin" />
-              <span>{field.reader ? "Checking your document…" : `Uploading… ${progress}%`}</span>
-              <div className="progress-bar"><div className="progress-fill" style={{ width: `${progress}%` }} /></div>
-            </div>
-          ) : (
-            <div className="drop-content">
-              <Upload size={18} />
-              <span>Drop file here or <strong>click to browse</strong></span>
-              <span className="accepted-types">{field.accept.replace(/\./g, "").toUpperCase()}</span>
-              <span className="size-limit-note">Max file size: 25 MB</span>
-            </div>
-          )}
-        </div>
+        <DropArea field={field} hintId={hintId} onFiles={pickFiles} disabled={uploading} prompt="Upload document" />
       )}
 
-      <ReadStatus status={readStatus} error={read.error} />
+      {field.pageHint && !isUploaded && !uploading && <p className="doc-card__hint">{field.pageHint}</p>}
+
+      {!uploading && <ReadStatus status={readStatus} error={read.error} />}
 
       {error && (
-        <div className={`upload-error${rejected ? " upload-rejected" : ""}`} role="alert">
-          {rejected ? <ShieldAlert size={14} /> : <AlertCircle size={13} />}
-          <span>
-            {rejected && <strong>Not uploaded. </strong>}
-            {error}
-          </span>
-          <button className="error-dismiss" onClick={() => { setError(""); setRejected(false); }} aria-label="Dismiss">×</button>
+        <div className={`doc-alert${rejected ? " doc-alert--rejected" : ""}`} role="alert" id={errorId}>
+          {rejected ? <ShieldAlert size={16} aria-hidden="true" /> : <CircleAlert size={16} aria-hidden="true" />}
+          <div className="doc-alert__body">
+            <strong>{rejected ? "Not uploaded" : invalid ? "File not accepted" : isUploaded ? "Replacement not uploaded" : "Upload didn't finish"}</strong>
+            <span>{error}</span>
+            {rejected && (
+              <span className="doc-alert__help">Make sure the document is clear, fully visible and matches “{splitLabel(field.label).title}”.</span>
+            )}
+            <div className="doc-alert__actions">
+              {retryFile && (
+                <button type="button" className="doc-link-btn" onClick={() => handleFile(retryFile)}>
+                  <RefreshCw size={13} aria-hidden="true" /> Try again
+                </button>
+              )}
+              {isUploaded && (
+                <button type="button" className="doc-link-btn" onClick={() => replaceRef.current?.click()}>
+                  Choose another file
+                </button>
+              )}
+            </div>
+          </div>
+          <button type="button" className="doc-alert__close" onClick={() => { setError(""); setRejected(false); setInvalid(false); setRetryFile(null); }} aria-label="Dismiss message">
+            <X size={14} aria-hidden="true" />
+          </button>
         </div>
       )}
 
-      <input ref={inputRef} type="file" accept={field.accept} style={{ display: "none" }} onChange={(e) => { handleFile(e.target.files[0]); e.target.value = ""; }} />
-      <div className="rename-hint">Will be saved as: <strong>{field.rename}.ext</strong></div>
-    </div>
+      <p className="doc-card__foot">Saved as <span>{field.rename}.ext</span></p>
+    </article>
   );
 }
 
-// ── Multi-file upload box (for fields with field.multiple = true) ──────────────
-function MultiUploadBox({ field, studentName, studentIdentifier, subFolder, onUploaded, uploadedFiles, extraction, onExtracted }) {
-  const [dragging, setDragging] = useState(false);
-  const [queue, setQueue]       = useState(() => {
+const hasValue = (v) => v !== undefined && v !== null && String(v).trim() !== "";
+
+// For two-page IDs: which pages are covered. A page counts once the reader
+// found a detail printed only on it, or once every page has a file.
+function pageStates(field, extraction, doneCount) {
+  if (!field.pages) return null;
+  const flat = extraction?.flat;
+  if (flat) {
+    return field.pages.map((p) => {
+      const readIt = p.readKeys.some((k) => hasValue(flat[k]));
+      return { ...p, state: readIt ? "read" : doneCount >= field.pages.length ? "uploaded" : "missing" };
+    });
+  }
+  // Nothing was read (e.g. a Word file): we only know how many pages exist.
+  return null;
+}
+
+// ── Multi-file upload card (for fields with field.multiple = true) ───────────
+function MultiUploadBox({ anchorId, field, studentName, studentIdentifier, subFolder, onUploaded, uploadedFiles, extraction, onExtracted }) {
+  const [queue, setQueue] = useState(() => {
     // restore already-uploaded files from uploadedFiles
     return Object.keys(uploadedFiles)
       .filter((k) => (k === field.id || k.startsWith(field.id + "_")) && uploadedFiles[k])
@@ -275,26 +514,31 @@ function MultiUploadBox({ field, studentName, studentIdentifier, subFolder, onUp
   });
   const [read, setRead]   = useState({ status: null, error: "" });
   const [limitMsg, setLimitMsg] = useState("");
-  const inputRef = useRef(null);
   const queueRef = useRef(queue);
   useEffect(() => { queueRef.current = queue; }, [queue]);
+  const previews = usePreviewUrls();
+  const titleId = useId();
+  const hintId = useId();
 
   const maxFiles = field.maxFiles || Infinity;
   const readStatus = read.status || (queue.some((q) => q.status === "done") ? statusFromExtraction(extraction) : null);
+
+  const patch = (slotKey, change) =>
+    setQueue((q) => q.map((item) => (item.key === slotKey ? { ...item, ...change } : item)));
 
   // Returns "done" | "rejected" | "error".
   const uploadFile = async (file, slotKey) => {
     const ext = file.name.split(".").pop().toLowerCase();
     if (!getAllowedExts(field).includes(ext)) {
-      setQueue((q) => q.map((item) => item.key === slotKey ? { ...item, status: "error", error: `Invalid type. Allowed: ${field.accept}` } : item));
+      patch(slotKey, { status: "error", invalid: true, error: `This file type isn't accepted. Please choose a ${formatTypes(field)} file.` });
       return "error";
     }
     if (file.size > MAX_BYTES) {
-      setQueue((q) => q.map((item) => item.key === slotKey ? { ...item, status: "error", error: "File too large. Max 25 MB." } : item));
+      patch(slotKey, { status: "error", invalid: true, error: `This file is ${formatBytes(file.size)} — the limit is ${MAX_LABEL}.` });
       return "error";
     }
 
-    setQueue((q) => q.map((item) => item.key === slotKey ? { ...item, status: "uploading", progress: 0 } : item));
+    patch(slotKey, { status: "uploading", progress: 0, error: "", file });
     const compressed = await compressImage(file);
     const willRead   = canRead(field, compressed);
     const rename     = slotKey === field.id ? field.rename : `${field.rename}_${slotKey.split("_").pop()}`;
@@ -307,18 +551,20 @@ function MultiUploadBox({ field, studentName, studentIdentifier, subFolder, onUp
         subFolder,
         fileName: rename,
         file: compressed,
-        onProgress: (p) =>
-          setQueue((q) => q.map((item) => item.key === slotKey ? { ...item, progress: p } : item)),
+        onProgress: (p) => patch(slotKey, { progress: p }),
         skipOcr: willRead && !field.keepOcr,
       });
     } catch (e) {
       const status = e.rejected ? "rejected" : "error";
-      setQueue((q) => q.map((item) => item.key === slotKey ? { ...item, status, error: e.message || "Upload failed." } : item));
+      patch(slotKey, { status, error: friendlyError(e) });
       return status;
     }
 
     const record = uploadRecord(result);
-    const markDone = (q) => q.map((item) => item.key === slotKey ? { ...item, status: "done", result: record, name: record.name, error: "" } : item);
+    const previewUrl = previews.make(compressed);
+    const markDone = (q) => q.map((item) => item.key === slotKey
+      ? { ...item, status: "done", result: record, name: record.name, error: "", file: null, previewUrl, size: compressed.size }
+      : item);
     queueRef.current = markDone(queueRef.current);
     setQueue(markDone);
     onUploaded(slotKey, record);
@@ -362,7 +608,7 @@ function MultiUploadBox({ field, studentName, studentIdentifier, subFolder, onUp
       const key = idx === 0 ? field.id : `${field.id}_${idx}`;
       if (!used.has(key)) keys.push(key);
     }
-    const newItems = arr.map((file, i) => ({ key: keys[i], name: file.name, status: "pending", progress: 0, result: null, error: "" }));
+    const newItems = arr.map((file, i) => ({ key: keys[i], name: file.name, status: "pending", progress: 0, result: null, error: "", file }));
     queueRef.current = [...queueRef.current, ...newItems];
     setQueue((prev) => [...prev, ...newItems]);
     if (field.reader) {
@@ -375,116 +621,156 @@ function MultiUploadBox({ field, studentName, studentIdentifier, subFolder, onUp
 
   const removeItem = (key) => {
     setLimitMsg("");
-    setQueue((q) => q.filter((item) => item.key !== key));
+    const item = queueRef.current.find((q) => q.key === key);
+    previews.release(item?.previewUrl);
+    queueRef.current = queueRef.current.filter((q) => q.key !== key);
+    setQueue((q) => q.filter((it) => it.key !== key));
     // signal removal to parent by passing null
     onUploaded(key, null);
   };
 
   const doneCount = queue.filter((q) => q.status === "done").length;
+  const busy = queue.some((q) => q.status === "uploading" || q.status === "pending");
+  const failed = queue.filter((q) => q.status === "rejected" || q.status === "error");
   const atLimit = queue.length >= maxFiles;
 
+  const pageTotal = field.pages?.length || 0;
+  const pages = pageStates(field, readStatus ? extraction : null, doneCount);
+  const pagesCovered = pageTotal
+    ? (pages ? pages.every((p) => p.state !== "missing") : doneCount >= pageTotal)
+    : true;
+
+  let badge = null;
+  let badgeText;
+  if (busy) badge = field.reader ? "checking" : "uploading";
+  else if (doneCount === 0 && failed.length) badge = failed.some((f) => f.status === "rejected") ? "rejected" : "failed";
+  else if (doneCount > 0 && !pagesCovered) {
+    badge = "pages";
+    badgeText = pages ? "Page needed" : `${doneCount} of ${pageTotal} pages`;
+  } else if (doneCount > 0) {
+    badge = badgeForRead(readStatus);
+    if (badge === "uploaded" && !field.reader && doneCount > 1) badgeText = `${doneCount} files`;
+  }
+
+  const state = busy ? "busy" : failed.length && !doneCount ? "error" : doneCount ? (badge === "pages" || badge === "review" ? "attention" : "done") : "empty";
+
+  const prompt = pageTotal
+    ? (doneCount > 0 ? "Add the next page" : `Upload ${field.pages.map((p) => p.label.toLowerCase()).join(" and ")}`)
+    : (queue.length > 0 ? "Add more files" : "Upload documents");
+
   return (
-    <div className={["upload-box", doneCount > 0 ? "uploaded" : "", dragging ? "dragging" : ""].filter(Boolean).join(" ")}>
-      <div className="upload-box-header">
-        <div className="upload-label">
-          <span>{field.label}</span>
-          {!field.optional && <span className="required-dot" title="Required">*</span>}
-          {field.optional && <span className="optional-tag">Optional</span>}
-          {field.reader && <span className="reader-tag" title="Your details are read from this document automatically"><Sparkles size={10} /> Auto-fill</span>}
-        </div>
-        {doneCount > 0 && (
-          <div className="upload-status-badge">
-            <CheckCircle size={13} />
-            <span>{doneCount} file{doneCount > 1 ? "s" : ""} uploaded</span>
-          </div>
-        )}
-      </div>
+    <article id={anchorId} tabIndex={anchorId ? -1 : undefined} className={`doc-card is-${state}`} aria-labelledby={titleId}>
+      <CardHeader field={field} titleId={titleId} badge={badge} badgeText={badgeText} />
 
-      {field.pageHint && <p className="page-hint">{field.pageHint}</p>}
+      {pageTotal > 0 && (
+        <ul className="doc-pages" aria-label="Pages">
+          {pages
+            ? pages.map((p) => (
+                <li key={p.label} className={`doc-page is-${p.state}`}>
+                  {p.state === "missing"
+                    ? <Circle size={15} aria-hidden="true" />
+                    : <CircleCheck size={15} aria-hidden="true" />}
+                  <span className="doc-page__text">
+                    <span className="doc-page__label">{p.label}</span>
+                    <span className="doc-page__state">
+                      {p.state === "read" ? "Details read" : p.state === "uploaded" ? "Uploaded" : p.detail ? `Still needed — has your ${p.detail}` : "Still needed"}
+                    </span>
+                  </span>
+                </li>
+              ))
+            : field.pages.map((p) => {
+                // Nothing was read, so we can't tell which page a file is —
+                // only whether there are enough files for every page.
+                const all = doneCount >= pageTotal;
+                return (
+                  <li key={p.label} className={`doc-page is-${all ? "uploaded" : "unknown"}`}>
+                    {all ? <CircleCheck size={15} aria-hidden="true" /> : <Circle size={15} aria-hidden="true" />}
+                    <span className="doc-page__text">
+                      <span className="doc-page__label">{p.label}</span>
+                      <span className="doc-page__state">{all ? "Uploaded" : p.detail ? `Has your ${p.detail}` : "Needed"}</span>
+                    </span>
+                  </li>
+                );
+              })}
+          {!pages && doneCount > 0 && doneCount < pageTotal && (
+            <li className="doc-page doc-page--note">
+              {doneCount} of {pageTotal} pages uploaded — make sure both pages are included.
+            </li>
+          )}
+        </ul>
+      )}
+      {!pageTotal && field.pageHint && <p className="doc-card__hint">{field.pageHint}</p>}
 
-      {/* File queue list */}
       {queue.length > 0 && (
-        <div className="multi-queue">
+        <ul className="doc-files">
           {queue.map((item) => (
-            <div key={item.key} className={`queue-item queue-${item.status}`}>
-              <FileText size={13} />
-              <span className="queue-name">{item.name}</span>
-              {item.status === "pending" && field.reader && <span className="queue-waiting">Waiting…</span>}
-              {item.status === "uploading" && field.reader && (
-                <span className="queue-waiting"><Loader size={12} className="spin" /> Checking…</span>
-              )}
-              {item.status === "uploading" && !field.reader && (
-                <div className="queue-progress-wrap">
-                  <Loader size={12} className="spin" />
-                  <div className="queue-bar"><div className="queue-fill" style={{ width: `${item.progress || 0}%` }} /></div>
-                </div>
-              )}
-              {item.status === "done" && (
-                <>
-                  <CheckCircle size={12} className="queue-done-icon" />
-                  {item.result?.webViewLink && (
-                    <a href={item.result.webViewLink} target="_blank" rel="noreferrer" className="view-link" style={{ fontSize: 11 }}>
-                      <Eye size={11} />
-                    </a>
-                  )}
-                </>
-              )}
-              {item.status === "error" && <AlertCircle size={12} className="queue-err-icon" title={item.error} />}
-              {item.status === "rejected" && <ShieldAlert size={13} className="queue-err-icon" title={item.error} />}
-              <button className="queue-remove" onClick={() => removeItem(item.key)} title="Remove">
-                <X size={12} />
-              </button>
-            </div>
+            <li key={item.key} className={`doc-file doc-file--row is-${item.status}`}>
+              <FileThumb previewUrl={item.previewUrl} name={item.name} />
+              <div className="doc-file__body">
+                <span className="doc-file__name" title={item.name}>{item.name}</span>
+                <span className="doc-file__meta">
+                  {item.status === "pending" && "Waiting…"}
+                  {item.status === "uploading" && (field.reader ? "Checking…" : `Uploading… ${item.progress || 0}%`)}
+                  {item.status === "done" && <>Saved{item.size ? ` · ${formatBytes(item.size)}` : ""}</>}
+                  {item.status === "error" && <span className="doc-file__err">Not uploaded</span>}
+                  {item.status === "rejected" && <span className="doc-file__err">Not accepted</span>}
+                </span>
+                {item.status === "uploading" && !field.reader && (
+                  <div className="doc-bar doc-bar--thin" aria-hidden="true"><span style={{ width: `${item.progress || 0}%` }} /></div>
+                )}
+              </div>
+              <div className="doc-file__actions">
+                {item.status === "uploading" && <LoaderCircle size={16} className="doc-spin doc-file__busy" aria-label="Uploading" />}
+                {item.status === "done" && item.result?.webViewLink && (
+                  <a href={item.result.webViewLink} target="_blank" rel="noreferrer" className="doc-icon-btn" aria-label={`View ${item.name} (opens in a new tab)`} title="View">
+                    <Eye size={16} aria-hidden="true" />
+                  </a>
+                )}
+                {item.status === "error" && item.file && !item.invalid && (
+                  <button type="button" className="doc-icon-btn" onClick={() => uploadFile(item.file, item.key)} aria-label={`Try uploading ${item.name} again`} title="Try again">
+                    <RefreshCw size={16} aria-hidden="true" />
+                  </button>
+                )}
+                {item.status !== "uploading" && item.status !== "pending" && (
+                  <button type="button" className="doc-icon-btn doc-icon-btn--danger" onClick={() => removeItem(item.key)} aria-label={`Remove ${item.name}`} title="Remove">
+                    <X size={16} aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
-      {/* Drop zone for adding more files */}
       {!atLimit && (
-        <div
-          className="drop-zone"
-          style={{ marginTop: queue.length > 0 ? 8 : 0 }}
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}
-          onClick={() => inputRef.current?.click()}
-        >
-          <div className="drop-content">
-            <Upload size={18} />
-            <span>
-              {queue.length > 0 && field.maxFiles ? <>Add the <strong>next page</strong></> : <>Drop files here or <strong>click to browse</strong></>}
-            </span>
-            <span className="accepted-types">
-              {field.accept.replace(/\./g, "").toUpperCase()} · {field.maxFiles ? `Up to ${field.maxFiles} files` : "Multiple files OK"}
-            </span>
-            <span className="size-limit-note">Max 25 MB per file</span>
-          </div>
-        </div>
+        <DropArea field={field} hintId={hintId} onFiles={addFiles} multiple prompt={prompt} />
       )}
 
-      {queue.filter((item) => item.status === "rejected" || item.status === "error").map((item) => (
-        <div key={`err-${item.key}`} className={`upload-error${item.status === "rejected" ? " upload-rejected" : ""}`} role="alert">
-          {item.status === "rejected" ? <ShieldAlert size={14} /> : <AlertCircle size={13} />}
-          <span>
-            <strong>{item.status === "rejected" ? `${item.name} was not uploaded. ` : `${item.name}: `}</strong>
-            {item.error}
-          </span>
+      {failed.map((item) => (
+        <div key={`err-${item.key}`} className={`doc-alert${item.status === "rejected" ? " doc-alert--rejected" : ""}`} role="alert">
+          {item.status === "rejected" ? <ShieldAlert size={16} aria-hidden="true" /> : <CircleAlert size={16} aria-hidden="true" />}
+          <div className="doc-alert__body">
+            <strong>{item.status === "rejected" ? `${item.name} was not uploaded` : `${item.name}`}</strong>
+            <span>{item.error}</span>
+          </div>
         </div>
       ))}
-      {limitMsg && <div className="upload-error"><AlertCircle size={13} /><span>{limitMsg}</span></div>}
-      <ReadStatus status={readStatus} error={read.error} />
+      {limitMsg && (
+        <p className="doc-note doc-note--warning"><CircleAlert size={14} aria-hidden="true" /><span>{limitMsg}</span></p>
+      )}
+      {!busy && <ReadStatus status={readStatus} error={read.error} />}
 
-      <input ref={inputRef} type="file" accept={field.accept} multiple style={{ display: "none" }} onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
-      <div className="rename-hint">Will be saved as: <strong>{field.rename}_N.ext</strong></div>
-    </div>
+      <p className="doc-card__foot">Saved as <span>{field.rename}_N.ext</span></p>
+    </article>
   );
 }
 
 // ── Public export — routes to single or multi based on field.multiple ──────────
-export default function FileUploadBox({ field, studentName, studentIdentifier, subFolder, onUploaded, uploadedFiles = {}, extraction, onExtracted }) {
+export default function FileUploadBox({ anchorId, field, studentName, studentIdentifier, subFolder, onUploaded, uploadedFiles = {}, extraction, onExtracted }) {
   const Box = field.multiple ? MultiUploadBox : SingleUploadBox;
   return (
     <Box
+      anchorId={anchorId}
       field={field}
       studentName={studentName}
       studentIdentifier={studentIdentifier}

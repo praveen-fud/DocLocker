@@ -167,19 +167,28 @@ export async function uploadDocument({ studentName, studentIdentifier, subFolder
 // ── Save student metadata ─────────────────────────────────────────────────────
 // Staff path: fire-and-forget (folder already exists, JWT auth).
 // Student path: returns a Promise so callers can await folder creation.
-export function saveStudentMeta(studentName, meta, studentIdentifier = '') {
+// throwOnError: opt in to a Promise that settles with the real outcome (and
+// rejects on failure) so the caller can show an honest "Saved" / "Couldn't
+// save" state. Without it, failures are logged and swallowed as before.
+export function saveStudentMeta(studentName, meta, studentIdentifier = '', { throwOnError = false } = {}) {
   const hasAdminToken = !!getAuthHeaders().Authorization;
+  const swallow = (label) => (e) => {
+    console.warn(`[DriveSync] ${label} failed${throwOnError ? '' : ' silently'}:`, e.message);
+    if (throwOnError) throw e;
+  };
   if (hasAdminToken) {
     const folderKey = buildFolderKey(studentName, studentIdentifier);
-    apiPost('/api/meta', { studentName: folderKey, metaJson: JSON.stringify(meta) })
-      .catch((e) => console.warn('[DriveSync] saveMeta failed silently:', e.message));
-    return Promise.resolve();
+    const req = apiPost('/api/meta', { studentName: folderKey, metaJson: JSON.stringify(meta) })
+      .catch(swallow('saveMeta'));
+    return throwOnError ? req : Promise.resolve();
   } else {
     const id = (studentIdentifier || '').trim();
     const name = (studentName || '').trim();
-    if (!id || !name) return Promise.resolve();
+    if (!id || !name) {
+      return throwOnError ? Promise.reject(new Error('Missing student name or identifier')) : Promise.resolve();
+    }
     return apiPost('/api/student-meta', { studentName: name, studentIdentifier: id, metaJson: JSON.stringify(meta) })
-      .catch((e) => console.warn('[DriveSync] student-meta failed silently:', e.message));
+      .catch(swallow('student-meta'));
   }
 }
 
