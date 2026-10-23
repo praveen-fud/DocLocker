@@ -67,6 +67,7 @@ import "./Admin.css";
 import DocumentReader from "./DocumentReader";
 import { buildIdentityReport } from "../../utils/identityCheck";
 import { buildDocumentChecks } from "../../utils/documentChecks";
+import { getApplicationId } from "../../utils/applicationId";
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
 
@@ -1692,8 +1693,9 @@ function FilesTab({ student }) {
   // getAllUploadedFiles reads. Listed separately here so staff can actually
   // find them without leaving the app to browse Drive by hand.
   const generated = [
-    student.summaryPdf && { key: "summary", name: "Application Form", tag: "Auto-generated", ...student.summaryPdf },
-    student.eligibilityPdf && { key: "eligibility", name: "Eligibility Report", tag: "Auto-generated", ...student.eligibilityPdf },
+    // Display name after the spread so it wins over the stored file name
+    student.summaryPdf && { key: "summary", tag: "Auto-generated", ...student.summaryPdf, name: "Application Form" },
+    student.eligibilityPdf && { key: "eligibility", tag: "Auto-generated", ...student.eligibilityPdf, name: "Eligibility Report" },
   ].filter(Boolean);
 
   if (!files.length && !generated.length) {
@@ -1713,7 +1715,9 @@ function FilesTab({ student }) {
       {viewing && (
         <DocumentViewer
           file={{ id: viewing.id || viewing.fileId, name: viewing.name }}
-          subtitle={[(student.name || "").split("__")[0], viewing.section || viewing.tag].filter(Boolean).join(" — ")}
+          // Every file of this student, so the viewer can step through them
+          files={[...generated, ...files].map((f) => ({ id: f.id || f.fileId, name: f.name })).filter((f) => f.id)}
+          subtitle={[(student.name || "").split("__")[0], getApplicationId(student), viewing.section || viewing.tag].filter(Boolean).join(" · ")}
           onClose={() => setViewing(null)}
         />
       )}

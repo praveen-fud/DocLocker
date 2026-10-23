@@ -8,6 +8,7 @@ import { useStudent } from "../../context/StudentContext";
 import { getAllStudentsFromDrive, getStudentFiles, changeOwnPassword, updateLoanStatus, uploadSanctionLetter, downloadFile, downloadAllFiles } from "../../utils/driveApi";
 import DocumentViewer from "../../components/DocumentViewer/DocumentViewer";
 import { getBankLogo } from "../../utils/bankOptions";
+import { getApplicationId } from "../../utils/applicationId";
 import "./BankerPortal.css";
 
 const LOAN_STATUS_CONFIG = {
@@ -435,7 +436,9 @@ export default function BankerPortal() {
       {previewFile && (
         <DocumentViewer
           file={previewFile}
-          subtitle={[(openStudent?.name || "").split("__")[0], previewFile.group?.replace(/_/g, " ")].filter(Boolean).join(" — ")}
+          // The viewable files of the same folder, so the viewer can step through them
+          files={(groups[previewFile.group] || []).filter((f) => PREVIEWABLE.has(f.mimeType))}
+          subtitle={[(openStudent?.name || "").split("__")[0], openStudent && getApplicationId(openStudent), previewFile.group?.replace(/_/g, " ")].filter(Boolean).join(" · ")}
           onClose={() => setPreviewFile(null)}
         />
       )}
