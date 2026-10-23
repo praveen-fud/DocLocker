@@ -435,7 +435,7 @@ export default function BankerPortal() {
       {previewFile && (
         <DocumentViewer
           file={previewFile}
-          subtitle={[openStudent?.name, previewFile.group?.replace(/_/g, " ")].filter(Boolean).join(" — ")}
+          subtitle={[(openStudent?.name || "").split("__")[0], previewFile.group?.replace(/_/g, " ")].filter(Boolean).join(" — ")}
           onClose={() => setPreviewFile(null)}
         />
       )}

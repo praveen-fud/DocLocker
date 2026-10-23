@@ -1713,7 +1713,7 @@ function FilesTab({ student }) {
       {viewing && (
         <DocumentViewer
           file={{ id: viewing.id || viewing.fileId, name: viewing.name }}
-          subtitle={[student.name, viewing.section || viewing.tag].filter(Boolean).join(" — ")}
+          subtitle={[(student.name || "").split("__")[0], viewing.section || viewing.tag].filter(Boolean).join(" — ")}
           onClose={() => setViewing(null)}
         />
       )}

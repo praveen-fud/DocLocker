@@ -4,6 +4,11 @@ import useFileObjectUrl from "../../hooks/useFileObjectUrl";
 import { downloadFile } from "../../utils/driveApi";
 import "./DocumentViewer.css";
 
+// Ask the browser's PDF viewer to fit the page to the frame's width and keep
+// the thumbnail sidebar closed, so a page never scrolls sideways. Chrome and
+// Edge read view/navpanes, Firefox reads zoom/pagemode; unknown keys are ignored.
+const PDF_VIEW_PARAMS = "#view=FitH&navpanes=0&zoom=page-width&pagemode=none";
+
 // In-app document viewer for staff and bankers. The document never leaves
 // DocLocker as a link: it's fetched privately and shown here, and
 // "Download" uses a one-time link that only works for this file, once.
@@ -58,7 +63,7 @@ export default function DocumentViewer({ file, subtitle, onClose }) {
       </div>
     );
   } else if (url && type === "application/pdf") {
-    body = <iframe src={url} title={file.name} className="dv-frame" />;
+    body = <iframe src={`${url}${PDF_VIEW_PARAMS}`} title={file.name} className="dv-frame" />;
   } else if (url) {
     body = <img src={url} alt={file.name} className="dv-image" />;
   } else {
