@@ -517,7 +517,7 @@ export default function BankerPortal() {
   const sidebarHidden = isMobile && !navOpen;
 
   return (
-    <div className="bk-page">
+    <div className="bk-page theme-orbit">
       {/* ── Mobile top bar ── */}
       <header className="bk-topbar">
         <button
@@ -544,7 +544,7 @@ export default function BankerPortal() {
         inert={sidebarHidden || undefined}
       >
         <div className="bk-sidebar-top">
-          <BrandLogo size="sm" />
+          <BrandLogo size="sm" tone="dark" />
           <button type="button" className="bk-icon-btn bk-sidebar-close" onClick={() => setNavOpen(false)} aria-label="Close menu">
             <X size={20} />
           </button>

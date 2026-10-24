@@ -10,9 +10,9 @@
   min-width: 0;
   padding: 16px;
   background: var(--surface);
-  border: 1px solid #e3eaf5;
-  border-radius: 14px;
-  box-shadow: 0 1px 2px rgba(15, 27, 61, 0.03), 0 6px 18px rgba(15, 27, 61, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
   /* Jumped to from the dashboard: clear the sticky header and bottom bars */
   scroll-margin: calc(var(--ps-header-h, 64px) + 16px) 0 calc(var(--ps-bottom-offset, 0px) + 96px);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
@@ -26,17 +26,24 @@
 @keyframes doc-spotlight {
   0%, 40% {
     border-color: var(--brand-primary);
-    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.22);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-primary) 22%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .doc-card.is-spotlight {
+    animation: none;
+    border-color: var(--brand-primary);
   }
 }
 .doc-card:hover {
   border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
 }
 .doc-card.is-done {
-  border-color: rgba(22, 163, 74, 0.28);
+  border-color: rgba(22, 163, 74, 0.34);
 }
 .doc-card.is-attention {
-  border-color: rgba(217, 119, 6, 0.38);
+  border-color: rgba(217, 119, 6, 0.45);
 }
 .doc-card.is-error {
   border-color: rgba(220, 38, 38, 0.4);
@@ -61,20 +68,24 @@
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: #e9f0ff;
+  background: var(--surface-blue);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-primary) 12%, transparent);
   color: var(--brand-primary);
   flex-shrink: 0;
 }
 .doc-card.is-done .doc-card__icon {
-  background: #e2f6ee;
-  color: #0c7f5a;
+  background: var(--success-bg);
+  box-shadow: none;
+  color: var(--success-text);
 }
 .doc-card.is-attention .doc-card__icon {
   background: var(--warning-bg);
+  box-shadow: none;
   color: var(--warning-text);
 }
 .doc-card.is-error .doc-card__icon {
   background: var(--error-bg);
+  box-shadow: none;
   color: var(--error-text);
 }
 .doc-card__titles {
@@ -89,17 +100,13 @@
   color: var(--text-primary);
   overflow-wrap: anywhere;
 }
-.doc-card__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-}
 .doc-card__sub {
-  margin-top: 6px;
-  font-size: 12px;
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.4;
   color: var(--text-secondary);
 }
+.doc-card__sub.is-ai { display: inline-flex; align-items: center; gap: 5px; color: var(--orbit-iris, #6a47c2); }
 .doc-card__status {
   grid-area: status;
   min-height: 0;
@@ -120,27 +127,6 @@
   }
 }
 
-.doc-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 18px;
-  color: var(--text-secondary);
-  background: var(--surface-muted);
-}
-.doc-chip--required {
-  color: var(--blue-dark);
-  background: var(--info-bg);
-}
-.doc-chip--ai {
-  color: #5b3fc4;
-  background: #f1edff;
-}
-
 /* ── Status badge ───────────────────────────────────────── */
 .doc-badge {
   display: inline-flex;
@@ -158,77 +144,65 @@
 .doc-badge--error   { color: var(--error-text);   background: var(--error-bg); }
 .doc-badge--info    { color: var(--blue-dark);    background: var(--info-bg); }
 
-/* ── Drop area ──────────────────────────────────────────── */
+/* ── Drop area: Upload + Camera ─────────────────────────── */
 .doc-drop {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-height: 96px;
-  padding: 14px 12px;
-  text-align: center;
+  min-height: 64px;
+  padding: 10px;
   background: var(--surface-subtle);
   border: 1.5px dashed var(--border-strong);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+  border-radius: 12px;
   transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
-.doc-drop:hover,
 .doc-drop.is-dragging {
   background: var(--surface-blue);
+  border-style: solid;
   border-color: var(--blue-light);
 }
-.doc-drop.is-dragging {
-  border-style: solid;
-  box-shadow: inset 0 0 0 1px var(--blue-light);
-}
-.doc-drop:focus-visible {
-  outline: 2px solid var(--border-focus);
-  outline-offset: 2px;
-}
-.doc-drop.is-disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-.doc-drop__icon {
-  color: var(--brand-primary);
-  margin-bottom: 2px;
-}
+.doc-drop.is-disabled { opacity: 0.6; }
 .doc-drop__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 14px;
   font-weight: 600;
   color: var(--brand-primary);
 }
-.doc-drop__hint {
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--text-muted);
-}
-
-/* Camera capture — only offered where there's a camera to point */
-.doc-camera {
-  display: none;
+.doc-drop__actions { display: flex; gap: 8px; width: 100%; }
+.doc-drop__btn {
+  flex: 1;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   min-height: 44px;
-  margin-top: -4px;
-  padding: 10px 14px;
-  font: 600 13.5px/1 var(--font-body);
-  color: var(--blue-dark);
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-.doc-camera:hover:not(:disabled) {
+  padding: 0 14px;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 22%, transparent);
+  border-radius: 12px;
+  /* Tonal, not filled: the wizard's Next / Submit is the page's one primary action */
   background: var(--surface-blue);
+  box-shadow: none;
+  font: 600 14px/1 var(--font-body);
+  color: var(--orbit-sapphire-dark, var(--brand-primary-dark));
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast), transform 80ms ease;
 }
-@media (pointer: coarse) {
-  .doc-camera {
-    display: inline-flex;
-  }
+.doc-drop__btn:hover:not(:disabled) { background: color-mix(in srgb, var(--brand-primary) 14%, white); }
+.doc-drop__btn:active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
+.doc-drop__btn.is-camera { background: var(--surface); border-color: var(--border-strong); box-shadow: none; color: var(--text-primary); }
+.doc-drop__btn.is-camera svg { color: var(--brand-primary); }
+.doc-drop__btn.is-camera:hover:not(:disabled) { background: var(--surface-blue); border-color: var(--blue-light); color: var(--brand-primary); }
+.doc-drop__btn:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+.doc-drop__btn:disabled { cursor: not-allowed; opacity: 0.55; box-shadow: none; }
+/* Narrow cards: stack Upload and Camera rather than let them overflow */
+@container (max-width: 279px) {
+  .doc-drop__actions { flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .doc-drop__btn { transition: none; }
 }
 
 .doc-card__hint {
@@ -268,14 +242,14 @@
   position: relative;
   height: 6px;
   border-radius: 999px;
-  background: rgba(26, 110, 181, 0.14);
+  background: color-mix(in srgb, var(--brand-primary) 14%, transparent);
   overflow: hidden;
 }
 .doc-bar > span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--brand-primary);
+  background: var(--orbit-progress, var(--brand-primary));
   transition: width var(--transition-normal);
 }
 .doc-bar.is-indeterminate > span {
@@ -307,7 +281,7 @@
   padding: 10px;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
 }
 .doc-files {
   display: flex;
@@ -549,17 +523,7 @@
 }
 
 /* ── Footer ─────────────────────────────────────────────── */
-.doc-card__foot {
-  margin-top: auto;
-  padding-top: 2px;
-  font-size: 11.5px;
-  color: var(--text-muted);
-  overflow-wrap: anywhere;
-}
-.doc-card__foot span {
-  font-weight: 600;
-  color: var(--text-secondary);
-}
+
 
 .doc-spin {
   animation: doc-spin 0.9s linear infinite;
@@ -567,3 +531,12 @@
 @keyframes doc-spin {
   to { transform: rotate(360deg); }
 }
+
+/* Card grid — column count follows the space the step actually has. */
+.doc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.doc-grid[hidden] { display: none; }

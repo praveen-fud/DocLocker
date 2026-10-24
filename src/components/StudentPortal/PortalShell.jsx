@@ -1,9 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
 import {
-  House,
-  FileText,
-  UserRound,
-  BadgeIndianRupee,
   CircleHelp,
   LogOut,
   ChevronDown,
@@ -13,6 +9,7 @@ import {
   CircleDot,
 } from "lucide-react";
 import BrandLogo from "../BrandLogo/BrandLogo";
+import { useBrand } from "../../context/BrandContext";
 import { getApplicationId } from "../../utils/applicationId";
 import { initials } from "./studentRecord";
 import "./PortalShell.css";
@@ -62,16 +59,6 @@ export function SaveIndicator({ status, savedAt, onRetry }) {
   }
   return null;
 }
-
-const TABS = [
-  { id: "home",      label: "My Application", short: "Home",        icon: House },
-  { id: "documents", label: "Documents",      short: "Documents",   icon: FileText },
-  { id: "profile",   label: "Profile",        short: "Profile",     icon: UserRound },
-  { id: "loan",      label: "Loan Status",    short: "Loan Status", icon: BadgeIndianRupee },
-  { id: "help",      label: "Help",           short: "Help",        icon: CircleHelp },
-];
-// Phones: Help moves into the account menu.
-const BOTTOM_TABS = ["home", "documents", "loan", "profile"].map((id) => TABS.find((t) => t.id === id));
 
 function UserMenu({ student, onHelp, onSignOut }) {
   const [open, setOpen] = useState(false);
@@ -135,6 +122,7 @@ function UserMenu({ student, onHelp, onSignOut }) {
 
 // Student portal chrome: top navigation (bottom tab bar on phones).
 export default function PortalShell({
+  tabs = [],
   view,
   onViewChange,
   reviewCount,
@@ -145,21 +133,25 @@ export default function PortalShell({
   onSignOut,
   children,
 }) {
-  const badgeFor = (id) => (id === "profile" && reviewCount > 0 ? reviewCount : null);
+  const brand = useBrand();
+  const badgeFor = (id) => (id === "application" && reviewCount > 0 ? reviewCount : null);
+  // Phones: Help moves into the account menu.
+  const bottomTabs = tabs.filter((t) => t.id !== "help");
   const badgeLabel = `${reviewCount} detail${reviewCount === 1 ? "" : "s"} to check`;
 
   return (
-    <div className="ps-app">
+    <div className="ps-app theme-orbit">
       <a href="#ps-main" className="ps-skip">Skip to content</a>
 
       <header className="ps-top">
         <div className="ps-top__inner">
-          <button type="button" className="ps-top__brand" onClick={() => onViewChange("home")} aria-label="DocLocker — My Application">
+          <button type="button" className="ps-top__brand" onClick={() => onViewChange("home")} aria-label={`${brand.name || "Home"}, home`}>
             <BrandLogo size="md" />
           </button>
 
+          {tabs.length > 0 && (
           <nav className="ps-tabs" aria-label="Portal">
-            {TABS.map((t) => {
+            {tabs.map((t) => {
               const active = view === t.id;
               const badge = badgeFor(t.id);
               return (
@@ -177,6 +169,7 @@ export default function PortalShell({
               );
             })}
           </nav>
+          )}
 
           <div className="ps-top__right">
             <SaveIndicator status={saveStatus} savedAt={savedAt} onRetry={onRetrySave} />
@@ -185,12 +178,13 @@ export default function PortalShell({
         </div>
       </header>
 
-      <main id="ps-main" className="ps-content" tabIndex={-1}>
+      <main id="ps-main" className={`ps-content${tabs.length ? "" : " no-tabs"}`} tabIndex={-1}>
         {children}
       </main>
 
+      {bottomTabs.length > 0 && (
       <nav className="ps-bottom" aria-label="Portal">
-        {BOTTOM_TABS.map((t) => {
+        {bottomTabs.map((t) => {
           const Icon = t.icon;
           const active = view === t.id;
           const badge = badgeFor(t.id);
@@ -212,6 +206,7 @@ export default function PortalShell({
           );
         })}
       </nav>
+      )}
     </div>
   );
 }

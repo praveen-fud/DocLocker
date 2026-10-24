@@ -13,11 +13,13 @@ import {
   ShieldCheck,
   RefreshCw,
   Camera,
+  Upload,
   Clock3,
   Info,
   Circle,
 } from "lucide-react";
 import { uploadDocument } from "../../utils/driveApi";
+import CameraCapture from "../CameraCapture/CameraCapture";
 import { iconFor, splitLabel, statusFromExtraction } from "./docMeta";
 import "./FileUploadBox.css";
 
@@ -186,19 +188,11 @@ function CardHeader({ field, titleId, badge, badgeText }) {
       </span>
       <div className="doc-card__titles">
         <h4 className="doc-card__title" id={titleId}>{title}</h4>
-        <div className="doc-card__meta">
-          {field.optional ? (
-            <span className="doc-chip">Optional</span>
-          ) : (
-            <span className="doc-chip doc-chip--required">Required</span>
-          )}
-          {field.reader && (
-            <span className="doc-chip doc-chip--ai" title="Your details are read from this document automatically">
-              <Sparkles size={11} aria-hidden="true" /> Auto-fill
-            </span>
-          )}
-        </div>
-        {note && !field.reader && <p className="doc-card__sub">{note}</p>}
+        {field.reader ? (
+          <p className="doc-card__sub is-ai"><Sparkles size={12} aria-hidden="true" /> Fills in your details</p>
+        ) : note ? (
+          <p className="doc-card__sub">{note}</p>
+        ) : null}
       </div>
       <div className="doc-card__status" aria-live="polite">
         <StatusBadge kind={badge} text={badgeText} />
@@ -207,26 +201,23 @@ function CardHeader({ field, titleId, badge, badgeText }) {
   );
 }
 
-// Drop target + browse + (on touch devices) camera capture.
-function DropArea({ field, onFiles, disabled, multiple, prompt, hintId }) {
+// Drop target with two clear actions: pick a file, or scan it with the
+// camera (in-page camera with a guide frame; the phone's own camera picker
+// when the browser can't use it). File types and size are listed once per
+// step, not on every card — the exact rule only shows up if a file is wrong.
+//   pages: labels still to capture, e.g. ["Front side", "Back side"]
+function DropArea({ field, onFiles, disabled, multiple, prompt, hintId, pages = [] }) {
   const [dragging, setDragging] = useState(false);
+  const [camera, setCamera] = useState(false);
   const inputRef = useRef(null);
   const cameraRef = useRef(null);
+  const title = splitLabel(field.label).title;
   const open = () => { if (!disabled) inputRef.current?.click(); };
 
   return (
     <>
       <div
         className={`doc-drop${dragging ? " is-dragging" : ""}${disabled ? " is-disabled" : ""}`}
-        role="button"
-        tabIndex={disabled ? -1 : 0}
-        aria-label={`${prompt}: ${splitLabel(field.label).title}`}
-        aria-describedby={hintId}
-        aria-disabled={disabled || undefined}
-        onClick={open}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
-        }}
         onDragOver={(e) => { e.preventDefault(); if (!disabled) setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={(e) => {
@@ -235,19 +226,32 @@ function DropArea({ field, onFiles, disabled, multiple, prompt, hintId }) {
           if (!disabled && e.dataTransfer.files?.length) onFiles(e.dataTransfer.files);
         }}
       >
-        <CloudUpload size={22} strokeWidth={1.8} className="doc-drop__icon" aria-hidden="true" />
-        <span className="doc-drop__title">
-          {dragging ? "Drop to upload" : prompt}
-        </span>
-        <span className="doc-drop__hint" id={hintId}>
-          {formatTypes(field)} · Max {MAX_LABEL}{multiple ? " each" : ""}
-          {field.multiple && !field.pages ? (field.maxFiles ? ` · Up to ${field.maxFiles} files` : " · Multiple files OK") : ""}
+        {dragging ? (
+          <span className="doc-drop__title"><CloudUpload size={18} aria-hidden="true" /> Drop to upload</span>
+        ) : (
+          <div className="doc-drop__actions">
+            <button type="button" className="doc-drop__btn" onClick={open} disabled={disabled} aria-describedby={hintId} aria-label={`${prompt}: ${title}`}>
+              <Upload size={16} aria-hidden="true" /> {prompt}
+            </button>
+            {acceptsImages(field) && (
+              <button type="button" className="doc-drop__btn is-camera" onClick={() => setCamera(true)} disabled={disabled} aria-label={`Scan ${title} with your camera`}>
+                <Camera size={16} aria-hidden="true" /> Camera
+              </button>
+            )}
+          </div>
+        )}
+        <span className="sr-only" id={hintId}>
+          {formatTypes(field)}, up to {MAX_LABEL}{multiple ? " each" : ""}.
         </span>
       </div>
-      {acceptsImages(field) && (
-        <button type="button" className="doc-camera" onClick={() => cameraRef.current?.click()} disabled={disabled}>
-          <Camera size={16} aria-hidden="true" /> Take a photo
-        </button>
+      {camera && (
+        <CameraCapture
+          title={title}
+          pages={pages}
+          onClose={() => setCamera(false)}
+          onDone={(files) => { setCamera(false); onFiles(files); }}
+          onFallback={() => { setCamera(false); cameraRef.current?.click(); }}
+        />
       )}
       <input
         ref={inputRef}
@@ -447,7 +451,7 @@ function SingleUploadBox({ anchorId, field, studentName, studentIdentifier, subF
           />
         </div>
       ) : (
-        <DropArea field={field} hintId={hintId} onFiles={pickFiles} disabled={uploading} prompt="Upload document" />
+        <DropArea field={field} hintId={hintId} onFiles={pickFiles} disabled={uploading} prompt="Upload" />
       )}
 
       {field.pageHint && !isUploaded && !uploading && <p className="doc-card__hint">{field.pageHint}</p>}
@@ -482,7 +486,6 @@ function SingleUploadBox({ anchorId, field, studentName, studentIdentifier, subF
         </div>
       )}
 
-      <p className="doc-card__foot">Saved as <span>{field.rename}.ext</span></p>
     </article>
   );
 }
@@ -655,8 +658,11 @@ function MultiUploadBox({ anchorId, field, studentName, studentIdentifier, subFo
   const state = busy ? "busy" : failed.length && !doneCount ? "error" : doneCount ? (badge === "pages" || badge === "review" ? "attention" : "done") : "empty";
 
   const prompt = pageTotal
-    ? (doneCount > 0 ? "Add the next page" : `Upload ${field.pages.map((p) => p.label.toLowerCase()).join(" and ")}`)
-    : (queue.length > 0 ? "Add more files" : "Upload documents");
+    ? (doneCount > 0 ? "Add next page" : "Upload")
+    : (queue.length > 0 ? "Add more" : "Upload");
+  const pagesToScan = pageTotal
+    ? (pages ? pages.filter((p) => p.state === "missing").map((p) => p.label) : field.pages.slice(doneCount).map((p) => p.label))
+    : [];
 
   return (
     <article id={anchorId} tabIndex={anchorId ? -1 : undefined} className={`doc-card is-${state}`} aria-labelledby={titleId}>
@@ -743,7 +749,7 @@ function MultiUploadBox({ anchorId, field, studentName, studentIdentifier, subFo
       )}
 
       {!atLimit && (
-        <DropArea field={field} hintId={hintId} onFiles={addFiles} multiple prompt={prompt} />
+        <DropArea field={field} hintId={hintId} onFiles={addFiles} multiple prompt={prompt} pages={pagesToScan} />
       )}
 
       {failed.map((item) => (
@@ -760,7 +766,6 @@ function MultiUploadBox({ anchorId, field, studentName, studentIdentifier, subFo
       )}
       {!busy && <ReadStatus status={readStatus} error={read.error} />}
 
-      <p className="doc-card__foot">Saved as <span>{field.rename}_N.ext</span></p>
     </article>
   );
 }

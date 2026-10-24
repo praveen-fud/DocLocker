@@ -35,9 +35,11 @@
   position: sticky;
   top: 0;
   z-index: var(--z-header);
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.82);
   border-bottom: 1px solid var(--border);
-  backdrop-filter: saturate(1.4) blur(12px);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 10px 30px -24px rgba(11, 30, 74, 0.35);
+  -webkit-backdrop-filter: saturate(1.6) blur(16px);
+  backdrop-filter: saturate(1.6) blur(16px);
 }
 .ps-top__inner {
   display: flex;
@@ -103,6 +105,27 @@
 .ps-tab.is-active::after {
   background: var(--brand-primary);
 }
+/* "You are here": a small gold dot riding on the active underline */
+.ps-tab::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -2px;
+  z-index: 1;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  border-radius: 50%;
+  background: var(--orbit-gold, var(--brand-accent));
+  box-shadow: 0 0 0 2px var(--surface);
+  opacity: 0;
+  transform: scale(0.4);
+  transition: opacity var(--transition-fast), transform var(--transition-normal);
+}
+.ps-tab.is-active::before {
+  opacity: 1;
+  transform: none;
+}
 .ps-tab:focus-visible {
   outline-offset: -4px;
 }
@@ -155,7 +178,8 @@
   height: 40px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6d6af5, var(--brand-primary));
+  background: linear-gradient(135deg, var(--orbit-sapphire-light, var(--blue-light)), var(--orbit-sapphire-dark, var(--brand-primary)));
+  box-shadow: 0 0 0 0 transparent;
   color: var(--text-inverse);
   font-family: var(--font-display);
   font-size: 14px;
@@ -251,7 +275,10 @@
   color: var(--text-secondary);
 }
 .ps-menu__item:hover {
-  background: var(--surface-subtle);
+  background: var(--surface-blue);
+}
+.ps-menu__item:hover svg {
+  color: var(--brand-primary);
 }
 .ps-menu__item.is-danger:hover {
   color: var(--error-text);
@@ -301,6 +328,8 @@
   padding-bottom: var(--ps-bottom-offset);
   outline: none;
 }
+/* The guided steps have no tab bar; their own action bar sits there. */
+.ps-content.no-tabs { padding-bottom: 0; }
 
 /* ── Bottom tab bar (phones) ────────────────────────────── */
 .ps-bottom {
@@ -312,10 +341,11 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   padding: 0 4px env(safe-area-inset-bottom);
-  background: rgba(255, 255, 255, 0.97);
+  background: rgba(255, 255, 255, 0.86);
   border-top: 1px solid var(--border);
-  box-shadow: 0 -6px 24px rgba(15, 27, 61, 0.06);
-  backdrop-filter: saturate(1.4) blur(12px);
+  box-shadow: 0 -12px 32px -20px rgba(11, 30, 74, 0.28);
+  -webkit-backdrop-filter: saturate(1.6) blur(16px);
+  backdrop-filter: saturate(1.6) blur(16px);
 }
 .ps-bottom__item {
   display: flex;
@@ -332,9 +362,41 @@
   font: 500 11.5px/1.1 var(--font-body);
   cursor: pointer;
 }
+.ps-bottom__item {
+  position: relative;
+}
 .ps-bottom__item.is-active {
   color: var(--brand-primary);
   font-weight: 700;
+}
+/* Active tab: a short sapphire bar on the top edge, gold dot at its centre */
+.ps-bottom__item::before,
+.ps-bottom__item::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.ps-bottom__item::before {
+  width: 28px;
+  height: 3px;
+  margin-left: -14px;
+  border-radius: 0 0 3px 3px;
+  background: var(--brand-primary);
+}
+.ps-bottom__item::after {
+  top: 6px;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: var(--orbit-gold, var(--brand-accent));
+}
+.ps-bottom__item.is-active::before,
+.ps-bottom__item.is-active::after {
+  opacity: 1;
 }
 .ps-bottom__item:focus-visible {
   outline-offset: -3px;
@@ -418,5 +480,21 @@
   .ps-tab::after {
     left: 18px;
     right: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ps-tab::before,
+  .ps-tab::after,
+  .ps-bottom__item::before,
+  .ps-bottom__item::after,
+  .ps-avatar {
+    transition: none;
+  }
+  .ps-menu {
+    animation: none;
+  }
+  .ps-spin {
+    animation-duration: 2.4s;
   }
 }

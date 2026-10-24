@@ -8,6 +8,7 @@ import {
   RefreshCw,
   User,
   Lock,
+  Mail,
   AlertCircle,
   ArrowLeft,
   ScanText,
@@ -18,14 +19,15 @@ import {
 import BrandLogo from "../../components/BrandLogo/BrandLogo";
 import { BANK_OPTIONS } from "../../utils/bankOptions";
 import { useStudent } from "../../context/StudentContext";
+import { passwordProblem } from "../../utils/adminApi";
 import "./AdminLogin.css";
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
-async function apiPost(path, body) {
+async function apiPost(path, body, token) {
   const res = await fetch(`${API_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: path.endsWith("/me/email") ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(body),
   });
   return res.json();
@@ -96,16 +98,20 @@ function PasswordToggle({ shown, onToggle }) {
 }
 
 export default function AdminLogin() {
-  // "login" | "setup"
+  // "login" | "email" (finish a name-only superadmin sign-in) | "setup"
   const [view, setView] = useState("login");
 
-  // Login form
-  const [loginName, setLoginName] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
   const [loginPass, setLoginPass] = useState("");
   const [showLoginPass, setShowLoginPass] = useState(false);
 
+  // One-time "add your email" step
+  const [setupToken, setSetupToken] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+
   // First-time setup form
   const [setupName, setSetupName] = useState("");
+  const [setupEmail, setSetupEmail] = useState("");
   const [setupPass, setSetupPass] = useState("");
   const [setupConfirm, setSetupConfirm] = useState("");
   const [showSetupPass, setShowSetupPass] = useState(false);
@@ -116,28 +122,46 @@ export default function AdminLogin() {
   const { loginAdmin } = useStudent();
   const navigate = useNavigate();
 
+  const finish = (result) => {
+    loginAdmin(result.role, result.advisorName, result.name, result.token, result.bank || "", result.account || null);
+    navigate(result.role === "banker" ? "/banker-portal" : "/admin");
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!loginName.trim()) { setError("Please enter your name."); return; }
-    if (!loginPass) { setError("Please enter your password."); return; }
+    if (!loginEmail.trim()) { setError("Enter your email."); return; }
+    if (!loginPass) { setError("Enter your password."); return; }
     setLoading(true);
     setError("");
     try {
-      const result = await apiPost("/api/auth/login", {
-        name: loginName.trim(),
-        password: loginPass,
-      });
+      const result = await apiPost("/api/auth/login", { email: loginEmail.trim(), password: loginPass });
       if (result.notInitialized) {
         setView("setup");
-        setLoading(false);
-        return;
-      }
-      if (result.success) {
-        loginAdmin(result.role, result.advisorName, result.name, result.token, result.bank || "");
-        navigate(result.role === "banker" ? "/banker-portal" : "/admin");
+      } else if (result.success && result.setupRequired) {
+        // Signed in by name: an email must be added before anything else.
+        setSetupToken(result.token);
+        setView("email");
+      } else if (result.success) {
+        finish(result);
       } else {
-        setError(result.error || "Invalid name or password. Please try again.");
+        setError(result.error || "Incorrect email or password.");
       }
+    } catch {
+      setError("Could not connect. Check your network and try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddEmail = async (e) => {
+    e.preventDefault();
+    if (!/^\S+@\S+\.\S{2,}$/.test(newEmail.trim())) { setError("Enter a valid email address."); return; }
+    setLoading(true);
+    setError("");
+    try {
+      const result = await apiPost("/api/auth/me/email", { email: newEmail.trim(), password: loginPass }, setupToken);
+      if (result.success) finish(result);
+      else setError(result.error || "Could not save your email.");
     } catch {
       setError("Could not connect. Check your network and try again.");
     } finally {
@@ -147,24 +171,20 @@ export default function AdminLogin() {
 
   const handleSetup = async (e) => {
     e.preventDefault();
-    if (!setupName.trim()) { setError("Please enter an admin name."); return; }
-    if (setupPass.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (setupName.trim().length < 2) { setError("Enter your name."); return; }
+    if (!/^\S+@\S+\.\S{2,}$/.test(setupEmail.trim())) { setError("Enter a valid email address."); return; }
+    const problem = passwordProblem(setupPass);
+    if (problem) { setError(`${problem}.`); return; }
     if (setupPass !== setupConfirm) { setError("Passwords do not match."); return; }
     setLoading(true);
     setError("");
     try {
-      const result = await apiPost("/api/auth/init", {
-        name: setupName.trim(),
-        password: setupPass,
-      });
+      const result = await apiPost("/api/auth/init", { name: setupName.trim(), email: setupEmail.trim(), password: setupPass });
       if (result.success) {
-        loginAdmin(result.role, result.advisorName, result.name, result.token);
-        navigate("/admin");
+        finish(result);
       } else {
         setError(result.error || "Setup failed. Please try again.");
-        if (result.error && result.error.includes("already initialized")) {
-          setView("login");
-        }
+        if (result.error && result.error.includes("already initialized")) setView("login");
       }
     } catch {
       setError("Could not connect. Check your network and try again.");
@@ -174,7 +194,7 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="al-page">
+    <div className="al-page theme-orbit">
       <header className="al-topbar">
         {/* The brand panel carries the full lockup on wide screens */}
         <BrandLogo size="sm" className="al-topbar-logo" />
@@ -186,7 +206,7 @@ export default function AdminLogin() {
       <div className="al-layout">
         {/* ── Brand panel ───────────────────────────────────────────── */}
         <aside className="al-brand" aria-label="About DocLocker">
-          <BrandLogo size="lg" tagline />
+          <BrandLogo size="lg" tone="dark" tagline />
 
           <div className="al-hero">
             <p className="al-eyebrow"><ShieldCheck size={14} aria-hidden="true" /> Staff &amp; lender access</p>
@@ -222,12 +242,13 @@ export default function AdminLogin() {
                 <p className="al-sub">Sign in to manage students, documents and loan applications.</p>
 
                 <Field
-                  id="al-name"
-                  label="Name"
-                  icon={User}
-                  value={loginName}
-                  onChange={setLoginName}
-                  placeholder="Your account name"
+                  id="al-email"
+                  label="Email"
+                  icon={Mail}
+                  type="email"
+                  value={loginEmail}
+                  onChange={setLoginEmail}
+                  placeholder="name@company.com"
                   autoComplete="username"
                   autoFocus
                 />
@@ -257,8 +278,44 @@ export default function AdminLogin() {
                 </button>
 
                 <p className="al-help">
-                  Advisors and bank officers only see their own students. Need an account? Ask your super admin.
+                  Staff and lenders only see their own students. Need an account or forgot your password? Ask your company admin.
                 </p>
+                <p className="al-help al-help--quiet">
+                  Super admin signing in for the first time since sign-in moved to email? Enter your old login name instead of an email.
+                </p>
+              </form>
+            )}
+
+            {view === "email" && (
+              <form onSubmit={handleAddEmail} className="al-form" noValidate>
+                <span className="al-setup-badge"><Mail size={14} aria-hidden="true" /> One more step</span>
+                <h1 className="al-title">Add your email</h1>
+                <p className="al-sub">Sign-in is by email now. Add yours once — next time you sign in with it and your same password.</p>
+
+                <Field
+                  id="al-new-email"
+                  label="Your email"
+                  icon={Mail}
+                  type="email"
+                  value={newEmail}
+                  onChange={setNewEmail}
+                  placeholder="name@flyurdream.com"
+                  autoComplete="email"
+                  autoFocus
+                />
+
+                {error && (
+                  <div className="al-error" role="alert">
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <button type="submit" className="al-submit" disabled={loading}>
+                  {loading
+                    ? <><RefreshCw size={17} className="spin" aria-hidden="true" /> Saving…</>
+                    : <><LogIn size={17} aria-hidden="true" /> Save and continue</>}
+                </button>
               </form>
             )}
 
@@ -266,17 +323,27 @@ export default function AdminLogin() {
               <form onSubmit={handleSetup} className="al-form" noValidate>
                 <span className="al-setup-badge"><Sparkles size={14} aria-hidden="true" /> First-time setup</span>
                 <h1 className="al-title">Set up DocLocker</h1>
-                <p className="al-sub">No accounts exist yet. Create the super admin account — you can add advisors and bank officers from Settings afterwards.</p>
+                <p className="al-sub">No accounts exist yet. Create the super admin account — you can add companies, staff and lenders from the Team page afterwards.</p>
 
                 <Field
                   id="al-setup-name"
-                  label="Super admin name"
+                  label="Your name"
                   icon={User}
                   value={setupName}
                   onChange={setSetupName}
-                  placeholder="e.g. Admin"
-                  autoComplete="username"
+                  placeholder="e.g. Priya Sharma"
+                  autoComplete="name"
                   autoFocus
+                />
+                <Field
+                  id="al-setup-email"
+                  label="Email"
+                  icon={Mail}
+                  type="email"
+                  value={setupEmail}
+                  onChange={setSetupEmail}
+                  placeholder="name@flyurdream.com"
+                  autoComplete="username"
                 />
                 <Field
                   id="al-setup-password"
@@ -285,7 +352,7 @@ export default function AdminLogin() {
                   type={showSetupPass ? "text" : "password"}
                   value={setupPass}
                   onChange={setSetupPass}
-                  placeholder="At least 6 characters"
+                  placeholder="At least 10 characters, with a number"
                   autoComplete="new-password"
                   trailing={<PasswordToggle shown={showSetupPass} onToggle={() => setShowSetupPass((s) => !s)} />}
                 />

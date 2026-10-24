@@ -3,17 +3,30 @@
 // In Vercel production: leave unset (or set to "") — requests go through Vercel's /api proxy
 // which rewrites to Railway server-side, so the mobile never needs to reach Railway directly.
 
+import { companyHeaders } from './company';
+import { applicantHeaders, clearApplicantToken } from './applicantApi';
+import { indianMobileProblem, emailProblem } from './validation';
+
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 // ── Auth header helper ────────────────────────────────────────────────────────
+// Staff send their token; students their PIN session and the company of
+// their signup link.
 function getAuthHeaders() {
   try {
     const raw = localStorage.getItem('abroad_admin_session');
-    if (!raw) return {};
-    const { token } = JSON.parse(raw);
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    const { token } = raw ? JSON.parse(raw) : {};
+    if (token) return { Authorization: `Bearer ${token}` };
+  } catch { /* fall through to the student's session */ }
+  return { ...companyHeaders(), ...applicantHeaders() };
+}
+
+// Staff working on a student's file use the staff routes.
+function hasStaffSession() {
+  try {
+    return Boolean(JSON.parse(localStorage.getItem('abroad_admin_session') || 'null')?.token);
   } catch {
-    return {};
+    return false;
   }
 }
 
@@ -83,19 +96,22 @@ export function buildFolderKey(name, identifier = '') {
 }
 
 // ── Input validators ──────────────────────────────────────────────────────────
+// Indian mobile numbers only (see utils/validation.js). Empty counts as valid
+// here; callers that need a number check for it themselves.
 export function isValidPhone(phone) {
   if (!phone || phone.trim() === '') return true;
-  return /^(\+91|0)?[6-9]\d{9}$/.test(phone.trim().replace(/\s+/g, ''));
+  return indianMobileProblem(phone) === null;
 }
 
 export function isValidEmail(email) {
   if (!email || email.trim() === '') return true;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  return emailProblem(email) === null;
 }
 
 // ── Clear student session from localStorage ───────────────────────────────────
 export function clearStudentFromLocalStorage() {
   localStorage.removeItem('abroad_student');
+  clearApplicantToken();
   // Remove any legacy student_meta_ cache keys from previous app versions
   Object.keys(localStorage)
     .filter((k) => k.startsWith('student_meta_'))
@@ -112,7 +128,7 @@ export async function uploadDocument({ studentName, studentIdentifier, subFolder
   const ext = file.name.split('.').pop().toLowerCase();
   const finalName = `${fileName}.${ext}`;
   const authHeaders = getAuthHeaders();
-  const hasAdminToken = !!authHeaders.Authorization;
+  const hasAdminToken = hasStaffSession();
 
   if (onProgress) onProgress(10);
 
@@ -128,9 +144,7 @@ export async function uploadDocument({ studentName, studentIdentifier, subFolder
     formData.append('studentName', buildFolderKey(studentName, studentIdentifier));
     endpoint = '/api/upload';
   } else {
-    // Student self-service — validated server-side by name + identifier pair
-    formData.append('studentName', (studentName || '').trim());
-    formData.append('studentIdentifier', (studentIdentifier || '').trim());
+    // Student self-service — the application comes from their PIN session
     endpoint = '/api/student-upload';
   }
 
@@ -138,7 +152,7 @@ export async function uploadDocument({ studentName, studentIdentifier, subFolder
 
   const res = await fetch(`${API_URL}${endpoint}`, {
     method: 'POST',
-    headers: hasAdminToken ? authHeaders : {},
+    headers: authHeaders,
     body: formData,
     // ID and certificate slots are read by our document model before
     // they're saved, which can take a while for large scans.
@@ -171,7 +185,7 @@ export async function uploadDocument({ studentName, studentIdentifier, subFolder
 // rejects on failure) so the caller can show an honest "Saved" / "Couldn't
 // save" state. Without it, failures are logged and swallowed as before.
 export function saveStudentMeta(studentName, meta, studentIdentifier = '', { throwOnError = false } = {}) {
-  const hasAdminToken = !!getAuthHeaders().Authorization;
+  const hasAdminToken = hasStaffSession();
   const swallow = (label) => (e) => {
     console.warn(`[DriveSync] ${label} failed${throwOnError ? '' : ' silently'}:`, e.message);
     if (throwOnError) throw e;
@@ -182,12 +196,8 @@ export function saveStudentMeta(studentName, meta, studentIdentifier = '', { thr
       .catch(swallow('saveMeta'));
     return throwOnError ? req : Promise.resolve();
   } else {
-    const id = (studentIdentifier || '').trim();
-    const name = (studentName || '').trim();
-    if (!id || !name) {
-      return throwOnError ? Promise.reject(new Error('Missing student name or identifier')) : Promise.resolve();
-    }
-    return apiPost('/api/student-meta', { studentName: name, studentIdentifier: id, metaJson: JSON.stringify(meta) })
+    // The application comes from the applicant's PIN session.
+    return apiPost('/api/student-meta', { metaJson: JSON.stringify(meta) })
       .catch(swallow('student-meta'));
   }
 }
@@ -201,23 +211,6 @@ export async function getAllStudentsFromDrive() {
     console.warn('getAllStudentsFromDrive failed:', e.message);
     return [];
   }
-}
-
-// ── Find student by email or phone ────────────────────────────────────────────
-export async function searchStudentByIdentifier(identifier) {
-  const id = identifier.trim();
-  try {
-    const data = await apiGet('/api/students/find', { identifier: id });
-    return data.student || null;
-  } catch (e) {
-    console.warn('searchStudentByIdentifier:', e.message);
-    return null;
-  }
-}
-
-// ── Check if identifier exists ────────────────────────────────────────────────
-export async function checkIdentifierExists(identifier) {
-  return !!(await searchStudentByIdentifier(identifier));
 }
 
 // Extract the Drive folder ID from a webViewLink, e.g.
@@ -336,6 +329,13 @@ export async function restoreMeta(studentName, studentIdentifier = '', meta) {
 export async function downloadAllFiles(studentName, studentIdentifier = '') {
   const folderKey = buildFolderKey(studentName, studentIdentifier);
   const { url } = await apiPost(`/api/students/${encodeURIComponent(folderKey)}/files/zip-link`, {});
+  startBrowserDownload(url);
+}
+
+// ── Download chosen documents from any students as one zip (superadmin) ──────
+// files: [{ id, path }] — path is where the file sits inside the zip.
+export async function downloadBundle(files, label) {
+  const { url } = await apiPost('/api/files/zip-link', { files, label });
   startBrowserDownload(url);
 }
 

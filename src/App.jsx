@@ -1,8 +1,10 @@
 import { Suspense, lazy } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { StudentProvider, useStudent } from "./context/StudentContext";
+import { BrandProvider } from "./context/BrandContext";
 import Home from "./pages/Home/Home";
 import "./index.css";
+import "./theme/orbit.css";
 
 // Heavy pages loaded only when actually navigated to
 const Portal       = lazy(() => import("./pages/Portal/Portal"));
@@ -37,13 +39,21 @@ function ProtectedBankerPortal() {
   return <BankerPortal />;
 }
 
+// A fresh Home per company link, so nothing from one company's page
+// (advisors, branding) carries over to another or to the main site.
+function CompanyHome() {
+  const { companySlug } = useParams();
+  return <Home key={companySlug} />;
+}
+
 function AppRoutes() {
   // Every screen owns its chrome: Home has the marketing header, the student
   // portal its top navigation, and the staff/banker dashboards their sidebars.
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
-        <Route path="/"              element={<Home />} />
+        <Route path="/"              element={<Home key="main" />} />
+        <Route path="/c/:companySlug" element={<CompanyHome />} />
         <Route path="/portal"        element={<ProtectedPortal />} />
         <Route path="/admin"         element={<ProtectedAdmin />} />
         <Route path="/admin-login"   element={<AdminLogin />} />
@@ -58,7 +68,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <StudentProvider>
-        <AppRoutes />
+        <BrandProvider>
+          <AppRoutes />
+        </BrandProvider>
       </StudentProvider>
     </BrowserRouter>
   );

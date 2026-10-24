@@ -111,7 +111,6 @@ export const DOCUMENT_SCHEMA = {
         rename: "10th_Marksheet",
         // FIX: was ".pdf,.jpg,.jpeg,.png,doc,.docx" (missing dot before doc)
         accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
-        optional: true,
         reader: "ssc",
         keepOcr: true,
       },

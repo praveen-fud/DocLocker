@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Download, X, RefreshCw, FileText, FileImage, AlertCircle, ShieldCheck,
   ZoomIn, ZoomOut, Scan, RotateCw, Maximize2, Minimize2,
@@ -6,6 +7,11 @@ import {
 import useFileObjectUrl from "../../hooks/useFileObjectUrl";
 import { downloadFile } from "../../utils/driveApi";
 import "./DocumentViewer.css";
+
+// Ask the browser's PDF viewer to fit the page to the frame's width and keep
+// its thumbnail sidebar closed, so a page never scrolls sideways. Chrome and
+// Edge read view/navpanes, Firefox reads zoom/pagemode; unknown keys are ignored.
+const PDF_VIEW_PARAMS = "#view=FitH&navpanes=0&zoom=page-width&pagemode=none";
 
 // In-app document viewer for staff and bankers. The document never leaves
 // DocLocker as a link: it's fetched privately and shown here, and
@@ -68,14 +74,16 @@ function ImageStage({ url, name, zoom, rotation }) {
   );
 }
 
-export default function DocumentViewer({ file, files, subtitle, onClose }) {
+// fetchBlob / download: the applicant's dashboard passes its own (PIN
+// session); staff use the defaults.
+export default function DocumentViewer({ file, files, subtitle, onClose, fetchBlob, download = downloadFile, downloadText = "Download (One-time Link)" }) {
   const list = files?.length > 1 ? files : null;
   // Remember which rail item was picked, but only for the file this viewer
   // was opened with — a new `file` prop starts fresh.
   const [picked, setPicked] = useState(null);
   const active = (picked?.base === file.id && list?.find((f) => f.id === picked.id)) || file;
 
-  const { url, type, error, loading, retry } = useFileObjectUrl(active.id);
+  const { url, type, error, loading, retry } = useFileObjectUrl(active.id, fetchBlob ? { fetchBlob } : undefined);
   const [view, setView] = useState({ id: active.id, ...FIT });
   const { zoom, rotation } = view.id === active.id ? view : FIT;
   const [expanded, setExpanded] = useState(false);
@@ -125,7 +133,7 @@ export default function DocumentViewer({ file, files, subtitle, onClose }) {
     setDownloading(true);
     setDownloadError("");
     try {
-      await downloadFile(active.id);
+      await download(active.id);
     } catch (err) {
       setDownloadError(err.message || "Download failed");
     } finally {
@@ -133,7 +141,7 @@ export default function DocumentViewer({ file, files, subtitle, onClose }) {
     }
   };
 
-  const downloadLabel = downloading ? "Preparing link…" : "Download (One-time Link)";
+  const downloadLabel = downloading ? "Preparing…" : downloadText;
 
   let body;
   if (loading) {
@@ -154,7 +162,7 @@ export default function DocumentViewer({ file, files, subtitle, onClose }) {
       </div>
     );
   } else if (url && type === "application/pdf") {
-    body = <iframe key={url} src={url} title={active.name} className="dv-frame" />;
+    body = <iframe key={url} src={`${url}${PDF_VIEW_PARAMS}`} title={active.name} className="dv-frame" />;
   } else if (url) {
     body = <ImageStage key={url} url={url} name={active.name} zoom={zoom} rotation={rotation} />;
   } else {
@@ -169,7 +177,10 @@ export default function DocumentViewer({ file, files, subtitle, onClose }) {
     );
   }
 
-  return (
+  // Portalled to <body>: callers render the viewer deep inside panels that
+  // animate with a transform (e.g. the admin student detail), and a
+  // transformed ancestor would trap this fixed overlay inside that panel.
+  return createPortal(
     <div className="dv-backdrop" onClick={onClose}>
       <div
         ref={boxRef}
@@ -206,9 +217,11 @@ export default function DocumentViewer({ file, files, subtitle, onClose }) {
                         title={f.name}
                         onClick={() => selectFile(f)}
                       >
-                        <span className="dv-thumb-page"><Icon size={20} /></span>
-                        <span className="dv-thumb-index">{i + 1}</span>
-                        <span className="sr-only">{f.name}</span>
+                        <span className="dv-thumb-page">
+                          <Icon size={20} />
+                          <span className="dv-thumb-index" aria-hidden="true">{i + 1}</span>
+                        </span>
+                        <span className="dv-thumb-name">{f.name}</span>
                       </button>
                     </li>
                   );
@@ -271,6 +284,7 @@ export default function DocumentViewer({ file, files, subtitle, onClose }) {
           </button>
         </footer>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

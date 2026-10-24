@@ -17,7 +17,9 @@ export const RENDERABLE_TYPES = new Set([
 // when the component unmounts or the file changes.
 //
 // enabled: false defers loading (e.g. until a thumbnail scrolls into view).
-export default function useFileObjectUrl(fileId, { thumbnail = false, enabled = true } = {}) {
+// fetchBlob: how to load it — staff by default; the applicant's dashboard
+// passes its own (their PIN session).
+export default function useFileObjectUrl(fileId, { thumbnail = false, enabled = true, fetchBlob = fetchFileBlob } = {}) {
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState({ key: null });
   const key = fileId && enabled ? `${fileId}|${thumbnail}|${attempt}` : null;
@@ -26,7 +28,7 @@ export default function useFileObjectUrl(fileId, { thumbnail = false, enabled = 
     if (!key) return undefined;
     let cancelled = false;
     let objectUrl = null;
-    fetchFileBlob(fileId, { thumbnail })
+    fetchBlob(fileId, { thumbnail })
       .then((blob) => {
         if (cancelled) return;
         const type = (blob.type || "").split(";")[0].trim().toLowerCase();
@@ -44,7 +46,7 @@ export default function useFileObjectUrl(fileId, { thumbnail = false, enabled = 
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [key, fileId, thumbnail]);
+  }, [key, fileId, thumbnail, fetchBlob]);
 
   const current = result.key === key ? result : null;
   return {

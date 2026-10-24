@@ -13,6 +13,8 @@
 // fonts the current page happened to load, and in production builds the
 // template's CSS chunk could be missing altogether — which produced a fully
 // unstyled, 6-page PDF.
+import { companyHeaders, getStudentCompany, companyLogoSrc } from "./company";
+import { applicantHeaders } from "./applicantApi";
 import jsPDF from "jspdf";
 import { DOCUMENT_SCHEMA, getTotalRequiredFields, countUploadedFields, coApplicantFields } from "../context/schemas";
 import templateCss from "./summaryPdfTemplate.css?inline";
@@ -53,6 +55,7 @@ async function _doGeneratePdf(studentName, studentData, studentIdentifier, uploa
     console.error("[SummaryPDF] buildModel failed — bad/unexpected student data shape:", e);
     return;
   }
+  Object.assign(model, await pdfBrand());
   try {
     rendered = await renderSummaryPdf(model);
   } catch (e) {
@@ -66,7 +69,7 @@ async function _doGeneratePdf(studentName, studentData, studentIdentifier, uploa
     fd.append("documents", JSON.stringify(uploadedDocuments || []));
     fd.append("summaryPdf", rendered.blob, rendered.fname);
 
-    const res = await fetch(`${API_URL}/api/student-summary`, { method: "POST", body: fd });
+    const res = await fetch(`${API_URL}/api/student-summary`, { method: "POST", body: fd, headers: { ...companyHeaders(), ...applicantHeaders() } });
     if (!res.ok) {
       console.error(`[SummaryPDF] upload request failed — HTTP ${res.status} ${res.statusText}`);
       return;
@@ -317,6 +320,32 @@ function buildModel(studentName, studentData) {
   };
 }
 
+// A partner company's students get that company's name and logo on the
+// form, never DocLocker's. The logo is inlined as a data URL first: the
+// render frame can't read a cross-origin image back out of its canvas.
+async function pdfBrand() {
+  const co = getStudentCompany();
+  if (!co?.slug) return {};
+  let logo = "";
+  if (co.logoUrl) {
+    try {
+      const res = await fetch(companyLogoSrc(co.logoUrl));
+      if (res.ok) {
+        const blob = await res.blob();
+        logo = await new Promise((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(fr.result);
+          fr.onerror = reject;
+          fr.readAsDataURL(blob);
+        });
+      }
+    } catch (e) {
+      console.warn("[SummaryPDF] company logo unavailable, printing the name only:", e);
+    }
+  }
+  return { companyName: co.branding?.displayName || co.name || "", logo, companyLogo: true };
+}
+
 // ── Render helpers ──────────────────────────────────────────────────────────
 function esc(v) {
   return String(v ?? "").replace(/[&<>"']/g, (c) => (
@@ -467,7 +496,7 @@ function renderHero(model) {
   return `
     <div class="hero">
       <div class="hero-top">
-        <div class="logo-card"><img class="logo-icon" src="${model.logo}" alt="" /><span class="logo-fallback">${esc(model.companyName)}</span></div>
+        <div class="logo-card">${model.logo ? `<img class="logo-icon${model.companyLogo ? " logo-icon--company" : ""}" src="${model.logo}" alt="" />` : ""}<span class="logo-fallback">${esc(model.companyName)}</span></div>
         ${s.loanTrack ? `
         <div class="track-badge">
           <div class="l">Loan Track For</div>

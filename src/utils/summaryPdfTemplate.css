@@ -73,6 +73,9 @@
 .pdf-render .logo-card .logo-icon{
   width:8mm; height:8mm; margin-right:2.2mm; display:block; flex-shrink:0;
 }
+.pdf-render .logo-card .logo-icon--company{
+  width:auto; max-width:28mm; object-fit:contain;
+}
 .pdf-render .logo-card .logo-fallback{
   font-family:var(--sumpdf-display); font-weight:700; font-size:10pt; color:var(--sumpdf-navy); letter-spacing:.02em;
 }

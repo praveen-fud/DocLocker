@@ -1,4 +1,5 @@
-// Portal.jsx — student document upload + profile
+// Portal.jsx — the applicant's side: a guided application (documents, then
+// details, then submit) and, once submitted, their dashboard.
 import { useState, useEffect, useRef, useId, createContext, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -10,20 +11,20 @@ import {
   TriangleAlert,
   ContactRound,
   GraduationCap,
-  Landmark,
+  Users,
   ListChecks,
-  ShieldCheck,
   UserRound,
   CircleCheck,
   CircleAlert,
-  ArrowLeft,
   ArrowRight,
   X,
-  Users,
+  Send,
+  FileCheck2,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import { saveStudentMeta } from "../../utils/driveApi";
 import { generateAndUploadSummaryPDF } from "../../utils/summaryGenerator";
+import { getApplicantToken, fetchMyApplication, submitMyApplication } from "../../utils/applicantApi";
 import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields, countUploadedFields } from "../../context/schemas";
 import { extractPersonalAutoFill, extractCoApplicantAutoFill, getDocSourceLabel } from "../../utils/autoFillMap";
 import {
@@ -36,22 +37,15 @@ import {
 import { buildIdentityReport } from "../../utils/identityCheck";
 import { getApplicationId } from "../../utils/applicationId";
 import FileUploadBox from "../../components/FileUploadBox/FileUploadBox";
-import { docAnchorId } from "../../components/FileUploadBox/docMeta";
+import { docAnchorId, splitLabel } from "../../components/FileUploadBox/docMeta";
 import PortalShell from "../../components/StudentPortal/PortalShell";
-import ApplicationStepper from "../../components/StudentPortal/ApplicationStepper";
-import DocumentSection from "../../components/StudentPortal/DocumentSection";
+import { DASHBOARD_TABS } from "../../components/StudentPortal/portalTabs";
+import ApplicationWizard from "../../components/StudentPortal/ApplicationWizard";
+import ApplicantDashboard from "../../components/StudentPortal/ApplicantDashboard";
 import ConfirmDialog from "../../components/StudentPortal/ConfirmDialog";
-import StudentDashboard from "../../components/StudentPortal/StudentDashboard";
-import LoanStatus from "../../components/StudentPortal/LoanStatus";
 import HelpCenter from "../../components/StudentPortal/HelpCenter";
-import { buildDocGroups, countStatuses } from "../../components/StudentPortal/dashboardData";
-import {
-  ProgressSummary,
-  AIVerificationPanel,
-  DocumentGuidelines,
-  SaveActions,
-  MobileActionBar,
-} from "../../components/StudentPortal/PortalRail";
+import { AIVerificationPanel } from "../../components/StudentPortal/PortalRail";
+import { PROFILE_PAGES, profileProgress, pageProgress } from "../../components/StudentPortal/profileFields";
 import "./Portal.css";
 
 const CUR_YEAR = new Date().getFullYear();
@@ -59,16 +53,39 @@ const YEARS = Array.from({ length: CUR_YEAR - 1974 }, (_, i) => CUR_YEAR - i);
 
 const MAX_FILE_SIZE = "25 MB";
 
-// The four steps of the document workspace, in page order.
-const STEP_IDS = ["sec-personal", "sec-academic", "sec-financial", "sec-review"];
-
-const PROFILE_PAGES = [
-  { id: 1, label: "Identity & academics" },
-  { id: 2, label: "Destination & address" },
-  { id: 3, label: "Family & guarantor" },
-  { id: 4, label: "History & assets" },
-  { id: 5, label: "References" },
+const STEPS = [
+  { id: "identity",  label: "Your ID",    icon: ContactRound },
+  { id: "education", label: "Education",  icon: GraduationCap },
+  { id: "family",    label: "Co-applicant", icon: Users },
+  { id: "details",   label: "Your details", icon: UserRound },
+  { id: "review",    label: "Review & submit", icon: ListChecks },
 ];
+
+const STEP_COPY = {
+  identity: {
+    heading: "Your ID documents",
+    description: "Start with your Passport, Aadhaar and PAN. We read them and fill in most of your details for you.",
+    notes: { autoFill: "Passport, Aadhaar and PAN fill in your details" },
+  },
+  education: {
+    heading: "Education",
+    description: "Your marksheets and certificates. Scores and years are filled in from your marksheets.",
+    notes: { autoFill: "10th and 12th marksheets fill in your scores" },
+  },
+  family: {
+    heading: "Co-applicant",
+    description: "Usually a parent who supports the loan. The documents asked for depend on how they earn.",
+    notes: { autoFill: "Their Aadhaar and PAN fill in their details" },
+  },
+  details: {
+    heading: "Your details",
+    description: "Check what we filled in from your documents and add the rest. What you type is never overwritten.",
+  },
+  review: {
+    heading: "Review & submit",
+    description: "One last look. Anything still missing is listed here — tap it to add it.",
+  },
+};
 
 // Fields the document reader filled but wasn't sure about: { formKey: reason }.
 // Provided around the profile form so every input can show "Please check"
@@ -89,17 +106,22 @@ const CIBIL_HINT = (
   </span>
 );
 
-const prefersReducedMotion = () =>
-  typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+// Students whose file staff already moved on count as submitted.
+const isSubmitted = (s) => Boolean(s?.applicationSubmittedAt) || Boolean(s?.loanStatus && s.loanStatus !== "pending");
+
+// Staff-owned fields refreshed from the server on every visit.
+const STAFF_FIELDS = ["loanStatus", "loanRemark", "loanStatusUpdatedAt", "loanDisbursement", "advisor", "applicationSubmittedAt"];
 
 export default function Portal() {
   const { student, setStudent, clearStudent, logoutAdmin } = useStudent();
   const navigate = useNavigate();
-  // home | documents | profile | loan | help
+  // dashboard views: home | documents | application | activity | help
   const [view, setView]                     = useState("home");
-  const [currentStep, setCurrentStep]       = useState(STEP_IDS[0]);
+  // Guided steps: always before submission; afterwards when editing.
+  const [editing, setEditing]               = useState(false);
+  const [step, setStep]                     = useState(null);
   const [profilePage, setProfilePage]       = useState(1);
   const [uploads, setUploads]               = useState(student?.uploads || {});
   const [personalInfo, setPersonalInfo]     = useState(() => {
@@ -117,6 +139,7 @@ export default function Portal() {
   // "co_0.aadhar", ...), and which auto-filled fields it flagged as uncertain.
   const [extractions, setExtractions]             = useState(student?.extractions || {});
   const [reviewFields, setReviewFields]           = useState(student?.reviewFields || {});
+  const [lenders, setLenders]                     = useState([]);
   const [saving, setSaving] = useState(false);
   // Header save indicator: idle | saving | saved | dirty | error — only ever
   // set from the real outcome of a save request.
@@ -124,6 +147,7 @@ export default function Portal() {
   const [savedAt, setSavedAt]       = useState(null);
   const [notice, setNotice]         = useState(null);
   const [confirmCo, setConfirmCo]   = useState(null);
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
 
   const studentIdentifier = student?.email || student?.phone || "";
 
@@ -145,27 +169,36 @@ export default function Portal() {
   useEffect(() => { extractionsRef.current = extractions;      }, [extractions]);
   useEffect(() => { reviewRef.current     = reviewFields;      }, [reviewFields]);
 
-  useEffect(() => {
-    if (!student) navigate("/");
-  }, [student, navigate]);
+  // A full page load to the home page: it gets past this route's guard
+  // (which would otherwise bounce to the sign-in page) and drops every
+  // piece of student data still held in memory.
+  const signOut = () => {
+    clearStudent();
+    logoutAdmin();
+    window.location.replace("/");
+  };
+  const signOutRef = useRef(signOut);
+  useEffect(() => { signOutRef.current = signOut; });
 
-  // Highlight the stepper step for the section currently in view.
+  // No PIN session (signed in before PINs existed, or it expired): sign in
+  // again. Otherwise refresh what staff may have changed since last time.
+  const studentKey = student?.studentKey;
   useEffect(() => {
-    if (view !== "documents") return undefined;
-    const els = STEP_IDS.map((id) => document.getElementById(id)).filter(Boolean);
-    if (!els.length || typeof IntersectionObserver === "undefined") return undefined;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible[0]) setCurrentStep(visible[0].target.id);
-      },
-      { rootMargin: "-30% 0px -60% 0px" },
-    );
-    els.forEach((el) => obs.observe(el));
-    return () => obs.disconnect();
-  }, [view]);
+    if (!student) { navigate("/"); return undefined; }
+    if (!getApplicantToken()) { signOutRef.current(); return undefined; }
+    let cancelled = false;
+    fetchMyApplication()
+      .then(({ student: fresh, lenders: banks }) => {
+        if (cancelled) return;
+        setLenders(banks || []);
+        const patch = Object.fromEntries(STAFF_FIELDS.map((f) => [f, fresh[f]]));
+        setStudent({ ...JSON.parse(localStorage.getItem("abroad_student") || "{}"), ...patch });
+      })
+      .catch((err) => { if (!cancelled && err.applicantSignIn) signOutRef.current(); });
+    return () => { cancelled = true; };
+    // Once per signed-in application.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentKey]);
 
   useEffect(() => {
     if (!notice) return undefined;
@@ -210,7 +243,8 @@ export default function Portal() {
         }
         return true;
       })
-      .catch(() => {
+      .catch((err) => {
+        if (err?.applicantSignIn) signOut();
         if (seq === saveSeq.current) setSaveStatus("error");
         return false;
       });
@@ -247,6 +281,7 @@ export default function Portal() {
 
       if (Object.keys(mapped).length > 0) {
         const sourceLabel = getDocSourceLabel(result.parsedData.type);
+        const fresh = Object.keys(mapped).filter((k) => !personalRef.current[k]);
         setAutoFilledFields((prev) => {
           const updated = { ...prev };
           for (const k of Object.keys(mapped)) {
@@ -261,6 +296,7 @@ export default function Portal() {
           }
           return updated;
         });
+        if (fresh.length) announceFill(sourceLabel, fresh.length);
       }
 
       // Co-applicant auto-fill (name + address from Aadhar)
@@ -291,6 +327,15 @@ export default function Portal() {
     const updated = buildStudentRecord();
     setStudent(updated);
     persist(updated);
+  };
+
+  // "Read your Passport — 7 details filled in."
+  const announceFill = (source, n) => {
+    setNotice({
+      tone: "success",
+      text: `Read your ${source || "document"} — ${plural(n, "detail")} filled in. You can check them in Your details.`,
+      action: { label: "Check", run: () => goToStep("details") },
+    });
   };
 
   // Called when our document model finishes reading a passport / Aadhaar /
@@ -326,6 +371,7 @@ export default function Portal() {
 
       if (sectionKey === "applicant" || sectionKey === "academics") {
         const { values, from } = applicantFieldsFromReader(merged.docType, merged.flat, merged.checks);
+        const before = personalRef.current;
         const r = mergeReaderFields({
           info: personalRef.current,
           autoFilled: autoFilledRef.current,
@@ -338,6 +384,8 @@ export default function Portal() {
         setPersonalInfo(r.info);
         setAutoFilledFields(r.autoFilled);
         setReviewFields(r.review);
+        const filled = Object.keys(r.info).filter((k) => r.info[k] && r.info[k] !== before[k]).length;
+        if (filled) announceFill(sourceLabel, filled);
       } else if (sectionKey.startsWith("co_")) {
         // Co-applicant inputs don't track which values were typed, so only
         // blanks are filled — the first document read wins.
@@ -420,13 +468,14 @@ export default function Portal() {
     persist(updatedStudent);
   };
 
-  const handleSave = async () => {
+  // Saves, and refreshes the Application Form PDF for the advisor.
+  const handleSave = async ({ withForm = true } = {}) => {
     if (saving) return false;
     setSaving(true);
     const updated = buildStudentRecord();
     setStudent(updated);
     const saved = persist(updated);
-    generateAndUploadSummaryPDF(student.name, updated, studentIdentifier, docsRef.current);
+    if (withForm) generateAndUploadSummaryPDF(student.name, updated, studentIdentifier, docsRef.current);
     const ok = await saved;
     setSaving(false);
     return ok;
@@ -454,337 +503,278 @@ export default function Portal() {
   const financialTotal = coIdx.reduce((a, i) => a + required(coFieldsFor(i)).length, 0);
   const financialDone = coIdx.reduce((a, i) => a + countUploadedFields(getUploadsFor(`co_${i}`), required(coFieldsFor(i))), 0);
   const requiredDone = personalDone + academicDone + financialDone;
-  const missingCount = Math.max(dynamicTotal - requiredDone, 0);
   const otherCount = Object.keys(getUploadsFor("otherDocs")).filter((k) => getUploadsFor("otherDocs")[k]).length;
 
   const coName = (i) => {
     const c = personalInfo[`co_info_${i}`] || {};
     return [c.firstName, c.lastName].filter(Boolean).join(" ") || c.name || `Co-applicant ${i + 1}`;
   };
-  const missingList = [
-    ...personalReq.filter((f) => !countUploadedFields(getUploadsFor("applicant"), [f])).map((f) => ({ key: `a-${f.id}`, target: "sec-personal", label: f.label, group: "Personal" })),
-    ...academicReq.filter((f) => !countUploadedFields(getUploadsFor("academics"), [f])).map((f) => ({ key: `ac-${f.id}`, target: "sec-academic", label: f.label, group: "Academic" })),
+  const missingDocs = [
+    ...personalReq.filter((f) => !countUploadedFields(getUploadsFor("applicant"), [f])).map((f) => ({ key: `a-${f.id}`, step: "identity", label: splitLabel(f.label).title, group: "Your ID", anchor: docAnchorId("applicant", f.id) })),
+    ...academicReq.filter((f) => !countUploadedFields(getUploadsFor("academics"), [f])).map((f) => ({ key: `ac-${f.id}`, step: "education", label: splitLabel(f.label).title, group: "Education", anchor: docAnchorId("academics", f.id) })),
     ...coIdx.flatMap((i) => required(coFieldsFor(i))
       .filter((f) => !countUploadedFields(getUploadsFor(`co_${i}`), [f]))
-      .map((f) => ({ key: `co${i}-${f.id}`, target: "sec-financial", label: f.label, group: coName(i) }))),
+      .map((f) => ({ key: `co${i}-${f.id}`, step: "family", label: splitLabel(f.label).title, group: coName(i), anchor: docAnchorId(`co_${i}`, f.id) }))),
   ];
+  const profile = profileProgress(personalInfo);
+  const missingDetails = profile.missingRequired.map((d) => ({ key: `d-${d.key}`, step: "details", page: d.page, label: d.label, group: "Your details" }));
+  const missingAll = [...missingDocs, ...missingDetails];
 
   const identity = buildIdentityReport({ extractions, personalInfo, coCount, legacyDocs: uploadedDocuments });
   const reviewCount = Object.keys(reviewFields).length;
   const applicationId = getApplicationId(student);
+  const counts = { docs: { done: requiredDone, total: dynamicTotal }, details: { done: profile.done, total: profile.total } };
 
-  // Dashboard tiles: every required document plus anything optional already
-  // uploaded, grouped as the student's own and each co-applicant's.
-  const docGroups = buildDocGroups({
-    sections: [
-      { key: "applicant", sectionId: "sec-personal", fields: DOCUMENT_SCHEMA.applicant.fields },
-      { key: "academics", sectionId: "sec-academic", fields: DOCUMENT_SCHEMA.academics.fields },
-    ],
-    co: coIdx.map((i) => ({ key: `co_${i}`, title: `Co-applicant ${i + 1} · ${coName(i)}`, fields: coFieldsFor(i) })),
-    uploads,
-    extractions,
-    otherDocs: getUploadsFor("otherDocs"),
-  });
-  const docCounts = countStatuses(docGroups);
+  const stepMeta = STEPS.map((s) => ({
+    ...s,
+    ...({
+      identity: { done: personalDone, total: personalReq.length },
+      education: { done: academicDone, total: academicReq.length },
+      family: { done: financialDone, total: financialTotal },
+      details: { done: profile.done, total: profile.total, unit: "details" },
+      review: { done: 0, total: 0 },
+    })[s.id],
+  }));
+  // Where to pick up: the first step with something required still missing.
+  const firstOpenStep = missingDocs[0]?.step || (missingDetails.length ? "details" : "review");
+  const currentStep = step || firstOpenStep;
+  const stepIndex = STEPS.findIndex((s) => s.id === currentStep);
+  const submitted = isSubmitted(student);
+  const inWizard = !submitted || editing;
 
-  const steps = [
-    { id: "sec-personal",  label: "Personal Documents",  icon: ContactRound,  done: personalDone,  total: personalReq.length },
-    { id: "sec-academic",  label: "Academic Documents",  icon: GraduationCap, done: academicDone,  total: academicReq.length },
-    { id: "sec-financial", label: "Financial Documents", icon: Landmark,      done: financialDone, total: financialTotal },
-    {
-      id: "sec-review",
-      label: "Review & Save",
-      icon: ListChecks,
-      done: requiredDone,
-      total: dynamicTotal,
-      summary: missingCount ? `${plural(missingCount, "item")} left` : "Ready to save",
-    },
-  ];
-
-  const scrollToId = (id) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.scrollIntoView({ behavior: prefersReducedMotion() ? "instant" : "smooth", block: "start" });
-  };
-
-  const jumpTo = (id) => {
-    setCurrentStep(id);
-    if (view !== "documents") {
-      setView("documents");
-      requestAnimationFrame(() => requestAnimationFrame(() => scrollToId(id)));
-    } else {
-      scrollToId(id);
+  const goToStep = (id, { page, anchor } = {}) => {
+    setStep(id);
+    if (page) setProfilePage(page);
+    window.scrollTo({ top: 0, behavior: "instant" });
+    if (anchor) {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const card = document.getElementById(anchor);
+        if (!card) return;
+        card.scrollIntoView({ behavior: "instant", block: "center" });
+        card.classList.remove("is-spotlight");
+        void card.offsetWidth; // restart the animation on a repeat click
+        card.classList.add("is-spotlight");
+      }));
     }
   };
 
-  // Dashboard tile → its upload card, briefly highlighted. Falls back to the
-  // section when the card is collapsed away.
-  const openDoc = (doc) => {
-    setView("documents");
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const card = document.getElementById(doc.anchorId);
-      if (!card?.offsetParent) { scrollToId(doc.sectionId); return; }
-      card.scrollIntoView({ behavior: prefersReducedMotion() ? "instant" : "smooth", block: "center" });
-      card.focus({ preventScroll: true });
-      card.classList.remove("is-spotlight");
-      void card.offsetWidth; // restart the animation on a repeat click
-      card.classList.add("is-spotlight");
-      card.addEventListener("animationend", () => card.classList.remove("is-spotlight"), { once: true });
-    }));
+  // Continue: save, then the next profile page or the next step. Missing
+  // documents never block moving on — the review step lists them.
+  const next = async () => {
+    if (currentStep === "details" && profilePage < PROFILE_PAGES.length) {
+      persist(buildStudentRecord());
+      setProfilePage(profilePage + 1);
+      window.scrollTo({ top: 0, behavior: "instant" });
+      return;
+    }
+    if (currentStep === "review") {
+      if (submitted) { await finishEditing(); return; }
+      if (missingAll.length) { setConfirmSubmit(true); return; }
+      await submit();
+      return;
+    }
+    persist(buildStudentRecord());
+    goToStep(STEPS[stepIndex + 1].id);
   };
 
-  const changeView = (next) => {
-    setView(next);
-    window.scrollTo({ top: 0, behavior: "instant" });
+  const back = () => {
+    if (currentStep === "details" && profilePage > 1) {
+      setProfilePage(profilePage - 1);
+      window.scrollTo({ top: 0, behavior: "instant" });
+      return;
+    }
+    if (stepIndex > 0) goToStep(STEPS[stepIndex - 1].id, STEPS[stepIndex - 1].id === "details" ? { page: PROFILE_PAGES.length } : undefined);
   };
 
-  // A full page load to the home page: it gets past this route's guard
-  // (which would otherwise bounce to the sign-in page) and drops every
-  // piece of student data still held in memory.
-  const handleSignOut = () => {
-    clearStudent();
-    logoutAdmin();
-    window.location.replace("/");
-  };
-
-  const saveProgress = async () => {
-    const ok = await handleSave();
-    setNotice(ok
-      ? { tone: "success", text: "Your progress has been saved." }
-      : { tone: "error", text: "We couldn't save just now. Check your connection and try again." });
-  };
-
-  // Save, then move the student to the next part of the workflow. Missing
-  // documents never block — they're listed so the student knows what's left.
-  const saveAndContinue = async () => {
+  const submit = async () => {
+    setConfirmSubmit(false);
     const ok = await handleSave();
     if (!ok) {
       setNotice({ tone: "error", text: "We couldn't save just now. Check your connection and try again." });
       return;
     }
-    if (view === "documents") {
-      changeView("profile");
-      setNotice(missingCount
-        ? { tone: "warning", text: `Saved. ${plural(missingCount, "required document")} still to upload — you can add ${missingCount === 1 ? "it" : "them"} any time.` }
-        : { tone: "success", text: "Saved. All required documents are in — now check your profile details." });
-    } else if (profilePage < PROFILE_PAGES.length) {
-      setProfilePage(profilePage + 1);
+    try {
+      const { student: fresh } = await submitMyApplication();
+      setStudent({ ...buildStudentRecord(), applicationSubmittedAt: fresh.applicationSubmittedAt });
+      setEditing(false);
+      setStep(null);
+      setView("home");
       window.scrollTo({ top: 0, behavior: "instant" });
-      setNotice({ tone: "success", text: "Saved." });
-    } else {
-      changeView("documents");
-      setNotice({ tone: "success", text: "Your profile has been saved." });
+      setNotice({ tone: "success", text: "Application submitted. Your advisor has been notified." });
+    } catch (err) {
+      if (err.applicantSignIn) { signOut(); return; }
+      setNotice({ tone: "error", text: err.message });
     }
   };
 
-  const primaryLabel = view === "documents" || profilePage < PROFILE_PAGES.length ? "Save & Continue" : "Save & Finish";
+  const finishEditing = async () => {
+    const ok = await handleSave();
+    if (!ok) {
+      setNotice({ tone: "error", text: "We couldn't save just now. Check your connection and try again." });
+      return;
+    }
+    setEditing(false);
+    setStep(null);
+    window.scrollTo({ top: 0, behavior: "instant" });
+    setNotice({ tone: "success", text: "Your changes are saved." });
+  };
 
-  const inWorkspace = view === "documents" || view === "profile";
+  const openEditor = (id, opts) => {
+    setEditing(true);
+    goToStep(id || firstOpenStep, opts);
+  };
 
-  const railNote = view === "documents"
-    ? (missingCount ? `${plural(missingCount, "required document")} still to upload.` : "All required documents are uploaded.")
-    : null;
+  const changeView = (nextView) => {
+    setView(nextView);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  };
+
+  const nextLabel = currentStep === "review"
+    ? (submitted ? "Save changes" : "Submit application")
+    : currentStep === "details" && profilePage < PROFILE_PAGES.length
+      ? `Next: ${PROFILE_PAGES[profilePage].label}`
+      : `Next: ${STEPS[stepIndex + 1]?.label}`;
+
+  const copy = STEP_COPY[currentStep];
 
   return (
     <PortalShell
+      tabs={inWizard ? [] : DASHBOARD_TABS}
       view={view}
       onViewChange={changeView}
       reviewCount={reviewCount}
       student={student}
       saveStatus={saveStatus}
       savedAt={savedAt}
-      onRetrySave={saveProgress}
-      onSignOut={handleSignOut}
+      onRetrySave={() => persist(buildStudentRecord())}
+      onSignOut={signOut}
     >
-      {view === "home" && (
-        <StudentDashboard
+      {!inWizard && view !== "help" && (
+        <ApplicantDashboard
+          view={view}
+          onViewChange={changeView}
           student={student}
           applicationId={applicationId}
-          done={requiredDone}
-          total={dynamicTotal}
-          counts={docCounts}
-          groups={docGroups}
-          reviewCount={reviewCount}
-          onOpenDoc={openDoc}
-          onViewAll={() => changeView("documents")}
-          onLoanDetails={() => changeView("loan")}
-          onOpenProfile={() => changeView("profile")}
+          counts={counts}
+          missing={missingAll}
+          lenders={lenders}
+          onEdit={(id) => openEditor(id)}
         />
       )}
-      {view === "loan" && (
-        <LoanStatus student={student} applicationId={applicationId} onOpenHelp={() => changeView("help")} />
-      )}
-      {view === "help" && (
+      {!inWizard && view === "help" && (
         <HelpCenter student={student} maxSize={MAX_FILE_SIZE} onOpenDocuments={() => changeView("documents")} />
       )}
 
-      {/* Stays mounted on every view so uploads in progress keep running
+      {/* Stays mounted while editing so uploads in progress keep running
           and keep their on-screen state. */}
-      <div className="sp-page" hidden={!inWorkspace}>
-        <div className="sp-main">
-          <div className="sp-stack" hidden={view !== "documents"}>
-              <div className="sp-heading">
-                <div className="sp-heading__text">
-                  <p className="sp-eyebrow">Application ID · <strong>{applicationId}</strong></p>
-                  <h1 className="sp-title">Upload Your Documents</h1>
-                  <p className="sp-lede">
-                    Upload all required documents for your education loan. Our AI will automatically verify and fill your profile details.
-                  </p>
-                </div>
-                <div className="sp-secure">
-                  <span className="sp-secure__icon" aria-hidden="true"><ShieldCheck size={22} /></span>
-                  <div>
-                    <p className="sp-secure__title">Your documents are secure and encrypted</p>
-                    <p className="sp-secure__text">Your documents are handled securely throughout the application process.</p>
-                  </div>
-                </div>
-              </div>
-
-              <ApplicationStepper steps={steps} currentId={currentStep} onSelect={jumpTo} />
-
-              <DocumentSection
-                id="sec-personal"
-                icon={ContactRound}
-                title="Personal Documents"
-                description="These documents help us verify your identity. Start with your Passport, Aadhaar and PAN — we read them and fill in your details."
-                done={personalDone}
-                total={personalReq.length}
-              >
-                <DocGrid
-                  sectionKey="applicant"
-                  fields={DOCUMENT_SCHEMA.applicant.fields}
-                  studentName={student.name}
-                  studentIdentifier={studentIdentifier}
-                  subFolder="GOVT ID"
-                  uploads={getUploadsFor("applicant")}
-                  onUploaded={(fieldId, result) => handleUploaded("applicant", fieldId, result)}
-                  extractionsFor={(fieldId) => extractions[`applicant.${fieldId}`]}
-                  onExtracted={(fieldId, payload) => handleExtracted("applicant", fieldId, payload)}
-                />
-              </DocumentSection>
-
-              <DocumentSection
-                id="sec-academic"
-                icon={GraduationCap}
-                title="Academic Documents"
-                description="Upload your academic records, certificates and test scores. Scores and years are filled into your profile."
-                done={academicDone}
-                total={academicReq.length}
-              >
-                <DocGrid
-                  sectionKey="academics"
-                  fields={DOCUMENT_SCHEMA.academics.fields}
-                  studentName={student.name}
-                  studentIdentifier={studentIdentifier}
-                  subFolder="Academics"
-                  uploads={getUploadsFor("academics")}
-                  onUploaded={(fieldId, result) => handleUploaded("academics", fieldId, result)}
-                  extractionsFor={(fieldId) => extractions[`academics.${fieldId}`]}
-                  onExtracted={(fieldId, payload) => handleExtracted("academics", fieldId, payload)}
-                />
-              </DocumentSection>
-
-              <DocumentSection
-                id="sec-financial"
-                icon={Landmark}
-                title="Financial Documents"
-                description="Upload the financial records of each co-applicant. The checklist adapts to their employment type."
-                done={financialDone}
-                total={financialTotal}
-              >
-                <LoanSection
-                  studentName={student.name}
-                  studentIdentifier={studentIdentifier}
-                  coCount={coCount}
-                  setCoCount={requestCoCount}
-                  uploads={uploads}
-                  onUploaded={handleUploaded}
-                  extractions={extractions}
-                  onExtracted={handleExtracted}
-                  personalInfo={personalInfo}
-                  onInfoChange={updatePersonal}
-                  coFieldsFor={coFieldsFor}
-                />
-              </DocumentSection>
-
-              <DocumentSection
-                id="sec-review"
-                icon={ListChecks}
-                title="Review & Save"
-                description="Add any other documents, check what's still missing, then save."
-                done={requiredDone}
-                total={dynamicTotal}
-              >
-                <ReviewPanel
-                  missing={missingList}
-                  onJump={jumpTo}
-                  reviewCount={reviewCount}
-                  onOpenProfile={() => changeView("profile")}
-                />
-                <OtherDocumentsSection
-                  studentName={student.name}
-                  studentIdentifier={studentIdentifier}
-                  uploads={getUploadsFor("otherDocs")}
-                  count={otherCount}
-                  onUploaded={(fieldId, result) => handleUploaded("otherDocs", fieldId, result)}
-                  onRemoved={handleOtherRemoved}
-                />
-              </DocumentSection>
+      {inWizard && (
+        <ApplicationWizard
+          steps={stepMeta}
+          current={currentStep}
+          onSelect={(id) => goToStep(id)}
+          counts={counts}
+          heading={copy.heading}
+          description={copy.description}
+          notes={copy.notes}
+          onBack={back}
+          onNext={next}
+          nextLabel={nextLabel}
+          busy={saving}
+          secondary={submitted ? (
+            <button type="button" className="aw-btn aw-btn--text" onClick={finishEditing} disabled={saving}>
+              Save &amp; close
+            </button>
+          ) : null}
+        >
+          <div hidden={currentStep !== "identity"}>
+            <DocGrid
+              sectionKey="applicant"
+              fields={DOCUMENT_SCHEMA.applicant.fields}
+              studentName={student.name}
+              studentIdentifier={studentIdentifier}
+              subFolder="GOVT ID"
+              uploads={getUploadsFor("applicant")}
+              onUploaded={(fieldId, result) => handleUploaded("applicant", fieldId, result)}
+              extractionsFor={(fieldId) => extractions[`applicant.${fieldId}`]}
+              onExtracted={(fieldId, payload) => handleExtracted("applicant", fieldId, payload)}
+            />
           </div>
-          {view === "profile" && (
+          <div hidden={currentStep !== "education"}>
+            <DocGrid
+              sectionKey="academics"
+              fields={DOCUMENT_SCHEMA.academics.fields}
+              studentName={student.name}
+              studentIdentifier={studentIdentifier}
+              subFolder="Academics"
+              uploads={getUploadsFor("academics")}
+              onUploaded={(fieldId, result) => handleUploaded("academics", fieldId, result)}
+              extractionsFor={(fieldId) => extractions[`academics.${fieldId}`]}
+              onExtracted={(fieldId, payload) => handleExtracted("academics", fieldId, payload)}
+              optionalNote="Test score reports and admission letters fill in your scores and course."
+            />
+          </div>
+          <div hidden={currentStep !== "family"}>
+            <LoanSection
+              studentName={student.name}
+              studentIdentifier={studentIdentifier}
+              coCount={coCount}
+              setCoCount={requestCoCount}
+              uploads={uploads}
+              onUploaded={handleUploaded}
+              extractions={extractions}
+              onExtracted={handleExtracted}
+              personalInfo={personalInfo}
+              onInfoChange={updatePersonal}
+              coFieldsFor={coFieldsFor}
+            />
+          </div>
+          {currentStep === "details" && (
             <ReviewContext.Provider value={reviewFields}>
+              <AutoFillBanner count={Object.keys(autoFilledFields).length} reviewCount={reviewCount} />
               <PersonalAndRefsSection
                 info={personalInfo}
                 onChange={updatePersonal}
                 autoFilledFields={autoFilledFields}
-                reviewCount={reviewCount}
                 subStep={profilePage}
                 setSubStep={(p) => { setProfilePage(p); window.scrollTo({ top: 0, behavior: "instant" }); }}
-                onBack={() => changeView("documents")}
               />
             </ReviewContext.Provider>
           )}
-        </div>
-
-        <aside className="sp-rail" aria-label="Application progress">
-          <ProgressSummary
-            done={requiredDone}
-            total={dynamicTotal}
-            categories={steps.slice(0, 3).map((s) => ({ id: s.id, label: s.label, done: s.done, total: s.total }))}
-            onJump={jumpTo}
-          />
-          <AIVerificationPanel
-            info={personalInfo}
-            autoFilled={autoFilledFields}
-            review={reviewFields}
-            identity={identity}
-            onEditProfile={view === "documents" ? () => changeView("profile") : null}
-          />
-          <DocumentGuidelines maxSize={MAX_FILE_SIZE} />
-          <SaveActions
-            primaryLabel={primaryLabel}
-            onPrimary={saveAndContinue}
-            onSave={saveProgress}
-            saving={saving}
-            note={railNote}
-          />
-        </aside>
-      </div>
-
-      {inWorkspace && (
-        <MobileActionBar
-          done={requiredDone}
-          total={dynamicTotal}
-          primaryLabel={primaryLabel}
-          onPrimary={saveAndContinue}
-          saving={saving}
-        />
+          <div hidden={currentStep !== "review"}>
+            <ReviewStep
+              missingDocs={missingDocs}
+              missingDetails={missingDetails}
+              reviewCount={reviewCount}
+              onJump={(m) => goToStep(m.step, { page: m.page, anchor: m.anchor })}
+              onCheckDetails={() => goToStep("details", { page: 1 })}
+              identity={identity}
+              info={personalInfo}
+              autoFilled={autoFilledFields}
+              review={reviewFields}
+              submitted={submitted}
+            >
+              <OtherDocumentsSection
+                studentName={student.name}
+                studentIdentifier={studentIdentifier}
+                uploads={getUploadsFor("otherDocs")}
+                count={otherCount}
+                onUploaded={(fieldId, result) => handleUploaded("otherDocs", fieldId, result)}
+                onRemoved={handleOtherRemoved}
+              />
+            </ReviewStep>
+          </div>
+        </ApplicationWizard>
       )}
 
       {notice && (
         <div className={`sp-toast is-${notice.tone}`} role="status">
           {notice.tone === "success" ? <CircleCheck size={18} aria-hidden="true" /> : notice.tone === "error" ? <CircleAlert size={18} aria-hidden="true" /> : <TriangleAlert size={18} aria-hidden="true" />}
           <span>{notice.text}</span>
+          {notice.action && inWizard && currentStep !== "details" && (
+            <button type="button" className="sp-toast__action" onClick={() => { notice.action.run(); setNotice(null); }}>
+              {notice.action.label}
+            </button>
+          )}
           <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss">
             <X size={16} aria-hidden="true" />
           </button>
@@ -803,7 +793,109 @@ export default function Portal() {
           <strong>{confirmCo.losing.map((i) => coName(i)).join(", ")}</strong>. You&apos;d need to upload their documents again.
         </ConfirmDialog>
       )}
+
+      {confirmSubmit && (
+        <ConfirmDialog
+          title="Submit with items missing?"
+          confirmLabel="Submit anyway"
+          onCancel={() => setConfirmSubmit(false)}
+          onConfirm={submit}
+        >
+          {plural(missingAll.length, "item")} {missingAll.length === 1 ? "is" : "are"} still missing. Your advisor can start with what you have —
+          you can add the rest from your dashboard any time.
+        </ConfirmDialog>
+      )}
     </PortalShell>
+  );
+}
+
+// ─── Step helpers ──────────────────────────────────────────────────────────────
+
+function AutoFillBanner({ count, reviewCount }) {
+  if (!count && !reviewCount) {
+    return (
+      <p className="sp-autofill is-empty">
+        <Sparkles size={16} aria-hidden="true" />
+        <span>Upload your Passport, Aadhaar and PAN in <strong>Your ID</strong> and most of this fills itself in.</span>
+      </p>
+    );
+  }
+  return (
+    <p className="sp-autofill">
+      <Sparkles size={16} aria-hidden="true" />
+      <span>
+        <strong>{plural(count, "detail")}</strong> filled in from your documents
+        {reviewCount > 0 && <> · <strong className="is-warning">{reviewCount} to check</strong> (marked “Please check”)</>}
+      </span>
+    </p>
+  );
+}
+
+function ReviewStep({ missingDocs, missingDetails, reviewCount, onJump, onCheckDetails, identity, info, autoFilled, review, submitted, children }) {
+  const complete = !missingDocs.length && !missingDetails.length;
+  return (
+    <div className="aw-review">
+      <section className="aw-check" aria-labelledby="rv-docs">
+        <div className="aw-check__head">
+          <h2 className="aw-check__title" id="rv-docs"><FileCheck2 size={18} aria-hidden="true" /> Documents</h2>
+        </div>
+        {missingDocs.length ? (
+          <MissingList items={missingDocs} onJump={onJump} />
+        ) : (
+          <p className="aw-check__ok"><CircleCheck size={18} aria-hidden="true" /> All required documents are in.</p>
+        )}
+      </section>
+      <section className="aw-check" aria-labelledby="rv-details">
+        <div className="aw-check__head">
+          <h2 className="aw-check__title" id="rv-details"><UserRound size={18} aria-hidden="true" /> Details</h2>
+        </div>
+        {missingDetails.length ? (
+          <MissingList items={missingDetails} onJump={onJump} />
+        ) : (
+          <p className="aw-check__ok"><CircleCheck size={18} aria-hidden="true" /> The details lenders need are filled in.</p>
+        )}
+        {reviewCount > 0 && (
+          <button type="button" className="aw-check__item aw-check__review" onClick={onCheckDetails}>
+            <TriangleAlert size={16} aria-hidden="true" />
+            <span>{plural(reviewCount, "detail")} read from your documents need a quick check</span>
+            <ArrowRight size={15} aria-hidden="true" />
+          </button>
+        )}
+      </section>
+
+      <div className="aw-full">
+        <AIVerificationPanel info={info} autoFilled={autoFilled} review={review} identity={identity} onEditProfile={onCheckDetails} />
+      </div>
+      <div className="aw-full">{children}</div>
+
+      {!submitted && (
+        <section className="aw-submit" aria-labelledby="rv-submit">
+          <h2 id="rv-submit"><Send size={18} aria-hidden="true" /> {complete ? "Everything’s ready" : "Almost there"}</h2>
+          <p>
+            {complete
+              ? "Tap Submit application below and your advisor starts on it right away. You can follow every step from your dashboard."
+              : "You can still submit now with Submit application below — your advisor starts with what you have, and you can add the rest from your dashboard."}
+          </p>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function MissingList({ items, onJump }) {
+  return (
+    <ul className="aw-check__list">
+      {items.map((m) => (
+        <li key={m.key}>
+          <button type="button" className="aw-check__item" onClick={() => onJump(m)}>
+            <CircleAlert size={16} aria-hidden="true" />
+            <span>{m.label}</span>
+            <span className="aw-check__group">{m.group}</span>
+            <ArrowRight size={15} aria-hidden="true" />
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -1026,53 +1118,33 @@ function FormGroup({ title, note, children }) {
 
 // ─── Personal Info + References (the "My Profile" view) ────────────────────────
 
-function PersonalAndRefsSection({ info, onChange, autoFilledFields, reviewCount, subStep, setSubStep, onBack }) {
+function PersonalAndRefsSection({ info, onChange, autoFilledFields, subStep, setSubStep }) {
   const af = autoFilledFields || {};
-  const afCount = Object.keys(af).length;
 
   return (
     <div className="sp-profile">
-      <div className="sp-heading sp-heading--profile">
-        <div className="sp-heading__text">
-          <button type="button" className="sp-back" onClick={onBack}>
-            <ArrowLeft size={15} aria-hidden="true" /> Back to documents
-          </button>
-          <h1 className="sp-title">My Profile</h1>
-          <p className="sp-lede">
-            {afCount > 0
-              ? "Fields marked “From …” were filled in from your documents. Check them and correct anything that looks wrong — what you type is never overwritten."
-              : "Fill in your details across the pages below. Uploading your Passport, Aadhaar and PAN fills many of them in for you."}
-          </p>
-        </div>
-        {(afCount > 0 || reviewCount > 0) && (
-          <div className="sp-profile-stats">
-            {afCount > 0 && (
-              <span className="sp-stat is-ai"><Sparkles size={14} aria-hidden="true" /> {plural(afCount, "field")} filled from documents</span>
-            )}
-            {reviewCount > 0 && (
-              <span className="sp-stat is-warning"><TriangleAlert size={14} aria-hidden="true" /> {plural(reviewCount, "detail")} to check</span>
-            )}
-          </div>
-        )}
-      </div>
-
       <div className="sp-card">
         <div className="sp-tabs" role="tablist" aria-label="Profile pages">
-          {PROFILE_PAGES.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              role="tab"
-              id={`profile-tab-${p.id}`}
-              aria-selected={subStep === p.id}
-              aria-controls="profile-panel"
-              className={`sp-tab${subStep === p.id ? " is-active" : ""}`}
-              onClick={() => setSubStep(p.id)}
-            >
-              <span className="sp-tab__num">{p.id}</span>
-              <span className="sp-tab__label">{p.label}</span>
-            </button>
-          ))}
+          {PROFILE_PAGES.map((p) => {
+            const { done, total } = pageProgress(info, p);
+            const complete = done >= total;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                role="tab"
+                id={`profile-tab-${p.id}`}
+                aria-selected={subStep === p.id}
+                aria-controls="profile-panel"
+                className={`sp-tab${subStep === p.id ? " is-active" : ""}${complete ? " is-complete" : ""}`}
+                onClick={() => setSubStep(p.id)}
+              >
+                <span className="sp-tab__num">{complete ? <CircleCheck size={14} aria-hidden="true" /> : p.id}</span>
+                <span className="sp-tab__label">{p.label}</span>
+                <span className="sp-tab__count">{done}/{total}</span>
+              </button>
+            );
+          })}
         </div>
 
         <div className="sp-tabpanel" role="tabpanel" id="profile-panel" aria-labelledby={`profile-tab-${subStep}`}>
@@ -1278,15 +1350,6 @@ function PersonalAndRefsSection({ info, onChange, autoFilledFields, reviewCount,
           {/* ── Page 5: References ── */}
           {subStep === 5 && <ReferencesContent info={info} onChange={onChange} />}
 
-          <div className="sp-pager">
-            <button type="button" className="rail-btn rail-btn--secondary" disabled={subStep === 1} onClick={() => setSubStep(subStep - 1)}>
-              <ArrowLeft size={15} aria-hidden="true" /> Previous page
-            </button>
-            <span className="sp-pager__pos">Page {subStep} of {PROFILE_PAGES.length}</span>
-            <button type="button" className="rail-btn rail-btn--secondary" disabled={subStep === PROFILE_PAGES.length} onClick={() => setSubStep(subStep + 1)}>
-              Next page <ArrowRight size={15} aria-hidden="true" />
-            </button>
-          </div>
         </div>
       </div>
     </div>
@@ -1353,8 +1416,13 @@ function ReferencesContent({ info, onChange }) {
 
 // ─── Document grid ─────────────────────────────────────────────────────────────
 
-// Required documents first, optional ones under their own heading.
-function DocGrid({ sectionKey, fields, studentName, studentIdentifier, subFolder, uploads, onUploaded, extractionsFor, onExtracted }) {
+// Required documents first. Optional ones fold away under one row (open by
+// itself once one of them is uploaded), so the step shows what's needed.
+function DocGrid({ sectionKey, fields, studentName, studentIdentifier, subFolder, uploads, onUploaded, extractionsFor, onExtracted, optionalNote }) {
+  const opt = fields.filter((f) => f.optional);
+  const optUploaded = countUploadedFields(uploads, opt);
+  const [showOptional, setShowOptional] = useState(optUploaded > 0);
+  const optId = useId();
   const card = (field) => (
     <FileUploadBox
       key={field.id}
@@ -1370,19 +1438,30 @@ function DocGrid({ sectionKey, fields, studentName, studentIdentifier, subFolder
     />
   );
   const req = fields.filter((f) => !f.optional);
-  const opt = fields.filter((f) => f.optional);
   return (
-    <>
-      {req.length > 0 && <div className="doc-grid">{req.map(card)}</div>}
-      {opt.length > 0 && (
-        <div className={req.length ? "doc-subgroup" : undefined}>
-          <h3 className="doc-subgroup__title">
-            Optional documents <span>— add them if you have them</span>
-          </h3>
-          <div className="doc-grid">{opt.map(card)}</div>
+    <div className="aw-body-stack">
+      {req.length > 0 && (
+        <div className="aw-group">
+          <h2 className="aw-group__title">Needed</h2>
+          <div className="doc-grid">{req.map(card)}</div>
         </div>
       )}
-    </>
+      {opt.length > 0 && (
+        <div className="aw-group">
+          <button type="button" className="aw-more" aria-expanded={showOptional} aria-controls={optId} onClick={() => setShowOptional((s) => !s)}>
+            <span>
+              <span className="aw-more__title">
+                If you have them · {plural(opt.length, "optional document")}
+                {optUploaded > 0 && ` · ${optUploaded} added`}
+              </span>
+              <span className="aw-more__sub">{optionalNote || "Not required, but they can strengthen your application."}</span>
+            </span>
+            <ChevronDown size={18} aria-hidden="true" />
+          </button>
+          <div className="doc-grid" id={optId} hidden={!showOptional}>{opt.map(card)}</div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1564,45 +1643,6 @@ function LoanSection({ studentName, studentIdentifier, coCount, setCoCount, uplo
           </div>
         );
       })}
-    </div>
-  );
-}
-
-// ─── Review checklist ──────────────────────────────────────────────────────────
-
-function ReviewPanel({ missing, onJump, reviewCount, onOpenProfile }) {
-  return (
-    <div className="review">
-      {missing.length === 0 ? (
-        <p className="review__ok">
-          <CircleCheck size={18} aria-hidden="true" /> All required documents are uploaded.
-        </p>
-      ) : (
-        <div className="review__list-wrap">
-          <p className="review__title">
-            <TriangleAlert size={16} aria-hidden="true" /> Still needed ({missing.length})
-          </p>
-          <ul className="review__list">
-            {missing.map((m) => (
-              <li key={m.key}>
-                <button type="button" className="review__item" onClick={() => onJump(m.target)}>
-                  <span className="review__group">{m.group}</span>
-                  <span className="review__label">{m.label}</span>
-                  <ArrowRight size={14} aria-hidden="true" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <button type="button" className="review__profile" onClick={onOpenProfile}>
-        <UserRound size={18} aria-hidden="true" />
-        <span>
-          <strong>Check your profile</strong>
-          <span>{reviewCount > 0 ? `${plural(reviewCount, "detail")} read from your documents need a quick check.` : "Confirm the details we filled in and add the rest."}</span>
-        </span>
-        <ArrowRight size={16} aria-hidden="true" />
-      </button>
     </div>
   );
 }

@@ -1,12 +1,17 @@
 import { ChevronDown, Headset, FileText } from "lucide-react";
 import { DocumentGuidelines } from "./PortalRail";
 import { initials } from "./studentRecord";
+import "./StudentDashboard.css";
 import "./PortalViews.css";
 
 const FAQ = [
   {
+    q: "I forgot my PIN. What do I do?",
+    a: "Ask your advisor to reset it. Then open your application again with your email or mobile number and choose a new PIN. After five wrong tries your application locks for 15 minutes to keep it safe.",
+  },
+  {
     q: "Which file types can I upload?",
-    a: "Most documents accept PDF, JPG, PNG, DOC or DOCX — each upload card lists exactly what it takes. On a phone you can also take a photo of the document straight from the card.",
+    a: "Most documents accept PDF, JPG or PNG (many also take DOC or DOCX). If a file isn’t accepted, the card tells you which types it takes. To scan a paper document, tap Camera on the card — line the document up in the frame and we crop it for you.",
   },
   {
     q: "Is there a file size limit?",
