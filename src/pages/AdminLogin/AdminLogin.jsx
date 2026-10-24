@@ -8,6 +8,7 @@ import {
   RefreshCw,
   User,
   Lock,
+  Mail,
   AlertCircle,
   ArrowLeft,
   ScanText,
@@ -15,17 +16,18 @@ import {
   Landmark,
   History,
 } from "lucide-react";
-import logoMark from "../../assets/logo-mark.webp";
+import BrandLogo from "../../components/BrandLogo/BrandLogo";
 import { BANK_OPTIONS } from "../../utils/bankOptions";
 import { useStudent } from "../../context/StudentContext";
+import { passwordProblem } from "../../utils/adminApi";
 import "./AdminLogin.css";
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
-async function apiPost(path, body) {
+async function apiPost(path, body, token) {
   const res = await fetch(`${API_URL}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: path.endsWith("/me/email") ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(body),
   });
   return res.json();
@@ -34,12 +36,31 @@ async function apiPost(path, body) {
 // What DocLocker actually does, in the order a student's file moves through
 // it — shown on the brand panel instead of generic marketing copy.
 const FLOW = [
-  { icon: ScanText,    title: "Documents read for you",       text: "Passport, Aadhaar, PAN and marksheets fill the application automatically." },
-  { icon: ShieldCheck, title: "Names checked across every ID", text: "Mismatches are flagged before a bank ever sees the file." },
-  { icon: Landmark,    title: "Shared with the right lender",  text: "Bank officers see only the students they're given access to." },
+  { icon: ScanText,    tone: "blue",  title: "Documents read for you",       text: "Passport, Aadhaar, PAN and marksheets fill the application automatically." },
+  { icon: ShieldCheck, tone: "teal",  title: "Names checked across every ID", text: "Mismatches are flagged before a bank ever sees the file." },
+  { icon: Landmark,    tone: "amber", title: "Shared with the right lender",  text: "Bank officers see only the students they're given access to." },
 ];
 
-const LENDERS = BANK_OPTIONS.filter((b) => b.value !== "Others").slice(0, 6);
+const ALL_LENDERS = BANK_OPTIONS.filter((b) => b.value !== "Others");
+const LENDERS = ALL_LENDERS.slice(0, 6);
+const MORE_LENDERS = ALL_LENDERS.length - LENDERS.length;
+
+// Rendered in the brand panel on wide screens and under the card on phones.
+function LenderStrip({ className = "" }) {
+  return (
+    <div className={`al-lenders ${className}`.trim()}>
+      <p className="al-lenders-label">Lenders on DocLocker</p>
+      <ul className="al-lenders-row">
+        {LENDERS.map((b) => (
+          <li key={b.value} className="al-lender" title={b.label}>
+            <img src={b.logo} alt={b.label} />
+          </li>
+        ))}
+      </ul>
+      {MORE_LENDERS > 0 && <p className="al-lenders-more">and {MORE_LENDERS} more lending partners</p>}
+    </div>
+  );
+}
 
 function Field({ id, label, icon: Icon, type = "text", value, onChange, placeholder, autoComplete, autoFocus, trailing }) {
   return (
@@ -77,16 +98,20 @@ function PasswordToggle({ shown, onToggle }) {
 }
 
 export default function AdminLogin() {
-  // "login" | "setup"
+  // "login" | "email" (finish a name-only superadmin sign-in) | "setup"
   const [view, setView] = useState("login");
 
-  // Login form
-  const [loginName, setLoginName] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
   const [loginPass, setLoginPass] = useState("");
   const [showLoginPass, setShowLoginPass] = useState(false);
 
+  // One-time "add your email" step
+  const [setupToken, setSetupToken] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+
   // First-time setup form
   const [setupName, setSetupName] = useState("");
+  const [setupEmail, setSetupEmail] = useState("");
   const [setupPass, setSetupPass] = useState("");
   const [setupConfirm, setSetupConfirm] = useState("");
   const [showSetupPass, setShowSetupPass] = useState(false);
@@ -97,28 +122,46 @@ export default function AdminLogin() {
   const { loginAdmin } = useStudent();
   const navigate = useNavigate();
 
+  const finish = (result) => {
+    loginAdmin(result.role, result.advisorName, result.name, result.token, result.bank || "", result.account || null);
+    navigate(result.role === "banker" ? "/banker-portal" : "/admin");
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!loginName.trim()) { setError("Please enter your name."); return; }
-    if (!loginPass) { setError("Please enter your password."); return; }
+    if (!loginEmail.trim()) { setError("Enter your email."); return; }
+    if (!loginPass) { setError("Enter your password."); return; }
     setLoading(true);
     setError("");
     try {
-      const result = await apiPost("/api/auth/login", {
-        name: loginName.trim(),
-        password: loginPass,
-      });
+      const result = await apiPost("/api/auth/login", { email: loginEmail.trim(), password: loginPass });
       if (result.notInitialized) {
         setView("setup");
-        setLoading(false);
-        return;
-      }
-      if (result.success) {
-        loginAdmin(result.role, result.advisorName, result.name, result.token, result.bank || "");
-        navigate(result.role === "banker" ? "/banker-portal" : "/admin");
+      } else if (result.success && result.setupRequired) {
+        // Signed in by name: an email must be added before anything else.
+        setSetupToken(result.token);
+        setView("email");
+      } else if (result.success) {
+        finish(result);
       } else {
-        setError(result.error || "Invalid name or password. Please try again.");
+        setError(result.error || "Incorrect email or password.");
       }
+    } catch {
+      setError("Could not connect. Check your network and try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddEmail = async (e) => {
+    e.preventDefault();
+    if (!/^\S+@\S+\.\S{2,}$/.test(newEmail.trim())) { setError("Enter a valid email address."); return; }
+    setLoading(true);
+    setError("");
+    try {
+      const result = await apiPost("/api/auth/me/email", { email: newEmail.trim(), password: loginPass }, setupToken);
+      if (result.success) finish(result);
+      else setError(result.error || "Could not save your email.");
     } catch {
       setError("Could not connect. Check your network and try again.");
     } finally {
@@ -128,24 +171,20 @@ export default function AdminLogin() {
 
   const handleSetup = async (e) => {
     e.preventDefault();
-    if (!setupName.trim()) { setError("Please enter an admin name."); return; }
-    if (setupPass.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (setupName.trim().length < 2) { setError("Enter your name."); return; }
+    if (!/^\S+@\S+\.\S{2,}$/.test(setupEmail.trim())) { setError("Enter a valid email address."); return; }
+    const problem = passwordProblem(setupPass);
+    if (problem) { setError(`${problem}.`); return; }
     if (setupPass !== setupConfirm) { setError("Passwords do not match."); return; }
     setLoading(true);
     setError("");
     try {
-      const result = await apiPost("/api/auth/init", {
-        name: setupName.trim(),
-        password: setupPass,
-      });
+      const result = await apiPost("/api/auth/init", { name: setupName.trim(), email: setupEmail.trim(), password: setupPass });
       if (result.success) {
-        loginAdmin(result.role, result.advisorName, result.name, result.token);
-        navigate("/admin");
+        finish(result);
       } else {
         setError(result.error || "Setup failed. Please try again.");
-        if (result.error && result.error.includes("already initialized")) {
-          setView("login");
-        }
+        if (result.error && result.error.includes("already initialized")) setView("login");
       }
     } catch {
       setError("Could not connect. Check your network and try again.");
@@ -155,173 +194,210 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="al-page">
-      {/* ── Brand panel ───────────────────────────────────────────── */}
-      <aside className="al-brand" aria-label="About DocLocker">
-        <div className="al-brand-inner">
+    <div className="al-page theme-orbit">
+      <header className="al-topbar">
+        {/* The brand panel carries the full lockup on wide screens */}
+        <BrandLogo size="sm" className="al-topbar-logo" />
+        <Link to="/" className="al-back">
+          <ArrowLeft size={16} aria-hidden="true" /> Back to home
+        </Link>
+      </header>
+
+      <div className="al-layout">
+        {/* ── Brand panel ───────────────────────────────────────────── */}
+        <aside className="al-brand" aria-label="About DocLocker">
+          <BrandLogo size="lg" tone="dark" tagline />
+
           <div className="al-hero">
-            <div className="al-mark-wrap">
-              <span className="al-mark-halo" aria-hidden="true" />
-              <img src={logoMark} alt="" className="al-mark" width="168" height="168" />
-            </div>
-            <h2 className="al-wordmark">
-              <span className="al-wordmark-doc">Doc</span><span className="al-wordmark-locker">Locker</span>
+            <p className="al-eyebrow"><ShieldCheck size={14} aria-hidden="true" /> Staff &amp; lender access</p>
+            <h2 className="al-headline">
+              Education loan files, <span>simplified</span>
             </h2>
-            <p className="al-tagline">
-              Study abroad. <em>Funded</em>, not delayed.
+            <p className="al-lede">
+              Review student documents, track every application and share verified files with lenders, all in one secure place.
             </p>
           </div>
 
-          <ol className="al-flow">
-            {FLOW.map(({ icon: Icon, title, text }, i) => (
-              <li key={title} className="al-flow-step" style={{ "--i": i }}>
-                <span className="al-flow-icon"><Icon size={18} /></span>
+          <ul className="al-flow">
+            {FLOW.map(({ icon: Icon, tone, title, text }, i) => (
+              <li key={title} className="al-flow-card" style={{ "--i": i }}>
+                <span className={`al-flow-icon al-flow-icon--${tone}`}><Icon size={20} aria-hidden="true" /></span>
                 <div>
                   <p className="al-flow-title">{title}</p>
                   <p className="al-flow-text">{text}</p>
                 </div>
               </li>
             ))}
-          </ol>
+          </ul>
 
-          <div className="al-lenders">
-            <p className="al-lenders-label">Lenders on DocLocker</p>
-            <div className="al-lenders-row">
-              {LENDERS.map((b) => (
-                <span key={b.value} className="al-lender" title={b.label}>
-                  <img src={b.logo} alt={b.label} loading="lazy" />
-                </span>
-              ))}
-            </div>
+          <LenderStrip />
+        </aside>
+
+        {/* ── Form panel ────────────────────────────────────────────── */}
+        <main className="al-main">
+          <div className="al-card">
+            {view === "login" && (
+              <form onSubmit={handleLogin} className="al-form" noValidate>
+                <h1 className="al-title">Welcome back</h1>
+                <p className="al-sub">Sign in to manage students, documents and loan applications.</p>
+
+                <Field
+                  id="al-email"
+                  label="Email"
+                  icon={Mail}
+                  type="email"
+                  value={loginEmail}
+                  onChange={setLoginEmail}
+                  placeholder="name@company.com"
+                  autoComplete="username"
+                  autoFocus
+                />
+                <Field
+                  id="al-password"
+                  label="Password"
+                  icon={Lock}
+                  type={showLoginPass ? "text" : "password"}
+                  value={loginPass}
+                  onChange={setLoginPass}
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  trailing={<PasswordToggle shown={showLoginPass} onToggle={() => setShowLoginPass((s) => !s)} />}
+                />
+
+                {error && (
+                  <div className="al-error" role="alert">
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <button type="submit" className="al-submit" disabled={loading}>
+                  {loading
+                    ? <><RefreshCw size={17} className="spin" aria-hidden="true" /> Signing in…</>
+                    : <><LogIn size={17} aria-hidden="true" /> Sign in</>}
+                </button>
+
+                <p className="al-help">
+                  Staff and lenders only see their own students. Need an account or forgot your password? Ask your company admin.
+                </p>
+                <p className="al-help al-help--quiet">
+                  Super admin signing in for the first time since sign-in moved to email? Enter your old login name instead of an email.
+                </p>
+              </form>
+            )}
+
+            {view === "email" && (
+              <form onSubmit={handleAddEmail} className="al-form" noValidate>
+                <span className="al-setup-badge"><Mail size={14} aria-hidden="true" /> One more step</span>
+                <h1 className="al-title">Add your email</h1>
+                <p className="al-sub">Sign-in is by email now. Add yours once — next time you sign in with it and your same password.</p>
+
+                <Field
+                  id="al-new-email"
+                  label="Your email"
+                  icon={Mail}
+                  type="email"
+                  value={newEmail}
+                  onChange={setNewEmail}
+                  placeholder="name@flyurdream.com"
+                  autoComplete="email"
+                  autoFocus
+                />
+
+                {error && (
+                  <div className="al-error" role="alert">
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <button type="submit" className="al-submit" disabled={loading}>
+                  {loading
+                    ? <><RefreshCw size={17} className="spin" aria-hidden="true" /> Saving…</>
+                    : <><LogIn size={17} aria-hidden="true" /> Save and continue</>}
+                </button>
+              </form>
+            )}
+
+            {view === "setup" && (
+              <form onSubmit={handleSetup} className="al-form" noValidate>
+                <span className="al-setup-badge"><Sparkles size={14} aria-hidden="true" /> First-time setup</span>
+                <h1 className="al-title">Set up DocLocker</h1>
+                <p className="al-sub">No accounts exist yet. Create the super admin account — you can add companies, staff and lenders from the Team page afterwards.</p>
+
+                <Field
+                  id="al-setup-name"
+                  label="Your name"
+                  icon={User}
+                  value={setupName}
+                  onChange={setSetupName}
+                  placeholder="e.g. Priya Sharma"
+                  autoComplete="name"
+                  autoFocus
+                />
+                <Field
+                  id="al-setup-email"
+                  label="Email"
+                  icon={Mail}
+                  type="email"
+                  value={setupEmail}
+                  onChange={setSetupEmail}
+                  placeholder="name@flyurdream.com"
+                  autoComplete="username"
+                />
+                <Field
+                  id="al-setup-password"
+                  label="Password"
+                  icon={Lock}
+                  type={showSetupPass ? "text" : "password"}
+                  value={setupPass}
+                  onChange={setSetupPass}
+                  placeholder="At least 10 characters, with a number"
+                  autoComplete="new-password"
+                  trailing={<PasswordToggle shown={showSetupPass} onToggle={() => setShowSetupPass((s) => !s)} />}
+                />
+                <Field
+                  id="al-setup-confirm"
+                  label="Confirm password"
+                  icon={Lock}
+                  type={showSetupPass ? "text" : "password"}
+                  value={setupConfirm}
+                  onChange={setSetupConfirm}
+                  placeholder="Repeat the password"
+                  autoComplete="new-password"
+                />
+
+                {error && (
+                  <div className="al-error" role="alert">
+                    <AlertCircle size={16} aria-hidden="true" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <button type="submit" className="al-submit" disabled={loading}>
+                  {loading
+                    ? <><RefreshCw size={17} className="spin" aria-hidden="true" /> Creating…</>
+                    : <><Sparkles size={17} aria-hidden="true" /> Create super admin</>}
+                </button>
+
+                <button
+                  type="button"
+                  className="al-link-btn"
+                  onClick={() => { setView("login"); setError(""); }}
+                >
+                  <ArrowLeft size={14} aria-hidden="true" /> Back to sign in
+                </button>
+              </form>
+            )}
+
+            <p className="al-foot">
+              <History size={14} aria-hidden="true" /> Every sign-in is recorded in the audit log.
+            </p>
           </div>
-        </div>
-      </aside>
 
-      {/* ── Form panel ────────────────────────────────────────────── */}
-      <main className="al-main">
-        <Link to="/" className="al-back">
-          <ArrowLeft size={15} /> Back to home
-        </Link>
-
-        <div className="al-form-wrap">
-          {/* Compact brand shown only when the brand panel is hidden (mobile) */}
-          <div className="al-mobile-brand" aria-hidden="true">
-            <img src={logoMark} alt="" />
-            <span><span className="al-wordmark-doc-dark">Doc</span><span className="al-wordmark-locker">Locker</span></span>
-          </div>
-
-          {view === "login" && (
-            <form onSubmit={handleLogin} className="al-form" noValidate>
-              <h1 className="al-title">Welcome back</h1>
-              <p className="al-sub">Sign in to manage students, documents and loan applications.</p>
-
-              <Field
-                id="al-name"
-                label="Name"
-                icon={User}
-                value={loginName}
-                onChange={setLoginName}
-                placeholder="Your account name"
-                autoComplete="username"
-                autoFocus
-              />
-              <Field
-                id="al-password"
-                label="Password"
-                icon={Lock}
-                type={showLoginPass ? "text" : "password"}
-                value={loginPass}
-                onChange={setLoginPass}
-                placeholder="Enter your password"
-                autoComplete="current-password"
-                trailing={<PasswordToggle shown={showLoginPass} onToggle={() => setShowLoginPass((s) => !s)} />}
-              />
-
-              {error && (
-                <div className="al-error" role="alert">
-                  <AlertCircle size={16} />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <button type="submit" className="al-submit" disabled={loading}>
-                {loading
-                  ? <><RefreshCw size={17} className="spin" /> Signing in…</>
-                  : <><LogIn size={17} /> Sign in</>}
-              </button>
-
-              <p className="al-help">
-                Advisors and bank officers only see their own students. Need an account? Ask your super admin.
-              </p>
-            </form>
-          )}
-
-          {view === "setup" && (
-            <form onSubmit={handleSetup} className="al-form" noValidate>
-              <span className="al-setup-badge"><Sparkles size={14} /> First-time setup</span>
-              <h1 className="al-title">Set up DocLocker</h1>
-              <p className="al-sub">No accounts exist yet. Create the super admin account — you can add advisors and bank officers from Settings afterwards.</p>
-
-              <Field
-                id="al-setup-name"
-                label="Super admin name"
-                icon={User}
-                value={setupName}
-                onChange={setSetupName}
-                placeholder="e.g. Admin"
-                autoComplete="username"
-                autoFocus
-              />
-              <Field
-                id="al-setup-password"
-                label="Password"
-                icon={Lock}
-                type={showSetupPass ? "text" : "password"}
-                value={setupPass}
-                onChange={setSetupPass}
-                placeholder="At least 6 characters"
-                autoComplete="new-password"
-                trailing={<PasswordToggle shown={showSetupPass} onToggle={() => setShowSetupPass((s) => !s)} />}
-              />
-              <Field
-                id="al-setup-confirm"
-                label="Confirm password"
-                icon={Lock}
-                type={showSetupPass ? "text" : "password"}
-                value={setupConfirm}
-                onChange={setSetupConfirm}
-                placeholder="Repeat the password"
-                autoComplete="new-password"
-              />
-
-              {error && (
-                <div className="al-error" role="alert">
-                  <AlertCircle size={16} />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <button type="submit" className="al-submit" disabled={loading}>
-                {loading
-                  ? <><RefreshCw size={17} className="spin" /> Creating…</>
-                  : <><Sparkles size={17} /> Create super admin</>}
-              </button>
-
-              <button
-                type="button"
-                className="al-link-btn"
-                onClick={() => { setView("login"); setError(""); }}
-              >
-                <ArrowLeft size={14} /> Back to sign in
-              </button>
-            </form>
-          )}
-
-          <p className="al-foot">
-            <History size={13} /> Every sign-in is recorded in the audit log.
-          </p>
-        </div>
-      </main>
+          <LenderStrip className="al-lenders--compact" />
+        </main>
+      </div>
     </div>
   );
 }

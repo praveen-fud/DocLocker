@@ -1,4 +1,4 @@
-import { Unlock, ExternalLink } from "lucide-react";
+import { LockKeyhole, ExternalLink } from "lucide-react";
 import "./PdfUnlockBanner.css";
 
 export default function PdfUnlockBanner() {
@@ -10,17 +10,16 @@ export default function PdfUnlockBanner() {
       rel="noopener noreferrer"
       aria-label="Unlock a password-protected PDF before uploading, opens ilovepdf.com in a new tab"
     >
-      <div className="pdf-unlock-track">
-        <div className="pdf-unlock-marquee">
-          {Array.from({ length: 2 }).map((_, i) => (
-            <span className="pdf-unlock-msg" key={i}>
-              <Unlock size={14} />
-              Got a password-protected PDF? Unlock it free before uploading — click here to unlock your PDF instantly
-              <ExternalLink size={12} />
-            </span>
-          ))}
-        </div>
-      </div>
+      <span className="pdf-unlock-icon" aria-hidden="true">
+        <LockKeyhole size={16} />
+      </span>
+      <span className="pdf-unlock-text">
+        <strong>Password-protected PDF?</strong>
+        <span>Unlock it for free before uploading — bank statements often are.</span>
+        <span className="pdf-unlock-link">
+          Unlock on ilovepdf.com <ExternalLink size={12} aria-hidden="true" />
+        </span>
+      </span>
     </a>
   );
 }

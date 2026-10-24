@@ -1,0 +1,433 @@
+/* Dashboard home. Inside .admin-shell (dashboard tokens); reuses the
+   overview card (.ov-card) and status colours (.ov-c-*) from Admin.css. */
+
+.dh { display: flex; flex-direction: column; gap: 20px; }
+
+/* Tones — colour carries meaning: sapphire for neutral counts, gold for
+   the one money figure, success only for loans that were approved.
+   --dh-ink is the icon colour on the tint (AA on --dh-soft). */
+.dh {
+  --dh-panel: #ebf0ff;
+  --dh-panel-edge: rgba(36, 72, 201, 0.18);
+  --dh-panel-rule: rgba(36, 72, 201, 0.12);
+}
+.dh-tone-blue,
+.dh-tone-teal   { --dh-c: var(--primary); --dh-ink: var(--primary); --dh-soft: var(--primary-tint); }
+.dh-tone-violet { --dh-c: var(--navy-soft); --dh-ink: var(--navy-soft); --dh-soft: #e8ecf8; }
+.dh-tone-indigo { --dh-c: var(--gold); --dh-ink: var(--gold-text); --dh-soft: var(--gold-tint); }
+.dh-tone-green  { --dh-c: var(--success); --dh-ink: var(--success-text); --dh-soft: var(--success-bg); }
+
+/* ── Headline figures ── */
+.dh-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.dh-kpis--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.dh-kpi {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 18px 18px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-card);
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+/* Coloured top edge in the card's tone */
+.dh-kpi::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: var(--dh-c);
+  pointer-events: none;
+}
+.dh-kpi:hover { border-color: color-mix(in srgb, var(--dh-c) 40%, white); box-shadow: var(--shadow-lift); transform: translateY(-1px); }
+.dh-kpi:active { transform: translateY(1px); }
+.dh-kpi-top { width: 100%; display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.dh-kpi-icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--dh-soft); color: var(--dh-ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dh-c) 18%, transparent); }
+.dh-kpi-go { color: var(--text-muted); opacity: 0; transition: opacity var(--transition-fast); }
+.dh-kpi:hover .dh-kpi-go, .dh-kpi:focus-visible .dh-kpi-go { opacity: 1; }
+.dh-kpi-value {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dh-kpi-label { font-size: 13.5px; font-weight: 600; color: var(--text-secondary); }
+.dh-kpi-sub { margin-top: 6px; font-size: 12.5px; color: var(--text-muted); }
+.dh-kpi-sub.is-up { color: var(--success-text); font-weight: 600; }
+
+/* ── Grid ── */
+.dh-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 20px; align-items: stretch; }
+.dh-card--funnel { grid-column: span 8; }
+.dh-card--attention { grid-column: span 4; }
+.dh-card--companies { grid-column: 1 / -1; }
+.dh-cell--docs, .dh-cell--advisors, .dh-cell--activity { grid-column: span 4; min-width: 0; display: flex; flex-direction: column; }
+.dh-cell--docs > .ov-card, .dh-cell--activity > .ov-card { flex: 1; }
+.dh-grid--staff .dh-cell--docs, .dh-cell--recent { grid-column: span 6; }
+.dh-cell--recent .loan-badge { height: 22px; padding: 0 8px; font-size: 11.5px; }
+
+.dh-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-card);
+}
+/* Loan journey + needs attention sit on a soft sapphire-tint panel */
+.dh-card--funnel,
+.dh-card--attention {
+  border-color: var(--dh-panel-edge);
+  background: var(--dh-panel);
+  box-shadow: 0 1px 2px rgba(11, 30, 74, 0.04), 0 10px 26px -18px rgba(36, 72, 201, 0.45);
+}
+.dh-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.dh-card-title { margin: 0; font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.dh-card-sub { margin: 3px 0 0; font-size: 12.5px; color: var(--text-secondary); }
+.dh-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: auto;
+  padding: 10px 0 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--primary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.dh-card-head .dh-link { margin-top: 0; padding: 0; }
+.dh-link:hover { text-decoration: underline; }
+.dh-muted { color: var(--text-muted); }
+.dh-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px 12px; text-align: center; color: var(--text-muted); }
+.dh-empty p { margin: 0; font-size: 13.5px; color: var(--text-secondary); }
+.dh-empty--ok { color: var(--success); }
+
+/* ── Loan journey: horizontal bars from one baseline ── */
+.dh-journey { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; flex: 1; justify-content: center; }
+.dh-step-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 176px minmax(0, 1fr) 52px;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.dh-step-row:hover, .dh-step-row:focus-visible { background: var(--bg-surface); box-shadow: 0 0 0 1px var(--dh-panel-edge); }
+.dh-step-label { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.dh-step-num {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--dh-step);
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+.dh-step-text { display: flex; flex-direction: column; min-width: 0; }
+.dh-step-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.dh-step-hint { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Track: hairline quarter gridlines behind the bar; the bar grows from the left baseline */
+.dh-step-track {
+  position: relative;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  border-left: 1px solid var(--border-strong);
+  background-image: linear-gradient(90deg, var(--dh-panel-rule) 1px, transparent 1px);
+  background-size: 25% 100%;
+  background-position: -1px 0;
+}
+.dh-step-bar {
+  height: 20px;
+  min-width: 2px;
+  border-radius: 0 4px 4px 0;
+  background: var(--dh-step);
+  transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.dh-step-value {
+  position: absolute;
+  top: 50%;
+  transform: translate(8px, -50%);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition: left 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.dh-step-share { text-align: right; font-size: 13px; font-weight: 600; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.dh-step-moved {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 0 calc(176px + 16px + 10px);
+  padding: 0 0 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.dh-step-moved svg { color: var(--text-muted); }
+
+/* Hover / focus tooltip */
+.dh-tip {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 200px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--navy);
+  color: #fff;
+  font-size: 12.5px;
+  line-height: 1.4;
+  box-shadow: var(--shadow-lift);
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+.dh-tip strong { font-size: 13px; }
+.dh-tip span { color: rgba(255, 255, 255, 0.8); }
+.dh-step-row:hover .dh-tip, .dh-step-row:focus-visible .dh-tip { opacity: 1; transform: none; }
+
+.dh-closed { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--dh-panel-rule); }
+.dh-closed-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--dh-panel-edge);
+  border-radius: 999px;
+  background: var(--bg-surface);
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.dh-closed-item:hover { border-color: var(--border-accent); }
+.dh-closed-item strong { color: var(--text-primary); }
+.dh-closed-note { margin-left: auto; font-size: 12.5px; color: var(--text-muted); }
+
+/* ── Needs attention ── */
+.dh-attn { list-style: none; margin: 0 -8px; padding: 0; }
+.dh-attn-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.dh-attn-row:hover { background: var(--bg-hover); }
+.dh-card--attention .dh-attn-row:hover { background: var(--bg-surface); }
+.dh-attn li + li .dh-attn-row { border-top: 1px solid var(--border-dim); border-radius: 0; }
+.dh-card--attention .dh-attn li + li .dh-attn-row { border-top-color: var(--dh-panel-rule); }
+.dh-attn li + li .dh-attn-row:hover { border-radius: 10px; border-top-color: transparent; }
+.dh-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.dh-avatar--sm { width: 32px; height: 32px; font-size: 11.5px; background: var(--primary-tint); color: var(--primary); }
+.dh-avatar.is-none { background: var(--bg-hover); color: var(--text-muted); }
+.dh-attn-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.dh-attn-name { font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dh-attn-reasons { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.dh-reason { padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dh-reason--danger { background: var(--danger-bg); color: #b91c1c; box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.18); }
+.dh-reason--warn { background: var(--gold-tint); color: var(--gold-text); box-shadow: inset 0 0 0 1px rgba(242, 166, 35, 0.35); }
+.dh-reason--info { background: var(--bg-surface); color: var(--primary-hover); box-shadow: inset 0 0 0 1px var(--dh-panel-edge); }
+.dh-more { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
+.dh-chev { color: var(--text-muted); }
+
+/* ── Companies ── */
+.dh-share { display: flex; gap: 3px; height: 10px; margin: -4px 0 18px; border-radius: 999px; overflow: hidden; background: var(--bg-hover); }
+.dh-share > span { min-width: 6px; }
+.dh-co-table { display: flex; flex-direction: column; border: 1px solid var(--border-dim); border-radius: 12px; overflow: hidden; }
+.dh-co-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) repeat(3, minmax(0, 0.8fr)) minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.6fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 0;
+  border-top: 1px solid var(--border-dim);
+  background: var(--bg-surface);
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.dh-co-row:hover { background: var(--bg-hover); }
+.dh-co-row--head {
+  border-top: 0;
+  background: var(--bg-raised);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+  cursor: default;
+}
+.dh-co-row--head:hover { background: var(--bg-raised); }
+.dh-co-name { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.dh-co-logo { flex-shrink: 0; width: 38px; height: 38px; border-radius: 10px; object-fit: contain; background: #fff; border: 1px solid var(--border-dim); padding: 3px; }
+.dh-co-logo--initials { --co: var(--primary); display: grid; place-items: center; padding: 0; font-size: 13px; font-weight: 800; color: color-mix(in srgb, var(--co) 55%, #0b1e4a); background: color-mix(in srgb, var(--co) 12%, #fff); border-color: color-mix(in srgb, var(--co) 22%, #fff); }
+.dh-co-text { display: flex; flex-direction: column; min-width: 0; }
+.dh-co-title { font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dh-co-kind { font-size: 12px; color: var(--text-muted); }
+.dh-co-num { font-size: 14px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.dh-co-num strong { font-family: var(--font-display); font-size: 16px; font-weight: 800; }
+.dh-co-pct { margin-left: 6px; font-size: 12px; color: var(--text-muted); }
+.dh-co-progress { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.dh-mini-bar { flex: 1; max-width: 120px; height: 6px; border-radius: 999px; background: var(--bg-hover); overflow: hidden; }
+.dh-mini-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--success); }
+.dh-co-team { font-size: 12.5px; color: var(--text-secondary); }
+
+/* ── Advisor workload ── */
+.dh-adv { list-style: none; margin: 0 -8px; padding: 0; }
+.dh-adv-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.dh-adv-row:hover:not(:disabled) { background: var(--bg-hover); }
+.dh-adv-row:disabled { cursor: default; }
+.dh-adv-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.dh-adv-name { font-size: 13.5px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dh-adv-bar { height: 6px; border-radius: 999px; background: var(--bg-hover); overflow: hidden; }
+.dh-adv-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+.dh-adv-nums { display: flex; flex-direction: column; align-items: flex-end; }
+.dh-adv-nums strong { font-family: var(--font-display); font-size: 16px; font-weight: 800; color: var(--text-primary); }
+.dh-adv-nums span { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
+
+/* The activity feed and lender strip already bring their own card styles */
+.dh .ov-partners { margin-top: 0; }
+
+/* Lending partners: the dashboard's one midnight band, logos on white chips */
+.dh .ov-partners {
+  border-color: transparent;
+  background: var(--orbit-band, linear-gradient(135deg, #0b1e4a 0%, #13306e 100%));
+  box-shadow: var(--shadow-lift);
+}
+.dh .ov-partners .ov-card-title { color: #ffffff; }
+.dh .ov-partners .ov-card-sub { color: rgba(255, 255, 255, 0.78); }
+.dh .ov-partners-icon { background: rgba(255, 255, 255, 0.10); color: var(--gold); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
+.dh .ov-partner { border-color: transparent; background: #ffffff; box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.5); }
+.dh-cell--activity .ov-activity-list { max-height: 360px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dh-kpi, .dh-kpi:hover, .dh-kpi:active { transform: none; }
+  .dh-step-bar, .dh-step-value { transition: none; }
+}
+
+/* ── Responsive ── */
+@media (max-width: 1360px) {
+  .dh-kpis--5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dh-co-row { grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 0.8fr)) minmax(0, 1.2fr) minmax(0, 1fr); }
+  .dh-co-row > :nth-child(7) { display: none; }
+}
+@media (max-width: 1180px) {
+  .dh-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dh-kpis--5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dh-kpis--5 > :last-child { grid-column: 1 / -1; }
+  .dh-card--funnel, .dh-card--attention { grid-column: 1 / -1; }
+  .dh-cell--docs, .dh-cell--advisors { grid-column: span 6; }
+  .dh-cell--activity { grid-column: 1 / -1; }
+  .dh-grid--staff .dh-cell--docs, .dh-cell--recent { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .dh-grid { gap: 16px; }
+  .dh-cell--docs, .dh-cell--advisors { grid-column: 1 / -1; }
+  .dh-kpi { padding: 14px; }
+  .dh-kpi-value { font-size: 24px; }
+  .dh-step-row { grid-template-columns: minmax(0, 1fr) 44px; grid-template-areas: "label share" "track track"; row-gap: 6px; }
+  .dh-step-label { grid-area: label; }
+  .dh-step-share { grid-area: share; }
+  .dh-step-track { grid-area: track; margin-right: 34px; }
+  .dh-step-moved { margin-left: 44px; }
+  .dh-tip { display: none; }
+  .dh-closed-note { margin-left: 0; width: 100%; }
+  .dh-card { padding: 16px; }
+  /* Company table → cards */
+  .dh-co-table { border: 0; gap: 10px; overflow: visible; }
+  .dh-co-row--head { display: none; }
+  .dh-co-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 12px;
+    border: 1px solid var(--border-dim);
+    border-radius: 12px;
+  }
+  .dh-co-row > :nth-child(7) { display: block; }
+  .dh-co-name, .dh-co-team, .dh-co-progress { grid-column: 1 / -1; }
+  .dh-co-row [data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .dh-co-progress { flex-wrap: wrap; }
+  .dh-co-progress::before { width: 100%; }
+}
+@media (max-width: 380px) {
+  .dh-kpis, .dh-kpis--5 { grid-template-columns: minmax(0, 1fr); }
+}

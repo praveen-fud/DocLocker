@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState } from "react";
+import { clearApplicantToken } from "../utils/applicantApi";
 
 const StudentContext = createContext(null);
 
@@ -61,6 +62,16 @@ function getStoredAdminToken() {
   }
 }
 
+function getStoredAdminAccount() {
+  try {
+    const raw = localStorage.getItem("abroad_admin_session");
+    if (!raw) return null;
+    return JSON.parse(raw).account || null;
+  } catch {
+    return null;
+  }
+}
+
 function getStoredAdminBank() {
   try {
     const raw = localStorage.getItem("abroad_admin_session");
@@ -98,6 +109,10 @@ export function StudentProvider({ children }) {
   const [adminBank, setAdminBank] = useState(() =>
     isAdminSessionValid() ? getStoredAdminBank() : "",
   );
+  // { id, name, email, role, company: { id, name, slug, kind } } from the server
+  const [adminAccount, setAdminAccount] = useState(() =>
+    isAdminSessionValid() ? getStoredAdminAccount() : null,
+  );
 
   const setStudent = (data) => {
     setStudentState(data);
@@ -107,15 +122,18 @@ export function StudentProvider({ children }) {
   const clearStudent = () => {
     setStudentState(null);
     localStorage.removeItem("abroad_student");
+    clearApplicantToken();
   };
 
-  // role: "superadmin" | "advisor" | "banker"
+  // role: "superadmin" | "admin" | "advisor" | "banker"
   // advisorName: the advisor's name (same as adminName for advisors)
-  // name: the login name of this admin
+  // name: the account's display name
   // token: JWT from backend
-  // bank: the bank name for banker accounts
-  const loginAdmin = (role = "superadmin", advisorName = "", name = "", token = "", bank = "") => {
+  // bank: the bank name for lender accounts
+  // account: the server's account summary (id, email, company)
+  const loginAdmin = (role = "superadmin", advisorName = "", name = "", token = "", bank = "", account = null) => {
     setIsAdmin(true);
+    setAdminAccount(account);
     setAdminRole(role);
     setAdminAdvisorName(advisorName);
     setAdminName(name);
@@ -130,10 +148,21 @@ export function StudentProvider({ children }) {
         adminName: name,
         token,
         adminBank: bank,
+        account,
         expiresAt: Date.now() + ADMIN_SESSION_TTL_MS,
       }),
     );
     localStorage.removeItem("abroad_admin");
+  };
+
+  // Refresh the stored account summary (e.g. after the company logo changes).
+  const updateAdminAccount = (account) => {
+    if (!account) return;
+    setAdminAccount(account);
+    try {
+      const raw = localStorage.getItem("abroad_admin_session");
+      if (raw) localStorage.setItem("abroad_admin_session", JSON.stringify({ ...JSON.parse(raw), account }));
+    } catch { /* storage blocked: the in-memory copy still updates */ }
   };
 
   const logoutAdmin = () => {
@@ -143,6 +172,7 @@ export function StudentProvider({ children }) {
     setAdminName("");
     setAdminToken("");
     setAdminBank("");
+    setAdminAccount(null);
     localStorage.removeItem("abroad_admin_session");
     localStorage.removeItem("abroad_admin");
   };
@@ -169,7 +199,9 @@ export function StudentProvider({ children }) {
         adminName: validSession ? adminName : "",
         adminToken: validSession ? adminToken : "",
         adminBank: validSession ? adminBank : "",
+        adminAccount: validSession ? adminAccount : null,
         loginAdmin,
+        updateAdminAccount,
         logoutAdmin,
       }}
     >

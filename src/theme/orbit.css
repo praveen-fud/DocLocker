@@ -1,0 +1,82 @@
+/* ============================================================
+   "Orbit" — the student-facing theme (landing page, sign-in dialog,
+   guided application, applicant dashboard).
+
+   Taken from the DocLocker mark: a sapphire shield circled by a gold
+   orbit. Sapphire carries actions, gold marks progress and "you are
+   here", midnight carries headings and the one dark band. Iris is kept
+   for "filled in from your documents" only.
+
+   Applied by adding .theme-orbit to a page root; it re-points the shared
+   tokens from index.css, so every component inside picks it up. Staff
+   pages (Workspace) keep the default tokens.
+   ============================================================ */
+.theme-orbit {
+  /* Palette */
+  --orbit-midnight: #0b1e4a;
+  --orbit-midnight-2: #13306e;
+  --orbit-sapphire: #2448c9;
+  --orbit-sapphire-dark: #1b379e;
+  --orbit-sapphire-light: #5b7cf0;
+  --orbit-gold: #f2a623;
+  --orbit-gold-deep: #8a5a00;   /* gold as text: 5.6:1 on white */
+  --orbit-gold-tint: #fff4de;
+  --orbit-porcelain: #f3f5fb;
+  --orbit-iris: #6a47c2;
+  --orbit-iris-tint: #f1ecfc;
+
+  /* Shared tokens, re-pointed */
+  --navy: var(--orbit-midnight);
+  --navy-dark: #071434;
+  --navy-light: var(--orbit-midnight-2);
+  --blue: var(--orbit-sapphire);
+  --blue-light: var(--orbit-sapphire-light);
+  --blue-dark: var(--orbit-sapphire-dark);
+  --accent: var(--orbit-gold);
+  --brand-primary: var(--orbit-sapphire);
+  --brand-primary-dark: var(--orbit-sapphire-dark);
+  --brand-accent: var(--orbit-gold);
+  --brand-navy: var(--orbit-midnight);
+
+  --page-bg: var(--orbit-porcelain);
+  --surface: #ffffff;
+  --surface-subtle: #f7f8fd;
+  --surface-blue: #edf1ff;
+  --surface-muted: #eef1f7;
+
+  --border: #e2e6f1;
+  --border-strong: #c9d1e4;
+  --border-focus: var(--orbit-sapphire);
+
+  --text-primary: var(--orbit-midnight);
+  --text-secondary: #4a5673;
+  --text-muted: #5a6683;
+
+  --info-bg: #edf1ff;
+  --success-bg: #e8f6ee;
+  --warning-bg: #fff4de;
+  --warning-text: #8a5a00;
+
+  /* Elevation: tinted with midnight, never plain grey */
+  --shadow-sm: 0 1px 2px rgba(11, 30, 74, 0.05), 0 2px 6px rgba(11, 30, 74, 0.04);
+  --shadow-md: 0 10px 28px -12px rgba(11, 30, 74, 0.18);
+  --shadow-lg: 0 24px 56px -20px rgba(11, 30, 74, 0.32);
+  --focus-ring: 0 0 0 3px rgba(36, 72, 201, 0.28);
+
+  /* Surfaces built from the palette */
+  --orbit-page:
+    radial-gradient(1200px 520px at 100% -10%, rgba(242, 166, 35, 0.10), transparent 60%),
+    radial-gradient(900px 480px at -10% 0%, rgba(36, 72, 201, 0.10), transparent 60%),
+    var(--orbit-porcelain);
+  --orbit-band:
+    radial-gradient(520px 260px at 88% -30%, rgba(242, 166, 35, 0.28), transparent 70%),
+    radial-gradient(600px 300px at 0% 120%, rgba(91, 124, 240, 0.35), transparent 65%),
+    linear-gradient(135deg, #0b1e4a 0%, #13306e 100%);
+  --orbit-btn: linear-gradient(180deg, #2d55da 0%, #2244be 100%);
+  --orbit-btn-hover: linear-gradient(180deg, #2449c9 0%, #1b379e 100%);
+  --orbit-btn-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 8px 18px -8px rgba(36, 72, 201, 0.65);
+  --orbit-progress: linear-gradient(90deg, #f2a623 0%, #f7c25c 100%);
+
+  background: var(--orbit-page);
+  background-attachment: fixed;
+}

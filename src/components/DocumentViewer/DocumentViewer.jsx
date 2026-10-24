@@ -74,14 +74,16 @@ function ImageStage({ url, name, zoom, rotation }) {
   );
 }
 
-export default function DocumentViewer({ file, files, subtitle, onClose }) {
+// fetchBlob / download: the applicant's dashboard passes its own (PIN
+// session); staff use the defaults.
+export default function DocumentViewer({ file, files, subtitle, onClose, fetchBlob, download = downloadFile, downloadText = "Download (One-time Link)" }) {
   const list = files?.length > 1 ? files : null;
   // Remember which rail item was picked, but only for the file this viewer
   // was opened with — a new `file` prop starts fresh.
   const [picked, setPicked] = useState(null);
   const active = (picked?.base === file.id && list?.find((f) => f.id === picked.id)) || file;
 
-  const { url, type, error, loading, retry } = useFileObjectUrl(active.id);
+  const { url, type, error, loading, retry } = useFileObjectUrl(active.id, fetchBlob ? { fetchBlob } : undefined);
   const [view, setView] = useState({ id: active.id, ...FIT });
   const { zoom, rotation } = view.id === active.id ? view : FIT;
   const [expanded, setExpanded] = useState(false);
@@ -131,7 +133,7 @@ export default function DocumentViewer({ file, files, subtitle, onClose }) {
     setDownloading(true);
     setDownloadError("");
     try {
-      await downloadFile(active.id);
+      await download(active.id);
     } catch (err) {
       setDownloadError(err.message || "Download failed");
     } finally {
@@ -139,7 +141,7 @@ export default function DocumentViewer({ file, files, subtitle, onClose }) {
     }
   };
 
-  const downloadLabel = downloading ? "Preparing link…" : "Download (One-time Link)";
+  const downloadLabel = downloading ? "Preparing…" : downloadText;
 
   let body;
   if (loading) {

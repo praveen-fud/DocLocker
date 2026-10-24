@@ -1,0 +1,75 @@
+.pin {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pin__boxes {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  flex: 1;
+  max-width: 330px;
+}
+.pin__box {
+  display: grid;
+  place-items: center;
+  height: 52px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+}
+.pin__box { position: relative; box-shadow: var(--shadow-sm); color: var(--orbit-midnight, var(--text-primary)); }
+.pin__box.is-filled { border-color: color-mix(in srgb, var(--brand-primary) 45%, var(--border-strong)); background: var(--surface-blue); box-shadow: none; }
+.pin__box.is-active { border-color: var(--brand-primary); background: var(--surface); box-shadow: var(--focus-ring); }
+/* Where the next digit goes: a short sapphire caret at the foot of the box */
+.pin__box.is-active::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 9px;
+  width: 14px;
+  height: 2px;
+  margin-left: -7px;
+  border-radius: 2px;
+  background: var(--brand-primary);
+}
+.pin.is-invalid .pin__box { border-color: var(--error, #dc2626); background: var(--error-bg, #fff0f0); }
+@media (prefers-reduced-motion: reduce) {
+  .pin__box { transition: none; }
+}
+
+/* The real input covers the boxes: invisible, but it takes every tap. */
+.pin__input {
+  position: absolute;
+  inset: 0 52px 0 0;
+  max-width: 330px;
+  width: 100%;
+  opacity: 0;
+  font-size: 16px; /* no zoom on iOS */
+  caret-color: transparent;
+  cursor: text;
+}
+.pin__toggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.pin__toggle:hover { background: var(--surface-muted); color: var(--text-primary); }
+.pin__toggle:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+@media (max-width: 380px) {
+  .pin__boxes { gap: 6px; }
+  .pin__box { height: 46px; font-size: 20px; }
+}

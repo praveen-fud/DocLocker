@@ -12,12 +12,23 @@ const PASSPORT_READER = {
   multiple: true,
   maxFiles: 2,
   pageHint: "Photo page + last page (the last page has your parents' names and address)",
+  // Display-only: which page carries what, so the card can say exactly
+  // which page is still needed. `readKeys` are the reader fields printed
+  // only on that page.
+  pages: [
+    { label: "Photo page", readKeys: ["passport_number", "surname", "given_names", "date_of_birth"] },
+    { label: "Last page", detail: "parents' names and address", readKeys: ["father_name", "mother_name", "address"] },
+  ],
 };
 const AADHAAR_READER = {
   reader: "aadhaar",
   multiple: true,
   maxFiles: 2,
   pageHint: "Front + back (the back has the address)",
+  pages: [
+    { label: "Front side", readKeys: ["aadhaar_number", "name", "date_of_birth"] },
+    { label: "Back side", detail: "address", readKeys: ["address"] },
+  ],
 };
 const PAN_READER = { reader: "pan" };
 
@@ -100,7 +111,6 @@ export const DOCUMENT_SCHEMA = {
         rename: "10th_Marksheet",
         // FIX: was ".pdf,.jpg,.jpeg,.png,doc,.docx" (missing dot before doc)
         accept: ".pdf,.jpg,.jpeg,.png,.doc,.docx",
-        optional: true,
         reader: "ssc",
         keepOcr: true,
       },

@@ -1,0 +1,143 @@
+/* Rendered into <body> (outside .theme-orbit), so the Orbit values it needs
+   are set here as local properties. */
+.cam {
+  --cam-night: #050d26;
+  --cam-sapphire-light: #9fb4ff;
+  --cam-btn: linear-gradient(180deg, #2d55da 0%, #2244be 100%);
+  --cam-btn-hover: linear-gradient(180deg, #2449c9 0%, #1b379e 100%);
+  --cam-btn-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 8px 18px -8px rgba(36, 72, 201, 0.8);
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  background: var(--cam-night);
+  color: #fff;
+}
+.cam__top,
+.cam__bottom {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: max(12px, env(safe-area-inset-top)) 16px 12px;
+}
+.cam__top { justify-content: space-between; }
+.cam__title { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
+.cam__title strong { font-size: 16px; font-weight: 700; }
+.cam__title span { font-size: 13px; color: rgba(255, 255, 255, 0.74); }
+.cam__icon-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+.cam__icon-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.16); }
+.cam__icon-btn:disabled { opacity: 0.4; cursor: default; }
+.cam__icon-btn:focus-visible, .cam__btn:focus-visible, .cam__shutter:focus-visible { outline: 3px solid var(--cam-sapphire-light); outline-offset: 2px; }
+
+.cam__stage { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.cam__video, .cam__review { position: absolute; inset: 0; width: 100%; height: 100%; }
+.cam__video { object-fit: cover; }
+.cam__review { object-fit: contain; background: var(--cam-night); padding: 16px; }
+
+/* Dim everything outside the frame */
+.cam__mask { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.cam__frame {
+  position: relative;
+  width: min(88%, 720px);
+  aspect-ratio: 1.42; /* ID card / passport page */
+  max-height: 72%;
+  border-radius: 16px;
+  box-shadow: 0 0 0 100vmax rgba(5, 13, 38, 0.58);
+}
+.cam__corner { position: absolute; width: 28px; height: 28px; border: 0 solid #fff; }
+.cam__corner.is-tl { top: -2px; left: -2px; border-top-width: 4px; border-left-width: 4px; border-top-left-radius: 16px; }
+.cam__corner.is-tr { top: -2px; right: -2px; border-top-width: 4px; border-right-width: 4px; border-top-right-radius: 16px; }
+.cam__corner.is-bl { bottom: -2px; left: -2px; border-bottom-width: 4px; border-left-width: 4px; border-bottom-left-radius: 16px; }
+.cam__corner.is-br { bottom: -2px; right: -2px; border-bottom-width: 4px; border-right-width: 4px; border-bottom-right-radius: 16px; }
+@media (orientation: portrait) { .cam__frame { aspect-ratio: 0.74; width: min(84%, 460px); } }
+
+.cam__status, .cam__error {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 15px;
+}
+.cam__error {
+  flex-direction: column;
+  width: min(88%, 380px);
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.07);
+  text-align: center;
+  line-height: 1.5;
+}
+.cam__error p { margin: 0; }
+.cam__error-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.cam__spin { animation: cam-spin 1s linear infinite; }
+@keyframes cam-spin { to { transform: rotate(360deg); } }
+
+.cam__bottom {
+  flex-direction: column;
+  padding: 14px 16px max(18px, env(safe-area-inset-bottom));
+}
+.cam__hint { margin: 0; font-size: 14px; color: rgba(255, 255, 255, 0.82); text-align: center; }
+.cam__shutter {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border: 5px solid rgba(255, 255, 255, 0.4);
+  border-radius: 50%;
+  background: #fff;
+  background-clip: padding-box;
+  color: var(--cam-night);
+  cursor: pointer;
+  transition: transform 150ms ease;
+}
+.cam__shutter:active { transform: scale(0.94); }
+.cam__shutter:disabled { opacity: 0.5; cursor: default; }
+.cam__actions { display: flex; gap: 10px; width: 100%; max-width: 460px; }
+.cam__btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, transform 80ms ease;
+}
+.cam__btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.45); }
+.cam__btn:active:not(:disabled) { transform: translateY(1px); }
+.cam__btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.cam__btn.is-primary { border-color: transparent; background: var(--cam-btn); box-shadow: var(--cam-btn-shadow); }
+.cam__btn.is-primary:hover:not(:disabled) { background: var(--cam-btn-hover); }
+.cam__btn.is-primary:active:not(:disabled) { box-shadow: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cam__spin { animation: none; }
+  .cam__shutter, .cam__btn, .cam__icon-btn { transition: none; }
+  .cam__shutter:active { transform: none; }
+}

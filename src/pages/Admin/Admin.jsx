@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
 import {
   Users,
   Search,
@@ -7,7 +8,6 @@ import {
   CheckCircle,
   AlertCircle,
   RefreshCw,
-  UserPlus,
   Trash2,
   X,
   ExternalLink,
@@ -18,6 +18,16 @@ import {
   ChevronLeft,
   Shield,
   Building2,
+  UsersRound,
+  Wallet,
+  FileCheck2,
+  ArrowDown,
+  BookOpen,
+  Plane,
+  Check,
+  Copy,
+  Mail,
+  Phone as PhoneIcon,
   Settings,
   KeyRound,
   UserCheck,
@@ -43,15 +53,18 @@ import {
   LogOut,
   Menu,
   ArrowUpRight,
+  ArrowRight,
   Filter,
   Landmark,
   LogIn,
   ChevronRight,
-  Bell,
   MoreVertical,
   Download,
+  MoreHorizontal,
+  UserRound,
+  FileClock,
+  BadgeCheck,
   Hourglass,
-  Wallet,
   MinusCircle,
   ScanSearch,
 } from "lucide-react";
@@ -59,12 +72,17 @@ import { useStudent } from "../../context/StudentContext";
 import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter, recoverMetaFromPdf, restoreMeta, buildFolderKey, getAuditLog, downloadAllFiles } from "../../utils/driveApi";
 import DocumentViewer from "../../components/DocumentViewer/DocumentViewer";
 import useFileObjectUrl from "../../hooks/useFileObjectUrl";
-import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields } from "../../context/schemas";
+import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields, coApplicantFields } from "../../context/schemas";
 import { BANK_OPTIONS, getBankLogo } from "../../utils/bankOptions";
-import logoImg from "../../assets/logo.png";
-import heroImg from "../../assets/bg.png";
+import BrandLogo from "../../components/BrandLogo/BrandLogo";
 import "./Admin.css";
+import "./StudentProfile.css";
+import "./Dashboard.css";
 import DocumentReader from "./DocumentReader";
+import DocumentLibrary from "./DocumentLibrary";
+import { TeamSection, CompaniesSection } from "./TeamCompanies";
+import { callAPI, isAdminLevel, ROLE_LABELS, passwordProblem } from "../../utils/adminApi";
+import { companyLogoSrc } from "../../utils/company";
 import { buildIdentityReport } from "../../utils/identityCheck";
 import { buildDocumentChecks } from "../../utils/documentChecks";
 import { getApplicationId } from "../../utils/applicationId";
@@ -85,74 +103,19 @@ function getOverallProgress(s) {
   return Math.min(100, Math.round((total / required) * 100));
 }
 
+function getInitials(name) {
+  const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  return (words[0][0] + (words.length > 1 ? words[words.length - 1][0] : "")).toUpperCase();
+}
+
 function getAvatarVariant(name) {
   const variants = ["a", "b", "c", "d", "e"];
-  const code = (name || "?").charCodeAt(0);
+  let code = 0;
+  for (const ch of String(name || "?")) code = (code * 31 + ch.charCodeAt(0)) % 9973;
   return variants[code % variants.length];
 }
 
-function getAllUploadedFiles(uploads) {
-  const files = [];
-  if (!uploads) return files;
-  Object.entries(uploads).forEach(([section, sectionFiles]) => {
-    if (!sectionFiles || typeof sectionFiles !== "object") return;
-    Object.entries(sectionFiles).forEach(([fieldId, fileInfo]) => {
-      if (!fileInfo) return; // null = removed file slot
-      files.push({
-        section,
-        fieldId,
-        name: fileInfo.name || fileInfo.fileName || fieldId,
-        id: fileInfo.id || fileInfo.fileId,
-        webViewLink: fileInfo.webViewLink,
-        customName: fileInfo.customName,
-      });
-    });
-  });
-  return files;
-}
-
-function getMissingDocs(s) {
-  const uploads = s.uploads || {};
-  const missing = [];
-
-  const applicantUploads = uploads.applicant || {};
-  DOCUMENT_SCHEMA.applicant.fields
-    .filter((f) => !f.optional)
-    .forEach((f) => {
-      if (!applicantUploads[f.id]) {
-        missing.push({ section: "GOVT ID", label: f.label });
-      }
-    });
-
-  const academicUploads = uploads.academics || {};
-  DOCUMENT_SCHEMA.academics.fields
-    .filter((f) => !f.optional)
-    .forEach((f) => {
-      if (!academicUploads[f.id]) {
-        missing.push({ section: "Academics", label: f.label });
-      }
-    });
-
-  const coCount = s.coApplicants || 0;
-  for (let i = 0; i < coCount; i++) {
-    const coUploads = uploads[`co_${i}`] || {};
-    const empType = s.personalInfo?.[`co_info_${i}`]?.empType || "salaried";
-    const coFields = CO_APPLICANT_SCHEMA[empType] || CO_APPLICANT_SCHEMA.other;
-    const coInfoForName = s.personalInfo?.[`co_info_${i}`] || {};
-    const coName =
-      [coInfoForName.firstName, coInfoForName.lastName].filter(Boolean).join(" ") ||
-      coInfoForName.name ||
-      `Co-Applicant ${i + 1}`;
-
-    coFields.forEach((f) => {
-      if (!coUploads[f.id]) {
-        missing.push({ section: coName, label: f.label });
-      }
-    });
-  }
-
-  return missing;
-}
 
 function getProgressClass(p) {
   if (p === 0) return "prog-0";
@@ -298,28 +261,32 @@ function assessLoanEligibility(student) {
 
 /* ─── Sub-components ───────────────────────────────────────────── */
 
-// Connected banks & lenders — a continuously auto-scrolling logo strip.
-// The tile list is duplicated once so the track can loop seamlessly at
-// -50%; hovering (or `prefers-reduced-motion`) pauses the motion.
+// Lending partners — a slim card: count on the left, an auto-scrolling logo
+// strip on the right. The tile list is duplicated once so the track can loop
+// seamlessly at -50%; hovering (or `prefers-reduced-motion`) pauses it.
 function PartnerBanksShowcase() {
   const banks = BANK_OPTIONS.filter((b) => b.value !== "Others");
   if (banks.length === 0) return null;
 
   return (
-    <div className="banks-card animate-fade-in">
-      <div className="banks-card-head">
-        <p className="banks-card-title"><Landmark size={15} /> Connected Banks &amp; Lenders</p>
+    <section className="ov-card ov-partners" aria-label="Lending partners">
+      <div className="ov-partners-intro">
+        <span className="ov-partners-icon" aria-hidden="true"><Landmark size={20} /></span>
+        <div>
+          <p className="ov-card-title">Lending partners</p>
+          <p className="ov-card-sub">{banks.length} banks &amp; NBFCs connected</p>
+        </div>
       </div>
-      <div className="banks-tile-row">
-        <div className="banks-tile-track">
+      <div className="ov-partners-strip">
+        <div className="ov-partners-track">
           {banks.concat(banks).map((b, i) => (
-            <div className="banks-tile" key={`${b.value}-${i}`} title={b.label}>
-              <img src={b.logo} alt={b.label} loading="lazy" />
+            <div className="ov-partner" key={`${b.value}-${i}`} title={b.label} aria-hidden={i >= banks.length || undefined}>
+              <img src={b.logo} alt={i < banks.length ? b.label : ""} loading="lazy" />
             </div>
           ))}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -335,116 +302,519 @@ function BankerRequestsNotice({ count, adminRole, onOpen }) {
       <span className="requests-notice-icon"><Hourglass size={18} /></span>
       <span className="requests-notice-body">
         <span className="requests-notice-title">
-          {adminRole === "superadmin"
+          {isAdminLevel(adminRole)
             ? `${count} banker access request${count === 1 ? "" : "s"} awaiting your review`
-            : `${count} of your banker access request${count === 1 ? "" : "s"} still pending approval`}
+            : count === 1 ? "1 lender access request you sent is waiting for approval" : `${count} lender access requests you sent are waiting for approval`}
         </span>
         <span className="requests-notice-sub">
-          {adminRole === "superadmin"
+          {isAdminLevel(adminRole)
             ? "An advisor asked to share a student's documents with a banker — approve or reject before it takes effect."
-            : "A superadmin needs to approve these before the banker gets access."}
+            : "An admin approves it before the lender can see the student."}
         </span>
       </span>
       <span className="requests-notice-cta">
-        {adminRole === "superadmin" ? "Review requests" : "View status"} <ArrowUpRight size={14} />
+        {isAdminLevel(adminRole) ? "Review requests" : "View status"} <ArrowUpRight size={14} />
       </span>
     </button>
   );
 }
 
-// A percentage-of-total trend line, not a fabricated "vs last month" figure
-// we have no historical snapshots to actually compute. Returns null (renders
+// A percentage-of-total share, not a fabricated "vs last month" figure we
+// have no historical snapshots to actually compute. Returns null (renders
 // nothing) rather than a misleading "0%" when the total itself is zero.
 function shareOfTotal(value, total) {
   if (!total) return null;
   return Math.round((value / total) * 100);
 }
 
-// One ring in the Document Progress card. Total Students reads as the
-// complete circle (it IS the whole); every other ring is that stat's real
-// share of the total, so the fill itself is honest, not decorative.
-function StatRing({ pct, color, value, label, active, onClick }) {
-  const clamped = Math.max(0, Math.min(100, pct));
+// One overview card: a stacked bar showing how the total splits, and a
+// legend whose rows double as filters for the student table above.
+function BreakdownCard({ title, sub, icon: Icon, items, active, onSelect, footer }) {
+  const total = items.reduce((sum, it) => sum + it.value, 0);
   return (
-    <button type="button" className={`stat-ring tone-${color}${active ? " stat-ring--active" : ""}`} onClick={onClick}>
-      <svg viewBox="0 0 36 36" className="stat-ring-svg">
-        <circle cx="18" cy="18" r="15.9" fill="none" strokeWidth="3" className="stat-ring-track" />
-        <circle
-          cx="18" cy="18" r="15.9" fill="none" strokeWidth="3"
-          strokeDasharray={`${clamped} ${100 - clamped}`}
-          strokeDashoffset="25"
-          className="stat-ring-fill"
-        />
-      </svg>
-      <span className="stat-ring-center">
-        <span className="stat-ring-value">{value}</span>
-        <span className="stat-ring-label">{label}</span>
-      </span>
-    </button>
+    <section className="ov-card ov-breakdown" aria-label={title}>
+      <header className="ov-card-head">
+        <span className="ov-card-icon" aria-hidden="true"><Icon size={18} /></span>
+        <div className="ov-card-heading">
+          <p className="ov-card-title">{title}</p>
+          <p className="ov-card-sub">{sub}</p>
+        </div>
+      </header>
+
+      <div className="ov-bar" role="img" aria-label={items.map((it) => `${it.label} ${it.value}`).join(", ")}>
+        {total === 0
+          ? <span className="ov-bar-empty" />
+          : items.filter((it) => it.value > 0).map((it) => (
+            <span key={it.key} className={`ov-bar-seg ov-c-${it.key}`} style={{ flexGrow: it.value }} />
+          ))}
+      </div>
+
+      <ul className="ov-legend">
+        {items.map((it) => {
+          const pct = shareOfTotal(it.value, total);
+          const isActive = active === it.key;
+          return (
+            <li key={it.key}>
+              <button
+                type="button"
+                className={`ov-legend-row ov-c-${it.key}${isActive ? " is-active" : ""}`}
+                aria-pressed={isActive}
+                onClick={() => onSelect(it.key)}
+                title={isActive ? "Show all students" : `Show ${it.label.toLowerCase()} students`}
+              >
+                <span className="ov-dot" aria-hidden="true" />
+                <span className="ov-legend-label">{it.label}</span>
+                <span className="ov-legend-value">{it.value}</span>
+                <span className="ov-legend-pct">{pct === null ? "–" : `${pct}%`}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      {footer && (
+        <dl className="ov-footer">
+          {footer.map(({ label, value }) => (
+            <div key={label} className="ov-footer-stat">
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </section>
   );
 }
 
-function StatsPanel({ stats, loanStats, filter, setFilter, loanStatusFilter, setLoanStatusFilter }) {
-  const docRings = [
-    { key: "all", label: "Total Students", value: stats.total, color: "blue", pct: 100 },
-    { key: "complete", label: "Completed", value: stats.complete, color: "green", pct: shareOfTotal(stats.complete, stats.total) || 0 },
-    { key: "progress", label: "In Progress", value: stats.inProgress, color: "amber", pct: shareOfTotal(stats.inProgress, stats.total) || 0 },
-    { key: "notStarted", label: "Not Started", value: stats.notStarted, color: "red", pct: shareOfTotal(stats.notStarted, stats.total) || 0 },
+
+
+/* ─── Dashboard home ───────────────────────────────────────────────
+   A command centre, not a list: headline figures, the loan funnel, the
+   students who need someone to act, and (superadmin) how each company is
+   doing. Every number opens the Students page filtered to exactly that
+   slice; every student opens their profile. */
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+}
+
+// ₹4,50,00,000 → "₹4.5 Cr", ₹45,00,000 → "₹45 L"
+function compactInr(n) {
+  if (!n) return "₹0";
+  if (n >= 1e7) return `₹${(n / 1e7).toFixed(n >= 1e9 ? 0 : 2).replace(/\.?0+$/, "")} Cr`;
+  if (n >= 1e5) return `₹${(n / 1e5).toFixed(1).replace(/\.0$/, "")} L`;
+  return `₹${Math.round(n).toLocaleString("en-IN")}`;
+}
+const amountOf = (s) => {
+  const raw = s.loanStatus === "disbursed" && s.loanDisbursement?.loanAmount ? s.loanDisbursement.loanAmount : s.personalInfo?.loanAmount;
+  const n = Number(String(raw ?? "").replace(/[^\d.]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+};
+
+// Ordered stages take one hue, lighter → darker as the loan moves on
+// (ordinal ramp, checked with the dataviz palette validator).
+const FUNNEL = [
+  { key: "pending", label: "Pending", hint: "Reviewing documents", color: "var(--ramp-1)" },
+  { key: "inprocess", label: "In process", hint: "With the lender", color: "var(--ramp-2)" },
+  { key: "sanctioned", label: "Sanctioned", hint: "Loan approved", color: "var(--ramp-3)" },
+  { key: "disbursed", label: "Disbursed", hint: "Money released", color: "var(--ramp-4)" },
+];
+const STALE_DAYS = 14;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Why a student needs someone to act — most urgent first.
+function attentionReasons(s, { adminLevel }) {
+  const reasons = [];
+  const status = s.loanStatus || "pending";
+  const progress = getOverallProgress(s);
+  const idr = identityReportFor(s);
+  if (s._parseError) reasons.push({ tone: "danger", text: "Record unreadable" });
+  if (idr.overall === "mismatch") reasons.push({ tone: "danger", text: "Details don’t match" });
+  if (status === "inprocess" && progress < 100) reasons.push({ tone: "warn", text: "Docs missing at lender stage" });
+  if (adminLevel && !s.advisor) reasons.push({ tone: "warn", text: "No advisor" });
+  if (progress === 0) reasons.push({ tone: "info", text: "No documents yet" });
+  const updated = s.updatedAt ? Date.parse(s.updatedAt) : NaN;
+  const idle = Number.isNaN(updated) ? 0 : Math.floor((Date.now() - updated) / DAY_MS);
+  if (idle >= STALE_DAYS && !["disbursed", "rejected", "dropped"].includes(status)) {
+    reasons.push({ tone: "info", text: `No update in ${idle} days` });
+  }
+  return reasons;
+}
+const TONE_RANK = { danger: 0, warn: 1, info: 2 };
+
+function DashboardHome({
+  students, loading, adminRole, companies = [], bankers = [], stats, loanStats,
+  onOpenStudents, onOpenProfile, onOpenCompanies, onOpenAudit, onOpenStudentFile,
+}) {
+  const isSuper = adminRole === "superadmin";
+  const adminLevel = isAdminLevel(adminRole);
+  const total = students.length;
+  const dash = (v) => (loading ? "–" : v);
+
+  // ── Headline figures ──
+  const active = students.filter((s) => ["inprocess", "sanctioned"].includes(s.loanStatus));
+  const pipelineValue = active.reduce((sum, s) => sum + amountOf(s), 0);
+  const disbursedValue = students.filter((s) => s.loanStatus === "disbursed").reduce((sum, s) => sum + amountOf(s), 0);
+  const approved = loanStats.sanctioned + loanStats.disbursed;
+  const decided = approved + loanStats.rejected;
+  const approvalRate = decided ? Math.round((approved / decided) * 100) : null;
+  const completeShare = total ? Math.round((stats.complete / total) * 100) : 0;
+  const partners = companies.filter((c) => c.kind !== "owner");
+  const viaPartners = students.filter((s) => s.company && s.company.slug !== "flyurdream").length;
+
+  const kpis = [
+    {
+      key: "students", label: "Students", value: total, icon: UserRound, tone: "blue",
+      sub: stats.newThisWeek ? `+${stats.newThisWeek} this week` : "No new students this week", up: stats.newThisWeek > 0,
+      open: () => onOpenStudents(),
+    },
+    {
+      key: "pipeline", label: "Loan value in progress", value: compactInr(pipelineValue), icon: Wallet, tone: "indigo",
+      sub: disbursedValue ? `${compactInr(disbursedValue)} disbursed` : `${active.length} application${active.length === 1 ? "" : "s"} moving`,
+      open: () => onOpenStudents({ loan: "inprocess" }),
+    },
+    {
+      key: "docs", label: "Files complete", value: `${completeShare}%`, icon: FileCheck2, tone: "teal",
+      sub: `${stats.inProgress + stats.notStarted} waiting on documents`,
+      open: () => onOpenStudents({ doc: "incomplete" }),
+    },
+    {
+      key: "approved", label: "Sanctioned & disbursed", value: approved, icon: BadgeCheck, tone: "green",
+      sub: approvalRate === null ? "No decisions yet" : `${approvalRate}% approval rate`,
+      open: () => onOpenStudents({ loan: "sanctioned" }),
+    },
+    ...(isSuper ? [{
+      key: "companies", label: "Partner companies", value: partners.length, icon: Building2, tone: "violet",
+      sub: total ? `${viaPartners} students · ${Math.round((viaPartners / total) * 100)}% of all` : "No students yet",
+      open: onOpenCompanies,
+    }] : []),
   ];
-  const loanTotal = loanStats.pending + loanStats.inprocess + loanStats.sanctioned + loanStats.disbursed + loanStats.rejected + loanStats.dropped;
-  const loanCards = [
-    { key: "pending",    label: "Pending",    value: loanStats.pending,    color: "slate",   icon: <Hourglass size={15} /> },
-    { key: "inprocess",  label: "In Process", value: loanStats.inprocess,  color: "orange",  icon: <RefreshCw size={15} /> },
-    { key: "sanctioned", label: "Sanctioned", value: loanStats.sanctioned, color: "teal",    icon: <CheckCircle size={15} /> },
-    { key: "disbursed",  label: "Disbursed",  value: loanStats.disbursed,  color: "emerald", icon: <Wallet size={15} /> },
-    { key: "rejected",   label: "Rejected",   value: loanStats.rejected,   color: "rose",    icon: <XCircle size={15} /> },
-    { key: "dropped",    label: "Dropped",    value: loanStats.dropped,    color: "violet",  icon: <MinusCircle size={15} /> },
-  ].map((c) => ({ ...c, pct: shareOfTotal(c.value, loanTotal) }));
+
+  // ── Funnel: how far students have got ──
+  const atStage = FUNNEL.map((f) => (f.key === "pending" ? loanStats.pending : loanStats[f.key]));
+  const reached = atStage.map((_, i) => atStage.slice(i).reduce((a, b) => a + b, 0));
+  const maxStage = Math.max(1, ...atStage);
+  const inJourney = reached[0];
+
+  // ── Needs attention ──
+  const attention = students
+    .map((s) => ({ s, reasons: attentionReasons(s, { adminLevel }) }))
+    .filter((x) => x.reasons.length)
+    .sort((a, b) => TONE_RANK[a.reasons[0].tone] - TONE_RANK[b.reasons[0].tone] || b.reasons.length - a.reasons.length);
+  const attentionShown = attention.slice(0, 6);
+
+  // ── Companies (superadmin) ──
+  const companyRows = companies.map((c) => {
+    const mine = students.filter((s) => s.company?.id === c.id);
+    const approvedHere = mine.filter((s) => ["sanctioned", "disbursed"].includes(s.loanStatus)).length;
+    return {
+      ...c,
+      count: mine.length,
+      inprocess: mine.filter((s) => s.loanStatus === "inprocess").length,
+      approved: approvedHere,
+      complete: mine.length ? Math.round((mine.filter((s) => getOverallProgress(s) === 100).length / mine.length) * 100) : null,
+      value: mine.filter((s) => ["inprocess", "sanctioned", "disbursed"].includes(s.loanStatus)).reduce((sum, s) => sum + amountOf(s), 0),
+    };
+  }).sort((a, b) => (a.kind === "owner" ? -1 : b.kind === "owner" ? 1 : b.count - a.count));
+  // Sapphire family only; every entry stays AA as text (company initials).
+  const COMPANY_COLORS = ["var(--ramp-4)", "var(--ramp-3)", "var(--navy-soft)", "var(--gold-text)"];
+
+  const recent = [...students].filter((s) => s.updatedAt).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).slice(0, 5);
+
+  // ── Advisor workload ──
+  const advisorRows = Object.values(students.reduce((acc, s) => {
+    const name = s.advisor || "";
+    if (!acc[name]) acc[name] = { name, count: 0, progress: 0, active: 0 };
+    acc[name].count += 1;
+    acc[name].progress += getOverallProgress(s);
+    if (["inprocess", "sanctioned"].includes(s.loanStatus)) acc[name].active += 1;
+    return acc;
+  }, {})).map((a) => ({ ...a, progress: Math.round(a.progress / a.count) }))
+    .sort((a, b) => (a.name ? 0 : 1) - (b.name ? 0 : 1) || b.count - a.count);
+  const maxAdvisor = Math.max(1, ...advisorRows.map((a) => a.count));
 
   return (
-    <div className="stats-row animate-fade-in">
-      <div className="stats-card">
-        <div className="stats-card-head">
-          <p className="stats-card-title"><BarChart3 size={15} /> Document Progress</p>
+    <div className="dh">
+      {/* Headline figures */}
+      <section className={`dh-kpis${kpis.length === 5 ? " dh-kpis--5" : ""}`} aria-label="Key figures">
+        {kpis.map((k) => {
+          const Icon = k.icon;
+          return (
+            <button key={k.key} type="button" className={`dh-kpi dh-tone-${k.tone}`} onClick={k.open}>
+              <span className="dh-kpi-top">
+                <span className="dh-kpi-icon" aria-hidden="true"><Icon size={20} /></span>
+                <ArrowUpRight size={16} className="dh-kpi-go" aria-hidden="true" />
+              </span>
+              <span className="dh-kpi-value">{dash(k.value)}</span>
+              <span className="dh-kpi-label">{k.label}</span>
+              <span className={`dh-kpi-sub${k.up ? " is-up" : ""}`}>{loading ? "Loading…" : k.sub}</span>
+            </button>
+          );
+        })}
+      </section>
+
+      <div className={`dh-grid${adminLevel ? "" : " dh-grid--staff"}`}>
+        {/* Loan funnel */}
+        <section className="dh-card dh-card--funnel" aria-labelledby="dh-funnel-title">
+          <header className="dh-card-head">
+            <div>
+              <h2 id="dh-funnel-title" className="dh-card-title">Loan journey</h2>
+              <p className="dh-card-sub">How far each application has got. Select a stage to see its students.</p>
+            </div>
+          </header>
+          <ol className="dh-journey">
+            {FUNNEL.map((f, i) => {
+              const n = atStage[i];
+              const share = total ? Math.round((n / total) * 100) : 0;
+              const moved = i < FUNNEL.length - 1 && reached[i] ? Math.round((reached[i + 1] / reached[i]) * 100) : null;
+              // The longest bar stops short of the edge so its label still fits.
+              const width = loading ? 0 : (n / maxStage) * 88;
+              return (
+                <li key={f.key} className="dh-step" style={{ "--dh-step": f.color }}>
+                  <button
+                    type="button"
+                    className="dh-step-row"
+                    onClick={() => onOpenStudents({ loan: f.key })}
+                    aria-label={`${f.label}: ${n} student${n === 1 ? "" : "s"}, ${share}% of all. Show them.`}
+                  >
+                    <span className="dh-step-label">
+                      <span className="dh-step-num" aria-hidden="true">{i + 1}</span>
+                      <span className="dh-step-text">
+                        <span className="dh-step-name">{f.label}</span>
+                        <span className="dh-step-hint">{f.hint}</span>
+                      </span>
+                    </span>
+                    <span className="dh-step-track" aria-hidden="true">
+                      <span className="dh-step-bar" style={{ width: `${width}%` }} />
+                      <span className="dh-step-value" style={{ left: `${width}%` }}>{dash(n)}</span>
+                      <span className="dh-tip" role="presentation">
+                        <strong>{f.label}</strong>
+                        <span>{n} student{n === 1 ? "" : "s"} · {share}% of all</span>
+                        {reached[i] > n && <span>{reached[i]} reached this stage or beyond</span>}
+                      </span>
+                    </span>
+                    <span className="dh-step-share">{loading ? "" : `${share}%`}</span>
+                  </button>
+                  {moved !== null && (
+                    <span className="dh-step-moved">
+                      <ArrowDown size={13} aria-hidden="true" />
+                      {inJourney ? `${moved}% moved on to the next stage` : "—"}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+          <div className="dh-closed">
+            <button type="button" className="dh-closed-item ov-c-rejected" onClick={() => onOpenStudents({ loan: "rejected" })}>
+              <span className="ov-dot" aria-hidden="true" /> Rejected <strong>{dash(loanStats.rejected)}</strong>
+            </button>
+            <button type="button" className="dh-closed-item ov-c-dropped" onClick={() => onOpenStudents({ loan: "dropped" })}>
+              <span className="ov-dot" aria-hidden="true" /> Dropped <strong>{dash(loanStats.dropped)}</strong>
+            </button>
+            {approvalRate !== null && <span className="dh-closed-note">{approvalRate}% of decided applications approved</span>}
+          </div>
+        </section>
+
+        {/* Needs attention */}
+        <section className="dh-card dh-card--attention" aria-labelledby="dh-attn-title">
+          <header className="dh-card-head">
+            <div>
+              <h2 id="dh-attn-title" className="dh-card-title">Needs attention</h2>
+              <p className="dh-card-sub">{attention.length ? `${attention.length} student${attention.length === 1 ? "" : "s"} waiting on someone` : "Nothing waiting right now"}</p>
+            </div>
+          </header>
+          {loading ? (
+            <div className="dh-empty"><div className="loading-dots"><span /><span /><span /></div></div>
+          ) : attentionShown.length === 0 ? (
+            <div className="dh-empty dh-empty--ok"><CheckCircle size={22} /><p>Every student is moving — no missing documents, unassigned files or stalled applications.</p></div>
+          ) : (
+            <ul className="dh-attn">
+              {attentionShown.map(({ s, reasons }) => (
+                <li key={studentKey(s)}>
+                  <button type="button" className="dh-attn-row" onClick={() => onOpenProfile(s, attention.map((x) => x.s))}>
+                    <span className={`dh-avatar avatar-${getAvatarVariant(s.name)}`} aria-hidden="true">{getInitials(displayName(s.name))}</span>
+                    <span className="dh-attn-text">
+                      <span className="dh-attn-name">{displayName(s.name)}</span>
+                      <span className="dh-attn-reasons">
+                        <span className={`dh-reason dh-reason--${reasons[0].tone}`}>{reasons[0].text}</span>
+                        {reasons.length > 1 && <span className="dh-more">+{reasons.length - 1} more</span>}
+                      </span>
+                    </span>
+                    <ChevronRight size={16} className="dh-chev" aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {attention.length > attentionShown.length && (
+            <button type="button" className="dh-link" onClick={() => onOpenProfile(attention[0].s, attention.map((x) => x.s))}>
+              Go through all {attention.length} <ArrowRight size={14} />
+            </button>
+          )}
+        </section>
+
+        {/* Companies (superadmin) */}
+        {isSuper && companyRows.length > 0 && (
+          <section className="dh-card dh-card--companies" aria-labelledby="dh-co-title">
+            <header className="dh-card-head">
+              <div>
+                <h2 id="dh-co-title" className="dh-card-title">Companies</h2>
+                <p className="dh-card-sub">{partners.length} partner{partners.length === 1 ? "" : "s"} · where every student comes from and how their files are moving</p>
+              </div>
+              <button type="button" className="dh-link" onClick={onOpenCompanies}>Manage companies <ArrowUpRight size={14} /></button>
+            </header>
+            {total > 0 && (
+              <div className="dh-share" role="img" aria-label={companyRows.map((c) => `${c.name} ${c.count}`).join(", ")}>
+                {companyRows.filter((c) => c.count).map((c, i) => (
+                  <span key={c.id} style={{ flexGrow: c.count, background: c.branding?.accent || COMPANY_COLORS[i % COMPANY_COLORS.length] }} title={`${c.name}: ${c.count}`} />
+                ))}
+              </div>
+            )}
+            <div className="dh-co-table" role="table" aria-label="Companies">
+              <div className="dh-co-row dh-co-row--head" role="row">
+                <span role="columnheader">Company</span>
+                <span role="columnheader">Students</span>
+                <span role="columnheader">In process</span>
+                <span role="columnheader">Approved</span>
+                <span role="columnheader">Files complete</span>
+                <span role="columnheader">Loan value</span>
+                <span role="columnheader">Team</span>
+              </div>
+              {companyRows.map((c, i) => (
+                <button key={c.id} type="button" role="row" className="dh-co-row" onClick={() => onOpenStudents({ company: c.id })}>
+                  <span role="cell" className="dh-co-name">
+                    {c.logoUrl
+                      ? <img src={companyLogoSrc(c.logoUrl)} alt="" className="dh-co-logo" />
+                      : <span className="dh-co-logo dh-co-logo--initials" style={{ "--co": c.branding?.accent || COMPANY_COLORS[i % COMPANY_COLORS.length] }}>{getInitials(c.name)}</span>}
+                    <span className="dh-co-text">
+                      <span className="dh-co-title">{c.name}</span>
+                      <span className="dh-co-kind">{c.kind === "owner" ? "Owner" : c.status === "active" ? "Partner" : "Suspended"}</span>
+                    </span>
+                  </span>
+                  <span role="cell" data-label="Students" className="dh-co-num">
+                    <strong>{c.count}</strong>
+                    <span className="dh-co-pct">{total ? `${Math.round((c.count / total) * 100)}%` : ""}</span>
+                  </span>
+                  <span role="cell" data-label="In process" className="dh-co-num">{c.inprocess}</span>
+                  <span role="cell" data-label="Approved" className="dh-co-num">{c.approved}</span>
+                  <span role="cell" data-label="Files complete" className="dh-co-progress">
+                    {c.complete === null ? <span className="dh-muted">—</span> : (
+                      <>
+                        <span className="dh-mini-bar"><span style={{ width: `${c.complete}%` }} /></span>
+                        <span>{c.complete}%</span>
+                      </>
+                    )}
+                  </span>
+                  <span role="cell" data-label="Loan value" className="dh-co-num">{c.value ? compactInr(c.value) : "—"}</span>
+                  <span role="cell" data-label="Team" className="dh-co-team">
+                    {c.counts ? `${c.counts.admins} admin${c.counts.admins === 1 ? "" : "s"} · ${c.counts.staff} staff · ${c.counts.lenders} lender${c.counts.lenders === 1 ? "" : "s"}` : "—"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Documents */}
+        <div className="dh-cell dh-cell--docs">
+          <BreakdownCard
+            title="Document completion"
+            sub={total ? `${stats.complete} of ${total} files complete` : "No students yet"}
+            icon={FileText}
+            items={[
+              { key: "complete", label: "All documents in", value: stats.complete },
+              { key: "progress", label: "In progress", value: stats.inProgress },
+              { key: "notStarted", label: "Not started", value: stats.notStarted },
+            ]}
+            active={null}
+            onSelect={(key) => onOpenStudents({ doc: key })}
+            footer={[
+              { label: "Average completion", value: total ? `${stats.avgProgress}%` : "–" },
+              { label: "New this week", value: stats.newThisWeek },
+            ]}
+          />
         </div>
-        <div className="ring-grid">
-          {docRings.map(({ key, label, value, color, pct }) => (
-            <StatRing
-              key={key}
-              color={color}
-              value={value}
-              label={label}
-              pct={pct}
-              active={filter === key}
-              onClick={() => setFilter(filter === key && key !== "all" ? "all" : key)}
-            />
-          ))}
-        </div>
+
+        {/* Advisor workload */}
+        {adminLevel && (
+          <section className="dh-card dh-cell--advisors" aria-labelledby="dh-adv-title">
+            <header className="dh-card-head">
+              <div>
+                <h2 id="dh-adv-title" className="dh-card-title">Advisor workload</h2>
+                <p className="dh-card-sub">Students per advisor and how complete their files are</p>
+              </div>
+            </header>
+            {advisorRows.length === 0 ? (
+              <div className="dh-empty"><p>No students yet.</p></div>
+            ) : (
+              <ul className="dh-adv">
+                {advisorRows.slice(0, 6).map((a) => (
+                  <li key={a.name || "none"}>
+                    <button type="button" className="dh-adv-row" onClick={() => onOpenStudents(a.name ? { advisor: a.name } : {})} disabled={!a.name}>
+                      <span className={`dh-avatar dh-avatar--sm${a.name ? "" : " is-none"}`} aria-hidden="true">{a.name ? getInitials(a.name) : "?"}</span>
+                      <span className="dh-adv-text">
+                        <span className="dh-adv-name">{a.name || "Unassigned"}</span>
+                        <span className="dh-adv-bar"><span style={{ width: `${(a.count / maxAdvisor) * 100}%` }} /></span>
+                      </span>
+                      <span className="dh-adv-nums">
+                        <strong>{a.count}</strong>
+                        <span>{a.progress}% docs</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+
+        {/* Staff: their most recently updated students */}
+        {!adminLevel && (
+          <section className="dh-card dh-cell--recent" aria-labelledby="dh-recent-title">
+            <header className="dh-card-head">
+              <div>
+                <h2 id="dh-recent-title" className="dh-card-title">Recently updated</h2>
+                <p className="dh-card-sub">Your students with the latest changes</p>
+              </div>
+            </header>
+            {recent.length === 0 ? (
+              <div className="dh-empty"><p>No students assigned to you yet.</p></div>
+            ) : (
+              <ul className="dh-attn">
+                {recent.map((s) => (
+                  <li key={studentKey(s)}>
+                    <button type="button" className="dh-attn-row" onClick={() => onOpenProfile(s, recent)}>
+                      <span className={`dh-avatar avatar-${getAvatarVariant(s.name)}`} aria-hidden="true">{getInitials(displayName(s.name))}</span>
+                      <span className="dh-attn-text">
+                        <span className="dh-attn-name">{displayName(s.name)}</span>
+                        <span className="dh-attn-reasons">
+                          <LoanStatusBadge status={s.loanStatus} />
+                          <span className="dh-more">{s.updatedAt ? timeAgo(s.updatedAt) : ""}</span>
+                        </span>
+                      </span>
+                      <ChevronRight size={16} className="dh-chev" aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+
+        {/* Recent activity */}
+        {adminLevel && (
+          <div className="dh-cell dh-cell--activity">
+            <LiveActivityFeed onViewAll={onOpenAudit} students={students} bankers={bankers} onOpenStudent={onOpenStudentFile} />
+          </div>
+        )}
       </div>
 
-      <div className="stats-card">
-        <div className="stats-card-head">
-          <p className="stats-card-title"><Banknote size={15} /> Loan Application Status</p>
-        </div>
-        <div className="loan-stat-row">
-          {loanCards.map(({ key, label, value, color, icon, pct }) => (
-            <button key={key} type="button"
-              className={`loan-stat-item tone-${color}${loanStatusFilter === key ? " active" : ""}`}
-              onClick={() => setLoanStatusFilter(loanStatusFilter === key ? "all" : key)}>
-              <span className="loan-stat-top">
-                <span className="loan-stat-icon">{icon}</span>
-                {pct !== null && <span className="loan-stat-pct">{pct}%</span>}
-              </span>
-              <span className="loan-stat-value">{value}</span>
-              <span className="loan-stat-label">{label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+      <PartnerBanksShowcase />
     </div>
   );
 }
-
 
 /* ─── Loan Status ──────────────────────────────────────────────── */
 
@@ -751,7 +1121,7 @@ function RecoverMetaModal({ student, onClose, onRestored }) {
         <div className="modal-icon"><ScanText size={26} /></div>
         <h3 className="bank-modal-title">Recover Meta from PDF</h3>
         <p className="bank-modal-desc">
-          Scans <strong>Student_Summary.pdf</strong> from Drive, uses AI to reconstruct the
+          Scans the student's <strong>Application Form</strong> PDF from Drive, uses AI to reconstruct the
           student's form data, then writes it back as <code>student_meta.json</code>.
         </p>
 
@@ -1513,254 +1883,652 @@ function ReportModal({ student, onClose }) {
 
 /* ─── Detail tabs content ─────────────────────────────────────── */
 
-function PersonalTab({ student }) {
+/* ─── Student profile (full details) ───────────────────────────────
+   Opens over the list as a large sheet: header with the key facts and
+   actions, a summary strip, then Overview / Profile / Documents /
+   Activity. Everything here is read from the student record already
+   loaded for the list; only Activity fetches (the audit log). */
+
+const fmtDate = (v) => {
+  if (!v) return "";
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+};
+const inr = (v) => {
+  const n = Number(String(v ?? "").replace(/[^\d.]/g, ""));
+  return v && Number.isFinite(n) && n > 0 ? `₹${n.toLocaleString("en-IN")}` : "";
+};
+const scoreText = (score, type, year) => {
+  if (!score) return "";
+  const unit = type === "marks" ? " marks" : type === "points" ? " points" : type === "cgpa" ? " CGPA" : "%";
+  return `${score}${unit}${year ? ` · ${year}` : ""}`;
+};
+// Only the last four digits of an ID number are ever shown.
+const maskTail = (v, keep = 4) => {
+  const s = String(v || "").replace(/\s/g, "");
+  return s ? `${"•".repeat(Math.max(0, s.length - keep))}${s.slice(-keep)}` : "";
+};
+const cleanDocLabel = (label = "") => label.replace(/\s*\((?:optional|if)[^)]*\)\s*$/i, "").trim();
+
+function personName(p, fallback) {
+  return [p.firstName, p.lastName].filter(Boolean).join(" ") || p.fullName || p.name || fallback;
+}
+
+// Grouped, labelled view of everything the student filled in.
+function profileSections(student) {
   const p = student.personalInfo || {};
-  const fullName = [p.firstName, p.lastName].filter(Boolean).join(" ") || p.fullName || student.name;
-  const fields = [
-    { label: "Full Name", value: fullName },
-    { label: "Email", value: student.email || p.email },
-    { label: "Phone", value: student.phone || p.phone },
-    { label: "Marital Status", value: p.marital === "Yes" ? "Married" : p.marital === "No" ? "Unmarried" : p.marital },
-    { label: "Loan Amount", value: p.loanAmount ? `₹${Number(p.loanAmount).toLocaleString("en-IN")}` : null },
-    { label: "10th Score", value: p.pct10Score ? `${p.pct10Score}${p.pct10Type === "marks" ? " Marks" : p.pct10Type === "points" ? " Points" : "%"}${p.pct10Year ? ` (${p.pct10Year})` : ""}` : p.pct10 },
-    { label: "12th Score", value: p.pct12Score ? `${p.pct12Score}${p.pct12Type === "marks" ? " Marks" : p.pct12Type === "points" ? " Points" : "%"}${p.pct12Year ? ` (${p.pct12Year})` : ""}` : p.pct12 },
-    { label: "Grad % / CGPA", value: p.pctGradScore ? `${p.pctGradScore}${p.pctGradType === "cgpa" ? " CGPA" : "%"}` : p.pctGrad },
-    { label: "Graduation Institution", value: p.qualInstitution },
-    { label: "Student CIBIL", value: p.studentCibil },
-    { label: "Destination Country", value: p.destinationCountry },
-    { label: "Target University", value: p.targetUniversity },
-    { label: "Current Address", value: p.currentAddress },
-    { label: "Permanent Address", value: p.permanentAddress },
-    { label: "Maternal Grandmother", value: p.maternalGrandma },
-    { label: "Paternal Grandmother", value: p.paternalGrandma },
-  ];
-
-  return (
-    <div className="detail-body">
-      <p className="section-heading">
-        <User size={13} /> Personal Information
-      </p>
-      <div className="info-grid">
-        {fields.map(({ label, value }) => (
-          <div key={label} className="info-cell">
-            <div className="info-label">{label}</div>
-            <div className={`info-value${!value ? " empty" : ""}`}>{value || "—"}</div>
-          </div>
-        ))}
-      </div>
-
-      {student.coApplicants > 0 && (
-        <>
-          <p className="section-heading" style={{ marginTop: 24 }}>
-            <UsersIcon size={13} /> Co‑Applicants ({student.coApplicants})
-          </p>
-          <div className="co-list">
-            {Array.from({ length: student.coApplicants }).map((_, idx) => {
-              const info = (student.personalInfo || {})[`co_info_${idx}`] || {};
-              const coDisplayName = [info.firstName, info.lastName].filter(Boolean).join(" ") || info.name || "";
-              if (!coDisplayName) return null;
-              return (
-                <div key={idx} className="co-item">
-                  <div className="co-avatar"><UsersIcon size={15} /></div>
-                  <div className="co-info">
-                    <div className="co-name">{coDisplayName}</div>
-                    <div className="co-details">{info.relation || "Relation N/A"}</div>
-                  </div>
-                  {info.empType && <span className="co-type">{info.empType}</span>}
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function DocumentsTab({ student }) {
+  const coCount = student.coApplicants || 0;
   const sections = [
-    { key: "applicant", label: "Applicant Docs", required: 6 },
-    { key: "academics", label: "Academics", required: 10 },
-    { key: "otherDocs", label: "Other Documents", required: null },
+    {
+      id: "personal", title: "Personal details", icon: User, rows: [
+        { label: "Full name", value: personName(p, displayName(student.name)) },
+        { label: "Date of birth", value: fmtDate(p.dob) },
+        { label: "Gender", value: p.gender },
+        { label: "Nationality", value: p.nationality },
+        { label: "Place of birth", value: p.placeOfBirth },
+        { label: "Married", value: p.marital },
+        { label: "Email", value: student.email || p.email },
+        { label: "Mobile", value: student.phone || p.phone },
+        { label: "Present address", value: p.currentAddress, wide: true },
+        { label: "Permanent address", value: p.permanentAddress, wide: true },
+      ],
+    },
+    {
+      id: "identity", title: "Identity", icon: ShieldCheck, rows: [
+        { label: "Passport number", value: p.passportNumber },
+        { label: "Passport issued", value: fmtDate(p.passportIssueDate) },
+        { label: "Passport expires", value: fmtDate(p.passportExpiry) },
+        { label: "PAN", value: p.panNumber },
+        { label: "Aadhaar", value: maskTail(p.aadhaarNumber), hint: "Masked" },
+      ],
+    },
+    {
+      id: "academics", title: "Academics", icon: BookOpen, rows: [
+        { label: "Highest qualification", value: p.qualName },
+        { label: "Institution", value: p.qualInstitution },
+        { label: "Passed out", value: p.qualYear || p.qualPassedYear },
+        { label: "10th", value: scoreText(p.pct10Score, p.pct10Type, p.pct10Year) || p.pct10 },
+        { label: "12th", value: scoreText(p.pct12Score, p.pct12Type, p.pct12Year) || p.pct12 },
+        { label: "Graduation", value: scoreText(p.pctGradScore, p.pctGradType, p.pctGradYear) || p.pctGrad },
+        { label: "Backlogs", value: p.hasBacklogs === "Yes" ? `Yes${p.backlogCount ? ` · ${p.backlogCount}` : ""}` : p.hasBacklogs },
+        {
+          label: "Test scores", wide: true, value: [
+            p.greScore && `GRE ${p.greScore}`, p.gmatScore && `GMAT ${p.gmatScore}`, p.ieltsScore && `IELTS ${p.ieltsScore}`,
+            p.toeflScore && `TOEFL ${p.toeflScore}`, p.pteScore && `PTE ${p.pteScore}`, p.duolingoScore && `Duolingo ${p.duolingoScore}`,
+          ].filter(Boolean).join(" · "),
+        },
+      ],
+    },
+    {
+      id: "study", title: "Study plan", icon: Plane, rows: [
+        { label: "Destination", value: p.destinationCountry },
+        { label: "University", value: p.targetUniversity },
+        { label: "Course", value: p.courseNameUniversity },
+        { label: "I-20 received", value: p.i20Received },
+        { label: "Visa slot booked", value: p.visaBooked },
+        { label: "Visa slot date", value: fmtDate(p.visaSlotDate) },
+      ],
+    },
+    {
+      id: "loan", title: "Loan & finances", icon: Banknote, rows: [
+        { label: "Loan amount", value: inr(p.loanAmount) },
+        { label: "Student CIBIL", value: p.studentCibil },
+        { label: "Applied to a bank before", value: p.priorBankApplied === "Yes" ? `Yes${(p.priorBankName === "Others" ? p.priorBankNameCustom : p.priorBankName) ? ` · ${p.priorBankName === "Others" ? p.priorBankNameCustom : p.priorBankName}` : ""}` : p.priorBankApplied },
+        { label: "Family owns a house", value: p.ownHouseStatus },
+        { label: "Working", value: p.hasJobDetails === "Yes" ? `Yes${p.jobSpecs ? ` · ${p.jobSpecs}` : ""}` : p.hasJobDetails, wide: p.hasJobDetails === "Yes" },
+        { label: "Consultancy", value: [p.consultantNameLoc, p.consultantContact].filter(Boolean).join(" · "), wide: true },
+      ],
+    },
+    {
+      id: "family", title: "Family", icon: UsersIcon, rows: [
+        { label: "Father", value: [p.fatherName, p.fatherContact].filter(Boolean).join(" · ") },
+        { label: "Father’s CIBIL", value: p.fatherCibil },
+        { label: "Mother", value: [p.motherName, p.motherContact].filter(Boolean).join(" · ") },
+        { label: "Mother’s CIBIL", value: p.motherCibil },
+        { label: "Maternal grandmother", value: p.maternalGrandma },
+        { label: "Paternal grandmother", value: p.paternalGrandma },
+        ...(p.guarantorName ? [
+          { label: "Guarantor", value: [p.guarantorName, p.guarantorRelation].filter(Boolean).join(" · ") },
+          { label: "Guarantor’s mobile", value: p.guarantorMobile },
+          { label: "Guarantor’s CIBIL", value: p.guarantorCibil },
+          { label: "Guarantor’s sector", value: p.guarantorSector },
+        ] : []),
+      ],
+    },
   ];
-  const caSections = student.coApplicants
-    ? [{ key: "co_uploads", label: `Co‑Applicant Docs`, required: student.coApplicants * 3 }]
-    : [];
 
-  return (
-    <div className="detail-body">
-      <p className="section-heading">
-        <FolderOpen size={13} /> Document Status by Section
-      </p>
-      <div className="upload-section-grid">
-        {[...sections, ...caSections].map(({ key, label, required }) => {
-          const uploads = student.uploads || {};
-          const count =
-            key === "co_uploads"
-              ? Object.keys(uploads).filter((k) => k.startsWith("co_")).length
-              : Object.keys(uploads[key] || {}).length;
-          const pct = required ? Math.min(100, Math.round((count / required) * 100)) : 0;
-          return (
-            <div key={key} className="upload-section-card">
-              <div className="usc-header">
-                <span className="usc-label">{label}</span>
-                <span className="usc-count">{count}{required ? ` / ${required}` : "+"}</span>
-              </div>
-              {required && (
-                <div className="usc-bar">
-                  <div className="usc-fill" style={{ width: `${pct}%` }} />
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+  const coApplicants = Array.from({ length: coCount }, (_, i) => {
+    const c = p[`co_info_${i}`] || {};
+    const financial = c.financialStatus !== "non-financial";
+    return {
+      index: i,
+      name: personName(c, `Co-applicant ${i + 1}`),
+      tag: financial ? (c.empType === "selfEmployed" ? "Self-employed" : c.empType === "other" ? "Financial" : "Salaried") : "Non-financial",
+      rows: [
+        { label: "Relationship", value: c.relation },
+        { label: "Mobile", value: c.mobile },
+        { label: "Email", value: c.email },
+        { label: "Date of birth", value: fmtDate(c.dob) },
+        { label: "PAN", value: c.panNumber },
+        { label: "Aadhaar", value: maskTail(c.aadhaarNumber), hint: "Masked" },
+        { label: "Occupation", value: c.occupation },
+        { label: "Annual income", value: inr(c.annualIncome) },
+        { label: "CIBIL", value: c.cibil },
+        { label: "Current address", value: c.currentAddress, wide: true },
+      ],
+    };
+  });
 
-      {(() => {
-        const missing = getMissingDocs(student);
-        if (!missing.length)
-          return (
-            <div className="missing-section missing-all-clear">
-              <div className="missing-title missing-ok">
-                <CheckCircle size={14} /> All required documents uploaded
-              </div>
-            </div>
-          );
+  const references = [1, 2].map((n) => ({
+    n,
+    name: p[`ref${n}_name`],
+    detail: [p[`ref${n}_relation`] === "Other" ? p[`ref${n}_custom_relation`] : p[`ref${n}_relation`], p[`ref${n}_occupation`], p[`ref${n}_mobile`]].filter(Boolean).join(" · "),
+  })).filter((r) => r.name || r.detail);
 
-        const grouped = missing.reduce((acc, { section, label }) => {
-          if (!acc[section]) acc[section] = [];
-          acc[section].push(label);
-          return acc;
-        }, {});
-
-        return (
-          <div className="missing-section" style={{ marginBottom: 16 }}>
-            <div className="missing-title">
-              <AlertCircle size={14} />
-              {missing.length} Missing Required Document{missing.length !== 1 ? "s" : ""}
-            </div>
-            {Object.entries(grouped).map(([section, labels]) => (
-              <div key={section} className="missing-group">
-                <div className="missing-group-label">{section}</div>
-                <ul className="missing-list">
-                  {labels.map((label, i) => <li key={i}>{label}</li>)}
-                </ul>
-              </div>
-            ))}
-          </div>
-        );
-      })()}
-    </div>
-  );
+  return { sections, coApplicants, references };
 }
 
-// Every document opens inside DocLocker's own viewer (fetched privately,
-// recorded in the audit log). Only a very old upload saved without a file
-// id falls back to its Drive link, which Drive itself still protects.
-function FileOpenAction({ file, onView }) {
-  const id = file.id || file.fileId;
-  if (id) {
-    return (
-      <button
-        type="button"
-        className="file-link"
-        onClick={(e) => { e.stopPropagation(); onView(); }}
-      >
-        <Eye size={12} /> View
-      </button>
-    );
+// Every upload slot, uploaded or not, grouped like the student's portal.
+function slotFiles(sectionUploads, fieldId) {
+  return Object.entries(sectionUploads || {})
+    .filter(([k, v]) => v && (k === fieldId || (k.startsWith(`${fieldId}_`) && /^\d+$/.test(k.slice(fieldId.length + 1)))))
+    .map(([, v]) => ({ id: v.id || v.fileId, name: v.name || v.fileName || fieldId, webViewLink: v.webViewLink }));
+}
+
+function documentGroups(student) {
+  const uploads = student.uploads || {};
+  const p = student.personalInfo || {};
+  const group = (key, title, fields, sectionKey) => ({
+    key, title,
+    items: fields.map((f) => ({ id: f.id, label: cleanDocLabel(f.label), required: !f.optional, files: slotFiles(uploads[sectionKey], f.id) })),
+  });
+  const groups = [
+    group("applicant", "Identity & personal", DOCUMENT_SCHEMA.applicant.fields, "applicant"),
+    group("academics", "Academics & tests", DOCUMENT_SCHEMA.academics.fields, "academics"),
+  ];
+  for (let i = 0; i < (student.coApplicants || 0); i++) {
+    const info = p[`co_info_${i}`] || {};
+    groups.push(group(`co_${i}`, `Co-applicant ${i + 1}${personName(info, "") ? ` · ${personName(info, "")}` : ""}`, coApplicantFields(info), `co_${i}`));
   }
-  if (!file.webViewLink) return null;
+  // Anything else the student added under their own names
+  const known = new Set(["applicant", "academics", ...Array.from({ length: student.coApplicants || 0 }, (_, i) => `co_${i}`)]);
+  const extra = Object.entries(uploads)
+    .filter(([k, v]) => !known.has(k) && v && typeof v === "object")
+    .flatMap(([, v]) => Object.entries(v).filter(([, f]) => f).map(([fid, f]) => ({
+      id: fid, label: f.customName || f.name || fid, required: false,
+      files: [{ id: f.id || f.fileId, name: f.name || f.fileName || fid, webViewLink: f.webViewLink }],
+    })));
+  if (extra.length) groups.push({ key: "other", title: "Other documents", items: extra });
+  return groups;
+}
+
+function ProfileRows({ rows }) {
   return (
-    <a
-      href={file.webViewLink}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="file-link"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <ExternalLink size={12} /> Open in Drive
-    </a>
+    <dl className="sp-rows">
+      {rows.map((r) => (
+        <div key={r.label} className={r.wide ? "is-wide" : undefined}>
+          <dt>{r.label}{r.hint && r.value ? <small>{r.hint}</small> : null}</dt>
+          <dd className={r.value ? undefined : "is-empty"}>{r.value || "Not provided"}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
-function FilesTab({ student }) {
-  const files = getAllUploadedFiles(student.uploads);
+function StudentProfile({
+  student, position, onPrev, onNext, onClose, adminRole, bankers = [], isDuplicate,
+  onLoanStatus, onEligibility, onShare, onOpenDrive, onRecover, onDelete, canManage,
+  canEditAdvisor, onAdvisorSave, advisorOptions, canEditConsultancy, onConsultancySave, consultancySuggestions,
+}) {
+  const [tab, setTab] = useState("overview");
   const [viewing, setViewing] = useState(null);
-  // Student_Summary.pdf / Eligibility_Report.pdf aren't part of student.uploads
-  // at all — they're auto-generated server-side into the student's "Others"
-  // Drive folder on every save, never recorded into the upload-field state
-  // getAllUploadedFiles reads. Listed separately here so staff can actually
-  // find them without leaving the app to browse Drive by hand.
+  const [copied, setCopied] = useState(false);
+  const [photoFailed, setPhotoFailed] = useState(false);
+  const [activity, setActivity] = useState(null); // null = not loaded
+  const [openEntry, setOpenEntry] = useState(null);
+  const [zipBusy, setZipBusy] = useState(false);
+  // The student's applicant PIN: null = not loaded, then { hasPin, note }
+  const [pin, setPin] = useState(null);
+  const closeRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
+
+  const canSeeActivity = isAdminLevel(adminRole);
+  const name = displayName(student.name);
+  const appId = getApplicationId(student);
+  const identity = identityReportFor(student);
+  const { sections, coApplicants, references } = profileSections(student);
+  const groups = documentGroups(student);
+  // Every count in the profile comes from the checklist below, so the
+  // header, tabs and Documents tab always agree (multi-page slots count once).
+  const requiredItems = groups.flatMap((g) => g.items.filter((i) => i.required));
+  const missing = requiredItems.filter((i) => !i.files.length);
+  const requiredTotal = requiredItems.length;
+  const progress = requiredTotal ? Math.round(((requiredTotal - missing.length) / requiredTotal) * 100) : 100;
+  const uploadedFiles = groups.flatMap((g) => g.items.flatMap((it) => it.files.map((f) => ({ ...f, slot: it.label, group: g.title }))));
   const generated = [
-    // Display name after the spread so it wins over the stored file name
-    student.summaryPdf && { key: "summary", tag: "Auto-generated", ...student.summaryPdf, name: "Application Form" },
-    student.eligibilityPdf && { key: "eligibility", tag: "Auto-generated", ...student.eligibilityPdf, name: "Eligibility Report" },
+    student.summaryPdf && { id: student.summaryPdf.fileId || student.summaryPdf.id, name: "Application Form", note: "Built from the profile on every save" },
+    student.eligibilityPdf && { id: student.eligibilityPdf.fileId || student.eligibilityPdf.id, name: "Eligibility Report", note: "Scores, CIBIL and readiness" },
+  ].filter((g) => g && g.id);
+  const viewerFiles = [...generated, ...uploadedFiles].filter((f) => f.id).map((f) => ({ id: f.id, name: f.name }));
+  const lenders = (student.sharedBankers || []).map((n) => ({ name: n, bank: bankers.find((b) => b.name === n)?.bank || "" }));
+  const photo = student.uploads?.applicant?.photo;
+  const hasPhoto = !!photo?.id && /\.(jpe?g|png|webp|gif)$/i.test(photo.name || "") && !photoFailed;
+  const updated = student.updatedAt ? new Date(student.updatedAt) : null;
+  const p = student.personalInfo || {};
+
+  // Esc closes — unless a dialog opened from here (viewer, loan status…) is on top.
+  useEffect(() => {
+    closeRef.current?.focus();
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      if (document.querySelector(".modal-backdrop, .dv-backdrop, .ad-backdrop, .rpt-backdrop")) return;
+      onCloseRef.current();
+    };
+    document.addEventListener("keydown", onKey);
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = overflow; };
+  }, []);
+
+  // This student's audit trail, loaded the first time Activity (or the
+  // overview preview) needs it.
+  useEffect(() => {
+    if (!canSeeActivity || activity !== null) return undefined;
+    let cancelled = false;
+    getAuditLog({ limit: 500 })
+      .then(({ entries }) => {
+        if (cancelled) return;
+        const target = studentAuditTarget(student);
+        setActivity(entries.filter((e) => e.target === target || (student.studentKey && e.target === student.studentKey)));
+      })
+      .catch(() => { if (!cancelled) setActivity([]); });
+    return () => { cancelled = true; };
+  }, [canSeeActivity, activity, student]);
+
+  // Students sign in with a PIN; a forgotten one is reset here and they
+  // choose a new one on their next visit.
+  const pinKey = student.studentKey || studentAuditTarget(student);
+  useEffect(() => {
+    let cancelled = false;
+    callAPI("GET", `/api/applicant/pin-status?studentKey=${encodeURIComponent(pinKey)}`)
+      .then((d) => { if (!cancelled && d.success) setPin({ hasPin: d.hasPin }); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [pinKey]);
+  const resetPin = async () => {
+    if (!window.confirm(`Reset ${name}’s PIN? They’ll be signed out and choose a new PIN the next time they open their application.`)) return;
+    const d = await callAPI("POST", "/api/applicant/reset-pin", { studentKey: pinKey }).catch(() => ({ success: false }));
+    setPin(d.success
+      ? { hasPin: false, note: "PIN reset — the student creates a new one on their next visit." }
+      : { ...(pin || {}), note: d.error || "The PIN couldn’t be reset. Try again." });
+  };
+
+  const copyId = async () => {
+    try { await navigator.clipboard.writeText(appId); setCopied(true); setTimeout(() => setCopied(false), 1400); } catch { /* blocked */ }
+  };
+  const downloadZip = async () => {
+    setZipBusy(true);
+    try { await downloadAllFiles(student.name, student.email || student.phone || ""); } catch { /* the browser shows its own error page */ }
+    setZipBusy(false);
+  };
+
+  const attention = [
+    student._parseError && { tone: "danger", text: "The saved record can’t be read — use Recover data to restore it." },
+    isDuplicate && { tone: "warn", text: "Another record uses the same email or phone. Check both before deleting either." },
+    (identity.overall === "mismatch" || identity.overall === "partial") && { tone: identity.overall === "mismatch" ? "danger" : "warn", text: `Details differ between documents: ${identity.issues.slice(0, 2).join("; ")}${identity.issues.length > 2 ? "…" : ""}` },
+    !student.advisor && { tone: "warn", text: "No advisor is assigned yet." },
+    missing.length > 0 && { tone: "info", text: `${missing.length} required document${missing.length === 1 ? "" : "s"} missing`, action: () => setTab("documents") },
+    student.loanStatus === "rejected" && student.loanRemark && { tone: "danger", text: `Rejected: ${student.loanRemark}` },
   ].filter(Boolean);
 
-  if (!files.length && !generated.length) {
-    return (
-      <div className="detail-body">
-        <div className="admin-empty" style={{ padding: "40px 20px" }}>
-          <div className="admin-empty-icon"><FileText size={24} /></div>
-          <h3>No files uploaded yet</h3>
-          <p>Documents will appear here once the student uploads them.</p>
-        </div>
-      </div>
-    );
-  }
+  const glance = [
+    { label: "Destination", value: [p.destinationCountry, p.targetUniversity].filter(Boolean).join(" · ") },
+    { label: "Course", value: p.courseNameUniversity },
+    { label: "Loan amount", value: inr(p.loanAmount) },
+    { label: "Student CIBIL", value: p.studentCibil },
+    { label: "Qualification", value: [p.qualName, p.qualInstitution].filter(Boolean).join(" · ") },
+    { label: "Co-applicants", value: student.coApplicants ? coApplicants.map((c) => c.name).join(", ") : "None" },
+  ];
+
+  const tabs = [
+    { id: "overview", label: "Overview" },
+    { id: "profile", label: "Profile" },
+    { id: "documents", label: "Documents", count: missing.length ? `${missing.length} missing` : null },
+    ...(canSeeActivity ? [{ id: "activity", label: "Activity", count: activity?.length || null }] : []),
+  ];
+
+  const loanCfg = LOAN_STATUS_CONFIG[student.loanStatus || "pending"] || LOAN_STATUS_CONFIG.pending;
 
   return (
-    <div className="detail-body">
+    <div className="sp-backdrop" onClick={onClose}>
+      <section className="sp-sheet" role="dialog" aria-modal="true" aria-labelledby="sp-name" onClick={(e) => e.stopPropagation()}>
+        {/* ── Header ── */}
+        <header className="sp-head">
+          <div className="sp-topbar">
+            <button type="button" ref={closeRef} className="sp-icon-btn" onClick={onClose} aria-label="Close student profile">
+              <X size={18} />
+            </button>
+            <span className="sp-crumb">Students <ChevronRight size={14} aria-hidden="true" /> <strong>{name}</strong></span>
+            {position && (
+              <span className="sp-pager">
+                <span className="sp-pager-count">{position.index + 1} of {position.total}</span>
+                <button type="button" className="sp-icon-btn" onClick={onPrev} disabled={!onPrev} aria-label="Previous student"><ChevronLeft size={18} /></button>
+                <button type="button" className="sp-icon-btn" onClick={onNext} disabled={!onNext} aria-label="Next student"><ChevronRight size={18} /></button>
+              </span>
+            )}
+          </div>
+
+          <div className="sp-identity">
+            <span className={`sp-avatar${hasPhoto ? " has-photo" : ` avatar-${getAvatarVariant(student.name)}`}`} aria-hidden="true">
+              {hasPhoto ? <StudentPhoto fileId={photo.id} onFail={() => setPhotoFailed(true)} /> : getInitials(name)}
+            </span>
+            <div className="sp-identity-text">
+              <h2 id="sp-name" className="sp-name">{name}</h2>
+              <div className="sp-meta">
+                {appId && (
+                  <button type="button" className="sp-appid" onClick={copyId} title="Copy Application ID">
+                    {appId} {copied ? <Check size={13} /> : <Copy size={13} />}
+                  </button>
+                )}
+                {(student.email || p.email) && <span><Mail size={14} aria-hidden="true" /> {student.email || p.email}</span>}
+                {(student.phone || p.phone) && <span><PhoneIcon size={14} aria-hidden="true" /> {student.phone || p.phone}</span>}
+                {adminRole === "superadmin" && student.company?.name && <span><Building2 size={14} aria-hidden="true" /> {student.company.name}</span>}
+                {updated && <span className="sp-muted">Updated {timeAgo(updated).replace("Just now", "just now")}</span>}
+                {pin && <span className="sp-muted"><KeyRound size={14} aria-hidden="true" /> {pin.hasPin ? "PIN set" : "No PIN yet"}</span>}
+              </div>
+              {pin?.note && <p className="sp-pin-note" role="status">{pin.note}</p>}
+            </div>
+            <div className="sp-actions">
+              <button type="button" className="sp-btn sp-btn--primary" onClick={onLoanStatus}><Banknote size={16} /> Update loan status</button>
+              <button type="button" className="sp-btn" onClick={onShare}><Send size={16} /> Share with lender</button>
+              <ActionsMenu
+                label="More actions"
+                icon={MoreHorizontal}
+                className="sp-icon-btn sp-icon-btn--outline"
+                items={[
+                  { label: "Eligibility report", icon: BarChart3, onSelect: onEligibility },
+                  { label: zipBusy ? "Preparing download…" : "Download all files", icon: Download, onSelect: downloadZip },
+                  ...(pin?.hasPin ? [{ label: "Reset applicant PIN", icon: KeyRound, onSelect: resetPin }] : []),
+                  ...(student.storage !== "railway" ? [{ label: "Open in Drive", icon: ExternalLink, onSelect: onOpenDrive }] : []),
+                  ...(canManage ? [
+                    { label: "Recover data from PDF", icon: ScanText, onSelect: onRecover },
+                    { label: "Delete student", icon: Trash2, onSelect: onDelete, danger: true },
+                  ] : []),
+                ]}
+              />
+            </div>
+          </div>
+
+          {/* ── Summary strip ── */}
+          <div className="sp-summary">
+            <div className={`sp-tile sp-tile--loan ${loanCfg.cls}`}>
+              <span className="sp-tile-label">Loan status</span>
+              <span className="sp-tile-value"><LoanStatusBadge status={student.loanStatus} /></span>
+              <span className="sp-tile-sub">
+                {student.loanStatusUpdatedBy ? `by ${student.loanStatusUpdatedBy}${student.loanStatusUpdatedAt ? ` · ${timeAgo(student.loanStatusUpdatedAt)}` : ""}` : "Not updated yet"}
+              </span>
+            </div>
+            <button type="button" className="sp-tile sp-tile--button" onClick={() => setTab("documents")}>
+              <span className="sp-tile-label">Documents</span>
+              <span className="sp-tile-value sp-tile-progress">
+                <DocRing pct={progress} />
+                <strong>{progress}%</strong>
+              </span>
+              <span className="sp-tile-sub">{missing.length ? `${missing.length} of ${requiredTotal} required missing` : "All required documents in"}</span>
+            </button>
+            <div className="sp-tile">
+              <span className="sp-tile-label">Advisor</span>
+              <span className="sp-tile-value sp-tile-text">{student.advisor || <em>Not assigned</em>}</span>
+              {canEditAdvisor
+                ? <AdvisorEditor value={student.advisor || ""} onSave={onAdvisorSave} options={advisorOptions} compact />
+                : <span className="sp-tile-sub">{student.advisor ? "Assigned advisor" : "Ask an admin to assign one"}</span>}
+            </div>
+            <div className="sp-tile">
+              <span className="sp-tile-label">Lenders</span>
+              <span className="sp-tile-value sp-tile-text">{lenders.length ? `${lenders.length} lender${lenders.length === 1 ? "" : "s"}` : <em>Not shared</em>}</span>
+              <span className="sp-tile-sub">{lenders.length ? lenders.map((l) => l.bank || l.name).join(", ") : "Share to start the loan review"}</span>
+            </div>
+          </div>
+
+          <nav className="sp-tabs" role="tablist" aria-label="Student details">
+            {tabs.map((t) => (
+              <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`sp-tab${tab === t.id ? " is-active" : ""}`} onClick={() => setTab(t.id)}>
+                {t.label}
+                {t.count ? <span className={`sp-tab-count${t.id === "documents" ? " is-warn" : ""}`}>{t.count}</span> : null}
+              </button>
+            ))}
+          </nav>
+        </header>
+
+        {/* ── Body ── */}
+        <div className="sp-body">
+          {tab === "overview" && (
+            <div className="sp-overview">
+              <div className="sp-col">
+                <section className="sp-card">
+                  <h3 className="sp-card-title">Needs attention</h3>
+                  {attention.length === 0 ? (
+                    <p className="sp-allclear"><CheckCircle size={18} /> Everything looks good — documents are in and the details match.</p>
+                  ) : (
+                    <ul className="sp-attention">
+                      {attention.map((a) => (
+                        <li key={a.text} className={`sp-attn sp-attn--${a.tone}`}>
+                          {a.tone === "info" ? <FileClock size={16} /> : <AlertTriangle size={16} />}
+                          <span>{a.text}</span>
+                          {a.action && <button type="button" className="sp-link" onClick={a.action}>Review</button>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+
+                <section className="sp-card">
+                  <h3 className="sp-card-title">At a glance</h3>
+                  <ProfileRows rows={glance} />
+                  <button type="button" className="sp-link sp-card-more" onClick={() => setTab("profile")}>See full profile <ArrowRight size={14} /></button>
+                </section>
+
+                {canEditConsultancy && (
+                  <section className="sp-card">
+                    <h3 className="sp-card-title">Consultancy</h3>
+                    <ConsultancyEditor value={p.consultantNameLoc || ""} onSave={onConsultancySave} suggestions={consultancySuggestions} />
+                  </section>
+                )}
+              </div>
+
+              <div className="sp-col">
+                <section className="sp-card">
+                  <h3 className="sp-card-title">Reports</h3>
+                  {generated.length === 0 ? (
+                    <p className="sp-muted-text">The Application Form appears here after the student saves their profile.</p>
+                  ) : (
+                    <ul className="sp-files">
+                      {generated.map((g) => (
+                        <li key={g.name} className="sp-file">
+                          <span className="sp-file-icon sp-file-icon--report"><ScanText size={16} /></span>
+                          <span className="sp-file-text"><strong>{g.name}</strong><span>{g.note}</span></span>
+                          <button type="button" className="sp-btn sp-btn--sm" onClick={() => setViewing(g)}><Eye size={15} /> View</button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+
+                {canSeeActivity && (
+                  <section className="sp-card">
+                    <h3 className="sp-card-title">Recent activity</h3>
+                    {activity === null ? (
+                      <div className="sp-loading"><div className="loading-dots"><span /><span /><span /></div></div>
+                    ) : activity.length === 0 ? (
+                      <p className="sp-muted-text">No activity recorded yet.</p>
+                    ) : (
+                      <>
+                        <ol className="sp-timeline">
+                          {activity.slice(0, 5).map((e) => <ActivityItem key={e.id} entry={e} onOpen={() => setOpenEntry(e)} />)}
+                        </ol>
+                        {activity.length > 5 && <button type="button" className="sp-link sp-card-more" onClick={() => setTab("activity")}>All {activity.length} events <ArrowRight size={14} /></button>}
+                      </>
+                    )}
+                  </section>
+                )}
+              </div>
+            </div>
+          )}
+
+          {tab === "profile" && (
+            <div className="sp-profile">
+              {sections.map((s) => {
+                const Icon = s.icon;
+                const filled = s.rows.filter((r) => r.value).length;
+                return (
+                  <section key={s.id} className="sp-card">
+                    <h3 className="sp-card-title"><Icon size={16} /> {s.title} <span className="sp-card-count">{filled}/{s.rows.length}</span></h3>
+                    <ProfileRows rows={s.rows} />
+                  </section>
+                );
+              })}
+              {coApplicants.map((c) => (
+                <section key={c.index} className="sp-card">
+                  <h3 className="sp-card-title"><UsersIcon size={16} /> {c.name} <span className="sp-chip">{c.tag}</span></h3>
+                  <ProfileRows rows={c.rows} />
+                </section>
+              ))}
+              {references.length > 0 && (
+                <section className="sp-card">
+                  <h3 className="sp-card-title"><UserCheck size={16} /> References</h3>
+                  <ProfileRows rows={references.map((r) => ({ label: `Reference ${r.n}`, value: [r.name, r.detail].filter(Boolean).join(" · "), wide: true }))} />
+                </section>
+              )}
+            </div>
+          )}
+
+          {tab === "documents" && (
+            <div className="sp-docs">
+              <div className="sp-docs-head">
+                <div className="sp-docs-progress">
+                  <span className="sp-docs-pct">{progress}%</span>
+                  <span className="sp-bar"><span style={{ width: `${progress}%` }} /></span>
+                  <span className="sp-muted">{missing.length ? `${missing.length} required document${missing.length === 1 ? "" : "s"} still missing` : "Every required document is in"}</span>
+                </div>
+                <button type="button" className="sp-btn" onClick={downloadZip} disabled={zipBusy || uploadedFiles.length === 0}>
+                  {zipBusy ? <RefreshCw size={16} className="spin" /> : <Download size={16} />} Download all
+                </button>
+              </div>
+
+              {generated.length > 0 && (
+                <section className="sp-card sp-card--flat">
+                  <h3 className="sp-card-title">Generated reports</h3>
+                  <ul className="sp-files sp-files--row">
+                    {generated.map((g) => (
+                      <li key={g.name} className="sp-file">
+                        <span className="sp-file-icon sp-file-icon--report"><ScanText size={16} /></span>
+                        <span className="sp-file-text"><strong>{g.name}</strong><span>{g.note}</span></span>
+                        <button type="button" className="sp-btn sp-btn--sm" onClick={() => setViewing(g)}><Eye size={15} /> View</button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {groups.map((g) => {
+                const req = g.items.filter((i) => i.required);
+                const done = req.filter((i) => i.files.length).length;
+                return (
+                  <section key={g.key} className="sp-card sp-card--flat">
+                    <h3 className="sp-card-title">
+                      {g.title}
+                      {req.length > 0 && <span className={`sp-card-count${done === req.length ? " is-done" : ""}`}>{done}/{req.length} required</span>}
+                    </h3>
+                    <ul className="sp-checklist">
+                      {g.items.map((it) => {
+                        const has = it.files.length > 0;
+                        if (!has && !it.required) return null; // empty optional slots stay out of the way
+                        return (
+                          <li key={it.id} className={`sp-check${has ? " is-done" : " is-missing"}`}>
+                            <span className="sp-check-icon" aria-hidden="true">{has ? <CheckCircle size={17} /> : <AlertCircle size={17} />}</span>
+                            <span className="sp-check-text">
+                              <span className="sp-check-label">{it.label}{!it.required && <em className="sp-optional">Optional</em>}</span>
+                              <span className="sp-check-files">
+                                {has ? it.files.map((f) => f.name).join(", ") : "Not uploaded yet"}
+                              </span>
+                            </span>
+                            {has && (
+                              <span className="sp-check-actions">
+                                {it.files.map((f, idx) => (
+                                  f.id
+                                    ? <button key={f.id} type="button" className="sp-btn sp-btn--sm" onClick={() => setViewing({ id: f.id, name: f.name, slot: it.label })}><Eye size={15} /> {it.files.length > 1 ? `Page ${idx + 1}` : "View"}</button>
+                                    : f.webViewLink && <a key={idx} className="sp-btn sp-btn--sm" href={f.webViewLink} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} /> Drive</a>
+                                ))}
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                );
+              })}
+            </div>
+          )}
+
+          {tab === "activity" && canSeeActivity && (
+            <section className="sp-card">
+              {activity === null ? (
+                <div className="sp-loading"><div className="loading-dots"><span /><span /><span /></div></div>
+              ) : activity.length === 0 ? (
+                <p className="sp-muted-text">No activity recorded yet.</p>
+              ) : (
+                <ol className="sp-timeline">
+                  {activity.map((e) => <ActivityItem key={e.id} entry={e} onOpen={() => setOpenEntry(e)} />)}
+                </ol>
+              )}
+            </section>
+          )}
+        </div>
+      </section>
+
       {viewing && (
         <DocumentViewer
-          file={{ id: viewing.id || viewing.fileId, name: viewing.name }}
-          // Every file of this student, so the viewer can step through them
-          files={[...generated, ...files].map((f) => ({ id: f.id || f.fileId, name: f.name })).filter((f) => f.id)}
-          subtitle={[(student.name || "").split("__")[0], getApplicationId(student), viewing.section || viewing.tag].filter(Boolean).join(" · ")}
+          file={{ id: viewing.id, name: viewing.name }}
+          files={viewerFiles}
+          subtitle={[name, appId, viewing.slot].filter(Boolean).join(" · ")}
           onClose={() => setViewing(null)}
         />
       )}
-      {generated.length > 0 && (
-        <>
-          <p className="section-heading">
-            <ScanText size={13} /> Generated Reports
-          </p>
-          <div className="files-list" style={{ marginBottom: 18 }}>
-            {generated.map((file) => (
-              <div key={file.key} className="file-item">
-                <div className="file-icon file-icon-generated"><ScanText size={14} /></div>
-                <div className="file-meta">
-                  <div className="file-name">{file.name}</div>
-                  <div className="file-section-tag">{file.tag}</div>
-                </div>
-                <FileOpenAction file={file} onView={() => setViewing(file)} />
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {files.length > 0 && (
-        <>
-          <p className="section-heading">
-            <FileText size={13} /> {files.length} Uploaded File{files.length !== 1 ? "s" : ""}
-          </p>
-          <div className="files-list">
-            {files.map((file, idx) => (
-              <div key={idx} className="file-item">
-                <div className="file-icon"><FileText size={14} /></div>
-                <div className="file-meta">
-                  <div className="file-name">{file.name}</div>
-                  <div className="file-section-tag">{file.section}</div>
-                </div>
-                <FileOpenAction file={file} onView={() => setViewing(file)} />
-              </div>
-            ))}
-          </div>
-        </>
+      {openEntry && (
+        <ActivityDetail
+          entry={openEntry}
+          entries={activity || []}
+          students={[student]}
+          bankers={bankers}
+          label={bankActivityActionLabel}
+          onClose={() => setOpenEntry(null)}
+        />
       )}
     </div>
+  );
+}
+
+function ActivityItem({ entry, onOpen }) {
+  const prefix = entry.action.split(".")[0];
+  const Icon = BANK_ACTIVITY_ACTION_ICON[prefix] || History;
+  const tone = AUDIT_ACTION_TONE[prefix] || "slate";
+  const d = entry.details || {};
+  const extra = entry.action === "loan_status.update"
+    ? `${d.previousStatus ? `${LOAN_STATUS_CONFIG[d.previousStatus]?.label || d.previousStatus} → ` : "→ "}${LOAN_STATUS_CONFIG[d.loanStatus]?.label || d.loanStatus || ""}`
+    : d.banker || d.fileName || d.file || "";
+  return (
+    <li>
+      <button type="button" className={`sp-event tone-${tone}`} onClick={onOpen}>
+        <span className="sp-event-icon" aria-hidden="true"><Icon size={14} /></span>
+        <span className="sp-event-text">
+          <span className="sp-event-title">{bankActivityActionLabel(entry.action)}{extra && <em> · {extra}</em>}</span>
+          <span className="sp-event-meta">{entry.actor} · {new Date(entry.ts).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+        </span>
+        <ChevronRight size={16} className="sp-event-chevron" aria-hidden="true" />
+      </button>
+    </li>
   );
 }
 
@@ -2008,18 +2776,123 @@ function StudentPhoto({ fileId, onFail }) {
   return url ? <img ref={ref} src={url} alt="" onError={onFail} /> : <span ref={ref} className="student-photo-placeholder" />;
 }
 
-function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDelete, onOpenDrive, onViewReport, onSendToBank, onLoanStatusUpdate, onRecoverMeta, canEditConsultancy, onConsultancySave, consultancySuggestions, canEditAdvisor, onAdvisorSave, advisorOptions, isDuplicate }) {
-  const [activeTab, setActiveTab] = useState("personal");
-  const [moreOpen, setMoreOpen] = useState(false);
+// Small progress ring for the Document Status column — fill is the student's
+// real share of required uploads.
+function DocRing({ pct }) {
+  const tone = pct === 100 ? "done" : pct >= 50 ? "high" : pct > 0 ? "mid" : "none";
+  return (
+    <svg viewBox="0 0 20 20" className={`adm-docring adm-docring--${tone}`} aria-hidden="true">
+      <circle cx="10" cy="10" r="7.5" className="adm-docring-track" />
+      <circle cx="10" cy="10" r="7.5" pathLength="100" strokeDasharray={`${pct} 100`} className="adm-docring-fill" />
+    </svg>
+  );
+}
+
+// Actions menu (row kebab, header overflow). Rendered position: fixed from the
+// trigger's rect so it is never clipped by the table's scroll container; it
+// follows the trigger on scroll/resize and closes on Escape or outside click.
+function ActionsMenu({ label, items, icon: TriggerIcon = MoreVertical, className = "adm-kebab" }) {
+  const [pos, setPos] = useState(null);
+  const open = pos !== null;
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
+
+  const close = useCallback((restoreFocus) => {
+    setPos(null);
+    if (restoreFocus) btnRef.current?.focus();
+  }, []);
+
+  const place = useCallback(() => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r || r.bottom < 0 || r.top > window.innerHeight) { setPos(null); return; }
+    const menuH = menuRef.current?.offsetHeight || items.length * 44 + 12;
+    const openUp = r.bottom + menuH + 8 > window.innerHeight && r.top > menuH + 8;
+    setPos({
+      right: Math.max(8, window.innerWidth - r.right),
+      top: openUp ? undefined : r.bottom + 6,
+      bottom: openUp ? window.innerHeight - r.top + 6 : undefined,
+    });
+  }, [items.length]);
+
+  const toggle = (e) => {
+    e.stopPropagation();
+    if (open) close();
+    else place();
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current?.querySelector("button")?.focus({ preventScroll: true });
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); close(true); return; }
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      e.preventDefault();
+      const btns = Array.from(menuRef.current?.querySelectorAll("button") || []);
+      const i = btns.indexOf(document.activeElement);
+      const next = e.key === "ArrowDown" ? (i + 1) % btns.length : (i - 1 + btns.length) % btns.length;
+      btns[next]?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, close, place]);
+
+  return (
+    <div className="adm-rowmenu" onClick={(e) => e.stopPropagation()}>
+      <button
+        ref={btnRef}
+        type="button"
+        className={className}
+        aria-label={label}
+        title={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={toggle}
+      >
+        <TriggerIcon size={17} />
+      </button>
+      {open && (
+        <>
+          <div className="adm-rowmenu-scrim" onClick={() => close()} />
+          <div
+            ref={menuRef}
+            role="menu"
+            className="adm-rowmenu-list"
+            style={{ top: pos.top, bottom: pos.bottom, right: pos.right }}
+          >
+            {items.map(({ label: itemLabel, icon: Icon, onSelect, danger }) => (
+              <button
+                key={itemLabel}
+                type="button"
+                role="menuitem"
+                className={danger ? "is-danger" : undefined}
+                onClick={(e) => { close(); onSelect(e); }}
+              >
+                <Icon size={15} /> {itemLabel}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDelete, onOpenDrive, onViewReport, onSendToBank, onLoanStatusUpdate, onRecoverMeta, isDuplicate, showAdvisor, canManage }) {
   const [photoFailed, setPhotoFailed] = useState(false);
 
   const totalUploads = getTotalUploads(student);
+  const required = getTotalRequiredFields(student.coApplicants || 1, student.personalInfo || {});
   const progress = getOverallProgress(student);
-  const progClass = getProgressClass(progress);
   const avatarVariant = getAvatarVariant(student.name);
-  const files = getAllUploadedFiles(student.uploads);
-  const consultancy = student.personalInfo?.consultantNameLoc || "";
   const identity = identityReportFor(student);
+  const applicationId = getApplicationId(student);
+  const destination = (student.personalInfo?.destinationCountry || "").trim();
 
   // The Govt ID / KYC section's "Passport Size Photo" upload — same field
   // the student's own portal collects. Only tried as an <img> when its
@@ -2028,194 +2901,113 @@ function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDel
   const photoUpload = student.uploads?.applicant?.photo;
   const hasPhoto = !!photoUpload?.id && /\.(jpe?g|png|webp|gif)$/i.test(photoUpload.name || "") && !photoFailed;
 
-  const tabs = [
-    { id: "personal", label: "Personal", icon: <User size={12} />, count: null },
-    { id: "documents", label: "Documents", icon: <FolderOpen size={12} />, count: null },
-    { id: "files", label: "Files", icon: <FileText size={12} />, count: files.length },
-  ];
-
   const updated = student.updatedAt ? new Date(student.updatedAt) : null;
 
+  const menuItems = [
+    { label: "Open profile", icon: Eye, onSelect: onToggle },
+    { label: "Eligibility report", icon: BarChart3, onSelect: onViewReport },
+    { label: "Bank access", icon: Send, onSelect: onSendToBank },
+    { label: "Update loan status", icon: Banknote, onSelect: onLoanStatusUpdate },
+    ...(student.storage !== "railway" ? [{ label: "Open Drive", icon: ExternalLink, onSelect: onOpenDrive }] : []),
+    ...(canManage ? [
+      { label: "Recover meta", icon: ScanText, onSelect: onRecoverMeta },
+      { label: "Delete student", icon: Trash2, onSelect: onDelete, danger: true },
+    ] : []),
+  ];
+
   return (
-    <div className={`student-block${isOpen ? " open" : ""}${selected ? " row-selected" : ""}`}>
-      <div className="student-row" onClick={onToggle}>
-        <div className="student-cell-check" onClick={(e) => e.stopPropagation()}>
+    <div className={`adm-rowblock${isOpen ? " is-open" : ""}${selected ? " is-selected" : ""}`}>
+      <div className={`adm-row${showAdvisor ? " adm-row--advisor" : ""}`} onClick={onToggle}>
+        <div className="adm-cell adm-cell--check" onClick={(e) => e.stopPropagation()}>
           <input type="checkbox" checked={selected} onChange={onToggleSelect} aria-label={`Select ${student.name}`} />
         </div>
 
-        <div className="student-cell-name">
-          <div className={`student-avatar${hasPhoto ? " has-photo" : ` avatar-${avatarVariant}`}`}>
+        <div className="adm-cell adm-cell--student">
+          <span className={`adm-avatar${hasPhoto ? " has-photo" : ` avatar-${avatarVariant}`}`} aria-hidden="true">
             {hasPhoto ? (
               <StudentPhoto fileId={photoUpload.id} onFail={() => setPhotoFailed(true)} />
             ) : (
-              <User size={16} />
+              getInitials(student.name)
             )}
-          </div>
-          <div className="student-info">
-            <span className="student-name">{student.name || "Unknown Student"}</span>
-            <span className="student-contact">{student.email || student.phone || "No contact info"}</span>
-            {student._parseError && (
-              <span
-                className="student-meta-error-badge"
-                title={`This student's data file is unreadable and could not be loaded: ${student._parseError}. Filters, progress, and details may be inaccurate until it's fixed (try Recover Meta).`}
-              >
-                <AlertTriangle size={11} /> Data unreadable
-              </span>
-            )}
-            {isDuplicate && (
-              <span
-                className="student-meta-error-badge student-duplicate-badge"
-                title="Another student record shares this same email or phone number — likely a duplicate Drive folder from a double submission. Check both records before deleting either one."
-              >
-                <AlertTriangle size={11} /> Possible duplicate
-              </span>
-            )}
-            {(identity.overall === "mismatch" || identity.overall === "partial") && (
-              <span
-                className={`student-meta-error-badge${identity.overall === "partial" ? " student-duplicate-badge" : ""}`}
-                title={`Details differ between this student's documents:\n• ${identity.issues.join("\n• ")}`}
-              >
-                <AlertTriangle size={11} /> {identity.overall === "mismatch" ? "Name/DOB mismatch" : "Details to check"}
+          </span>
+          <div className="adm-student-text">
+            <button
+              type="button"
+              className="adm-student-name"
+              aria-haspopup="dialog"
+              onClick={(e) => { e.stopPropagation(); onToggle(); }}
+            >
+              {student.name || "Unknown Student"}
+            </button>
+            <span className="adm-student-contact">{student.email || student.phone || "No contact info"}</span>
+            {(student._parseError || isDuplicate || identity.overall === "mismatch" || identity.overall === "partial") && (
+              <span className="adm-flags">
+                {student._parseError && (
+                  <span
+                    className="adm-flag adm-flag--danger"
+                    title={`This student's data file is unreadable and could not be loaded: ${student._parseError}. Filters, progress, and details may be inaccurate until it's fixed (try Recover Meta).`}
+                  >
+                    <AlertTriangle size={11} /> Data unreadable
+                  </span>
+                )}
+                {isDuplicate && (
+                  <span
+                    className="adm-flag adm-flag--warn"
+                    title="Another student record shares this same email or phone number — likely a duplicate Drive folder from a double submission. Check both records before deleting either one."
+                  >
+                    <AlertTriangle size={11} /> Possible duplicate
+                  </span>
+                )}
+                {(identity.overall === "mismatch" || identity.overall === "partial") && (
+                  <span
+                    className={`adm-flag ${identity.overall === "partial" ? "adm-flag--warn" : "adm-flag--danger"}`}
+                    title={`Details differ between this student's documents:\n• ${identity.issues.join("\n• ")}`}
+                  >
+                    <AlertTriangle size={11} /> {identity.overall === "mismatch" ? "Name/DOB mismatch" : "Details to check"}
+                  </span>
+                )}
               </span>
             )}
           </div>
         </div>
 
-        <div className="student-cell-text">{consultancy || <span className="cell-empty">—</span>}</div>
-        <div className="student-cell-text">{student.advisor || <span className="cell-empty">—</span>}</div>
-
-        <div className="student-cell-status">
+        <div className="adm-cell adm-cell--appid" data-label="Application ID">
+          {applicationId || <span className="adm-empty-val">—</span>}
+        </div>
+        <div className="adm-cell adm-cell--dest" data-label="Destination">
+          {destination || <span className="adm-empty-val">—</span>}
+        </div>
+        {showAdvisor && (
+          <div className="adm-cell adm-cell--advisor" data-label="Advisor">
+            {student.advisor || <span className="adm-empty-val">—</span>}
+          </div>
+        )}
+        <div
+          className="adm-cell adm-cell--docs"
+          data-label="Documents"
+          title={`${progress}% complete · ${totalUploads} file${totalUploads === 1 ? "" : "s"} uploaded`}
+        >
+          <DocRing pct={progress} />
+          <span>{Math.min(totalUploads, required)}/{required}</span>
+        </div>
+        <div className="adm-cell adm-cell--loan" data-label="Loan Status">
           <LoanStatusBadge status={student.loanStatus} />
         </div>
-
-        <div className={`student-cell-progress ${progClass}`}>
-          <div className="progress-track">
-            <div className="progress-fill" style={{ width: `${progress}%` }} />
-          </div>
-          <span className="progress-pct">{progress}%</span>
-        </div>
-
-        <div className="student-cell-files">
-          <FileText size={13} />
-          {totalUploads}
-        </div>
-
-        <div className="student-cell-updated">
+        <div className="adm-cell adm-cell--updated" data-label="Updated On">
           {updated ? (
-            <>
+            <span className="adm-updated">
               <span>{updated.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
-              <span className="cell-updated-time">{updated.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
-            </>
+              <span className="adm-updated-time">{updated.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
+            </span>
           ) : (
-            <span className="cell-empty">—</span>
+            <span className="adm-empty-val">—</span>
           )}
         </div>
-
-        <div className="student-cell-actions" onClick={(e) => e.stopPropagation()}>
-          <button className="icon-btn" title="View" onClick={onToggle}>
-            <Eye size={16} />
-          </button>
-          <button className="icon-btn" title="Analytics" onClick={onViewReport}>
-            <BarChart3 size={16} />
-          </button>
-          <button className="icon-btn" title="Send to bank" onClick={onSendToBank}>
-            <Send size={16} />
-          </button>
-          <button className="icon-btn del-btn" title="Delete" onClick={onDelete}>
-            <Trash2 size={16} />
-          </button>
-          <div className="row-more-wrap">
-            <button className="icon-btn" title="More" onClick={() => setMoreOpen((o) => !o)}>
-              <MoreVertical size={16} />
-            </button>
-            {moreOpen && (
-              <>
-                <div className="row-more-scrim" onClick={() => setMoreOpen(false)} />
-                <div className="row-more-menu">
-                  <button onClick={(e) => { setMoreOpen(false); onLoanStatusUpdate(e); }}>
-                    <Banknote size={14} /> Update Loan Status
-                  </button>
-                  {student.storage !== "railway" && (
-                    <button onClick={(e) => { setMoreOpen(false); onOpenDrive(e); }}>
-                      <ExternalLink size={14} /> Open Drive
-                    </button>
-                  )}
-                  <button onClick={(e) => { setMoreOpen(false); onRecoverMeta(e); }}>
-                    <ScanText size={14} /> Recover Meta
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+        <div className="adm-cell adm-cell--actions">
+          <ActionsMenu label={`Actions for ${student.name || "student"}`} items={menuItems} />
         </div>
       </div>
 
-      {isOpen && (
-        <div className="student-detail">
-          <div className="detail-inner">
-            <div className="detail-tabs">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  className={`detail-tab${activeTab === tab.id ? " active" : ""}`}
-                  onClick={() => setActiveTab(tab.id)}
-                >
-                  {tab.icon}
-                  {tab.label}
-                  {tab.count !== null && tab.count > 0 && (
-                    <span className="tab-count">{tab.count}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {activeTab === "personal" && <PersonalTab student={student} />}
-            {activeTab === "documents" && <DocumentsTab student={student} />}
-            {activeTab === "files" && <FilesTab student={student} />}
-
-            {canEditAdvisor && (
-              <AdvisorEditor
-                value={student.advisor || ""}
-                onSave={onAdvisorSave}
-                options={advisorOptions}
-              />
-            )}
-
-            {canEditConsultancy && (
-              <ConsultancyEditor
-                value={student.personalInfo?.consultantNameLoc || ""}
-                onSave={onConsultancySave}
-                suggestions={consultancySuggestions}
-              />
-            )}
-
-            <div className="detail-action-bar">
-              <div className="dab-primary">
-                <button className="btn btn-loan btn-sm" onClick={onLoanStatusUpdate}>
-                  <Banknote size={13} /> Loan Status
-                </button>
-                <button className="btn btn-primary btn-sm" onClick={onViewReport}>
-                  <BarChart3 size={13} /> Eligibility Report
-                </button>
-                {student.storage !== "railway" && (
-                  <button className="btn btn-secondary btn-sm" onClick={onOpenDrive}>
-                    <ExternalLink size={13} /> Open Drive
-                  </button>
-                )}
-                <button className="btn btn-secondary btn-sm" onClick={onSendToBank}>
-                  <Send size={13} /> Bank Access
-                </button>
-                <button className="btn btn-recover btn-sm" onClick={onRecoverMeta} title="Recover meta JSON from Summary PDF">
-                  <ScanText size={13} /> Recover Meta
-                </button>
-              </div>
-              <button className="btn btn-danger btn-sm dab-delete" onClick={onDelete}>
-                <Trash2 size={13} /> Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -2386,6 +3178,9 @@ function GrantBankAccessModal({ student, onClose, onAccessChanged, adminRole, on
 
 /* ─── Banker Access + Management (unified) ─────────────────────── */
 
+// Student names are stored as "Name__identifier"; show only the name part.
+const displayName = (name) => (name || "").split("__")[0] || "Unnamed";
+
 function BankerAccessSection({ students, onAccessChanged, onBankersChanged, adminRole, adminName, onRequestsChanged, panel, setPanel }) {
   // Bankers — fetched internally so add/edit/delete stays live
   const [allBankers, setAllBankers] = useState([]);
@@ -2414,8 +3209,8 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged, admi
   // Add form
   const [addBank, setAddBank] = useState("");
   const [addName, setAddName] = useState("");
-  const [addEmail, setAddEmail] = useState("");
   const [addPass, setAddPass] = useState("");
+  const [addEmail, setAddEmail] = useState("");
   const [addShowPass, setAddShowPass] = useState(false);
   const [addMsg, setAddMsg] = useState(null);
   const [addLoading, setAddLoading] = useState(false);
@@ -2432,6 +3227,9 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged, admi
   // Delete
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Officer list search
+  const [officerSearch, setOfficerSearch] = useState("");
 
   // Access management
   const [accessSearch, setAccessSearch] = useState("");
@@ -2453,6 +3251,8 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged, admi
     finally { setBankersLoading(false); }
   }, []);
 
+  // Load on open — the fetch sets state asynchronously, not in the effect body.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchBankers(); }, [fetchBankers]);
 
   const fetchRequests = useCallback(async () => {
@@ -2470,16 +3270,22 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged, admi
   // Derived: unique banks that have registered officers
   const uniqueBanks = Array.from(new Set(allBankers.map((b) => b.bank).filter(Boolean))).sort();
 
-  // Bankers visible in sidebar after bank filter
+  // Bankers visible in the officer list after the bank filter
   const visibleBankers = bankFilter === "all"
     ? allBankers
     : allBankers.filter((b) => b.bank === bankFilter);
+  const oq = officerSearch.trim().toLowerCase();
+  const listedBankers = oq
+    ? visibleBankers.filter((b) => `${b.name} ${b.bank || ""} ${b.email || ""}`.toLowerCase().includes(oq))
+    : visibleBankers;
+  const accessCount = (name) => students.filter((s) => (s.sharedBankers || []).includes(name)).length;
 
   const selectedBanker = allBankers.find((b) => b.name === selectedName) || null;
 
   // Keep selected banker valid when filter changes
   useEffect(() => {
     if (selectedName && !visibleBankers.find((b) => b.name === selectedName)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-off correction after the filter changes
       setSelectedName(visibleBankers[0]?.name || null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2577,16 +3383,17 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged, admi
     e.preventDefault();
     if (!addBank) { setAddMsg({ type: "err", text: "Please select a bank." }); return; }
     if (!addName.trim()) { setAddMsg({ type: "err", text: "Name is required." }); return; }
-    if (addPass.length < 6) { setAddMsg({ type: "err", text: "Password must be at least 6 characters." }); return; }
+    if (!/^\S+@\S+\.\S{2,}$/.test(addEmail.trim())) { setAddMsg({ type: "err", text: "Enter their email — they sign in with it." }); return; }
+    if (passwordProblem(addPass)) { setAddMsg({ type: "err", text: `Password: ${passwordProblem(addPass)}.` }); return; }
     setAddLoading(true); setAddMsg(null);
     try {
       const r = await callAPI("POST", "/api/admins", {
-        name: addName.trim(), role: "banker", password: addPass,
+        name: addName.trim(), email: addEmail.trim(), role: "banker", password: addPass,
         bank: addBank,
       });
       if (r.success) {
         setAddMsg({ type: "ok", text: `${addName.trim()} added successfully.` });
-        setAddBank(""); setAddName(""); setAddPass("");
+        setAddBank(""); setAddName(""); setAddPass(""); setAddEmail("");
         await fetchBankers(); onBankersChanged?.();
         setTimeout(() => { setPanel("access"); setAddMsg(null); }, 1400);
       } else {
@@ -2600,10 +3407,11 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged, admi
     e.preventDefault();
     setEditLoading(true); setEditMsg(null);
     try {
-      const r = await callAPI("PUT", `/api/admins/${encodeURIComponent(editBanker.name)}`, { bank: editBank, email: editEmail });
+      if (editPass && passwordProblem(editPass)) { setEditMsg({ type: "err", text: `Password: ${passwordProblem(editPass)}.` }); setEditLoading(false); return; }
+      const r = await callAPI("PUT", `/api/admins/${editBanker.id}`, { bank: editBank, email: editEmail.trim() });
       if (!r.success) { setEditMsg({ type: "err", text: r.error || "Failed to update." }); setEditLoading(false); return; }
-      if (editPass.length >= 6) {
-        const rp = await callAPI("PUT", `/api/admins/${encodeURIComponent(editBanker.name)}/reset-password`, { newPassword: editPass });
+      if (editPass) {
+        const rp = await callAPI("PUT", `/api/admins/${editBanker.id}/reset-password`, { newPassword: editPass });
         if (!rp.success) { setEditMsg({ type: "err", text: rp.error || "Failed to reset password." }); setEditLoading(false); return; }
       }
       setEditMsg({ type: "ok", text: "Saved successfully." });
@@ -2613,13 +3421,13 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged, admi
     finally { setEditLoading(false); }
   };
 
-  const handleDelete = async (name) => {
+  const handleDelete = async (banker) => {
     setDeleteLoading(true);
     try {
-      const r = await callAPI("DELETE", `/api/admins/${encodeURIComponent(name)}`);
+      const r = await callAPI("DELETE", `/api/admins/${banker.id}`);
       if (r.success) {
         setDeleteTarget(null);
-        if (editBanker?.name === name) { setPanel("access"); setEditBanker(null); }
+        if (editBanker?.name === banker.name) { setPanel("access"); setEditBanker(null); }
         await fetchBankers(); onBankersChanged?.();
       } else { alert(r.error || "Failed to delete."); }
     } catch { alert("Network error."); }
@@ -2634,474 +3442,435 @@ function BankerAccessSection({ students, onAccessChanged, onBankersChanged, admi
 
   const openAdd = () => {
     setPanel("add"); setAddMsg(null);
-    setAddBank(""); setAddName(""); setAddEmail(""); setAddPass("");
+    setAddBank(""); setAddName(""); setAddPass(""); setAddEmail("");
   };
 
-  return (
-    <div className="bam-page animate-fade-in">
+  const officersTab = panel !== "requests";
 
-      {/* ── Header ─────────────────────────────────────────────── */}
-      <div className="bam-header">
-        <div className="bam-header-left">
-          <div className="bam-header-icon"><Send size={18} /></div>
-          <div>
-            <h2 className="bam-title">Banker Access</h2>
-            <p className="bam-subtitle">
-              {allBankers.length} loan officer{allBankers.length !== 1 ? "s" : ""}
-              {uniqueBanks.length > 0 && ` · ${uniqueBanks.length} bank${uniqueBanks.length !== 1 ? "s" : ""}`}
-            </p>
-          </div>
-        </div>
-        <div className="bam-header-actions">
+  const studentRow = (st, action) => (
+    <li key={st.name} className="bl-student">
+      <span className="bl-avatar" aria-hidden="true">{getInitials(displayName(st.name))}</span>
+      <span className="bl-student-text">
+        <span className="bl-student-name">{displayName(st.name)}</span>
+        <span className="bl-student-sub">{st.email || st.phone || "—"}</span>
+      </span>
+      {action}
+    </li>
+  );
+
+  return (
+    <div className="bl-page animate-fade-in">
+      {/* ── Tabs + primary action ─────────────────────────────── */}
+      <div className="bl-topbar">
+        <div className="bl-tabs" role="tablist" aria-label="Banks & lenders">
           <button
-            className={`btn btn-secondary btn-sm bam-requests-btn${panel === "requests" ? " active" : ""}`}
-            onClick={() => setPanel(panel === "requests" ? "access" : "requests")}
+            type="button"
+            role="tab"
+            aria-selected={officersTab}
+            className={`bl-tab${officersTab ? " is-active" : ""}`}
+            onClick={() => setPanel("access")}
           >
-            <Hourglass size={13} /> Access Requests
-            {pendingRequests.length > 0 && <span className="bam-requests-count">{pendingRequests.length}</span>}
+            <Users size={16} aria-hidden="true" /> Loan officers
+            <span className="bl-tab-count">{allBankers.length}</span>
           </button>
-          {panel !== "add" && (
-            <button className="btn btn-primary btn-sm bam-add-btn" onClick={openAdd}>
-              <Plus size={13} /> Add Loan Officer
-            </button>
-          )}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!officersTab}
+            className={`bl-tab${!officersTab ? " is-active" : ""}`}
+            onClick={() => setPanel("requests")}
+          >
+            <Hourglass size={16} aria-hidden="true" /> Access requests
+            {pendingRequests.length > 0 && <span className="bl-tab-count bl-tab-count--alert">{pendingRequests.length}</span>}
+          </button>
         </div>
+        <button type="button" className="adm-btn adm-btn--primary bl-add" onClick={openAdd}>
+          <Plus size={17} /> <span>Add loan officer</span>
+        </button>
       </div>
 
-        {/* ── Bank filter chips ───────────────────────────────────── */}
-        {uniqueBanks.length > 0 && (
-          <div className="bam-bank-filters">
-            <button
-              className={`bam-bank-chip${bankFilter === "all" ? " active" : ""}`}
-              onClick={() => setBankFilter("all")}
-            >
-              <span className="bam-chip-all-icon"><Building2 size={13} /></span>
-              <span className="bam-chip-label">All</span>
-              <span className="bam-chip-count">{allBankers.length}</span>
-            </button>
-            {uniqueBanks.map((bank) => {
-              const cnt = allBankers.filter((b) => b.bank === bank).length;
-              return (
-                <button
-                  key={bank}
-                  className={`bam-bank-chip${bankFilter === bank ? " active" : ""}`}
-                  onClick={() => setBankFilter(bank)}
+      {officersTab && (
+        <div className="bl-layout">
+          {/* ── Officer list ─────────────────────────────────────── */}
+          <aside className="bl-list" aria-label="Loan officers">
+            <div className="bl-list-tools">
+              <label className="bl-search">
+                <span className="sr-only">Search loan officers</span>
+                <Search size={16} aria-hidden="true" />
+                <input
+                  type="search"
+                  placeholder="Search officers…"
+                  value={officerSearch}
+                  onChange={(e) => setOfficerSearch(e.target.value)}
+                />
+              </label>
+              {uniqueBanks.length > 1 && (
+                <select
+                  className="bl-select"
+                  aria-label="Filter by bank"
+                  value={bankFilter}
+                  onChange={(e) => setBankFilter(e.target.value)}
                 >
-                  <img src={getBankLogo(bank)} alt={bank} className="bam-chip-logo"
-                    onError={(e) => { e.target.style.display = "none"; }} />
-                  <span className="bam-chip-label">{bank}</span>
-                  <span className="bam-chip-count">{cnt}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+                  <option value="all">All banks ({allBankers.length})</option>
+                  {uniqueBanks.map((bank) => (
+                    <option key={bank} value={bank}>
+                      {bank} ({allBankers.filter((x) => x.bank === bank).length})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
 
-        {/* ── Body ────────────────────────────────────────────────── */}
-        <div className="bam-body">
-
-          {/* Sidebar — banker list */}
-          <div className="bam-sidebar">
             {bankersLoading ? (
-              <div className="bam-sidebar-loading">
-                <div className="loading-dots"><span /><span /><span /></div>
-              </div>
-            ) : visibleBankers.length === 0 ? (
-              <div className="bam-sidebar-empty">
-                <div className="bam-sidebar-empty-icon"><Building2 size={28} /></div>
-                <p>No loan officers yet</p>
-                <button className="btn btn-primary btn-sm" onClick={openAdd}><Plus size={12} /> Add first</button>
+              <div className="bl-state"><div className="loading-dots"><span /><span /><span /></div></div>
+            ) : listedBankers.length === 0 ? (
+              <div className="bl-state">
+                <Building2 size={26} aria-hidden="true" />
+                <p>{oq ? "No officers match your search." : "No loan officers yet."}</p>
               </div>
             ) : (
-              visibleBankers.map((b) => {
-                const count = students.filter((s) => (s.sharedBankers || []).includes(b.name)).length;
-                const isSelected = selectedName === b.name;
-                return (
-                  <div
-                    key={b.name}
-                    className={`bam-banker-card${isSelected ? " selected" : ""}`}
-                    onClick={() => { setSelectedName(b.name); if (panel === "edit" || panel === "add") setPanel("access"); }}
-                  >
-                    <div className="bam-card-logo-wrap">
-                      <img src={getBankLogo(b.bank)} alt={b.bank || "Bank"} className="bam-card-logo"
-                        onError={(e) => { e.target.style.display = "none"; }} />
-                    </div>
-                    <div className="bam-card-info">
-                      <span className="bam-card-name">{b.name}</span>
-                      <span className="bam-card-bank">{b.bank || <em className="bam-card-nobank">No bank set</em>}</span>
-                      {b.email && <span className="bam-card-email">{b.email}</span>}
-                    </div>
-                    <div className="bam-card-right">
-                      <span className="bam-card-count" title={`${count} student${count !== 1 ? "s" : ""} with access`}>
-                        {count}
-                      </span>
-                      <div className="bam-card-actions" onClick={(e) => e.stopPropagation()}>
-                        <button className="bam-action-btn edit" title="Edit" onClick={() => openEdit(b)}>
-                          <Pencil size={11} />
-                        </button>
-                        {deleteTarget === b.name ? (
-                          <div className="bam-del-confirm">
-                            <button className="bam-del-yes" disabled={deleteLoading} onClick={() => handleDelete(b.name)}>
-                              {deleteLoading ? <RefreshCw size={10} className="spin" /> : "Yes"}
-                            </button>
-                            <button className="bam-del-no" onClick={() => setDeleteTarget(null)} disabled={deleteLoading}>No</button>
-                          </div>
-                        ) : (
-                          <button className="bam-action-btn delete" title="Remove" onClick={() => setDeleteTarget(b.name)}>
-                            <Trash2 size={11} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
+              <ul className="bl-officers">
+                {listedBankers.map((b) => {
+                  const isSelected = selectedName === b.name && panel !== "add";
+                  const count = accessCount(b.name);
+                  return (
+                    <li key={b.name}>
+                      <button
+                        type="button"
+                        className={`bl-officer${isSelected ? " is-selected" : ""}`}
+                        aria-current={isSelected ? "true" : undefined}
+                        onClick={() => { setSelectedName(b.name); if (panel === "edit" || panel === "add") setPanel("access"); }}
+                      >
+                        <span className="bl-logo">
+                          <img src={getBankLogo(b.bank)} alt="" onError={(e) => { e.target.style.display = "none"; }} />
+                        </span>
+                        <span className="bl-officer-text">
+                          <span className="bl-officer-name">{b.name}</span>
+                          <span className="bl-officer-bank">{b.bank || "No bank set"}</span>
+                        </span>
+                        <span className="bl-officer-count" title={`${count} student${count !== 1 ? "s" : ""} with access`}>
+                          {count}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
-          </div>
+          </aside>
 
-          {/* Main panel */}
-          <div className="bam-main">
-
-            {/* ── Access panel ── */}
+          {/* ── Detail / forms ───────────────────────────────────── */}
+          <section className="bl-detail" aria-live="polite">
             {panel === "access" && (
               selectedBanker ? (
-                <div className="bam-access-panel">
-                  {/* Banker identity bar */}
-                  <div className="bam-identity-bar">
-                    <div className="bam-identity-logo-wrap">
-                      <img src={getBankLogo(selectedBanker.bank)} alt={selectedBanker.bank || ""} className="bam-identity-logo"
-                        onError={(e) => { e.target.style.display = "none"; }} />
+                <>
+                  <header className="bl-profile">
+                    <span className="bl-logo bl-logo--lg">
+                      <img src={getBankLogo(selectedBanker.bank)} alt="" onError={(e) => { e.target.style.display = "none"; }} />
+                    </span>
+                    <div className="bl-profile-text">
+                      <h2 className="bl-profile-name">{selectedBanker.name}</h2>
+                      <p className="bl-profile-meta">
+                        <span>{selectedBanker.bank || "No bank set"}</span>
+                        {selectedBanker.email && <span>{selectedBanker.email}</span>}
+                        {selectedBanker.createdAt && (
+                          <span>Since {new Date(selectedBanker.createdAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}</span>
+                        )}
+                      </p>
                     </div>
-                    <div className="bam-identity-info">
-                      <span className="bam-identity-name">{selectedBanker.name}</span>
-                      <span className="bam-identity-bank">{selectedBanker.bank || "No bank set"}</span>
-                    </div>
-                    <button className="bam-identity-edit-btn" onClick={() => openEdit(selectedBanker)} title="Edit this loan officer">
-                      <Pencil size={13} /> Edit
-                    </button>
-                  </div>
-
-                  {/* Granted students */}
-                  <div className="bam-section">
-                    <div className="bam-section-header">
-                      <span className="bam-section-title">Can access</span>
-                      <span className="bam-section-badge">{grantedStudents.length}</span>
-                    </div>
-                    {grantedStudents.length === 0 ? (
-                      <p className="bam-no-students">No students assigned yet. Grant access below.</p>
-                    ) : (
-                      <div className="bam-student-list">
-                        {grantedStudents.map((s) => (
-                          <div key={s.name} className="bam-student-row">
-                            <div className="bam-student-avatar">{(s.name || "?")[0].toUpperCase()}</div>
-                            <div className="bam-student-info">
-                              <span className="bam-student-name">{s.name}</span>
-                              <span className="bam-student-contact">{s.email || s.phone || "—"}</span>
-                            </div>
-                            <button className="bam-revoke-btn" disabled={togglingName === s.name} onClick={() => toggleAccess(s, false)}>
-                              {togglingName === s.name ? <RefreshCw size={11} className="spin" /> : "Revoke"}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Grant more */}
-                  <div className="bam-section">
-                    <div className="bam-section-header">
-                      <span className="bam-section-title">Grant access</span>
-                    </div>
-                    <div className="bam-search-wrap">
-                      <Search size={13} className="bam-search-icon" />
-                      <input
-                        className="bam-search-input"
-                        placeholder="Search students by name, email, or phone…"
-                        value={accessSearch}
-                        onChange={(e) => setAccessSearch(e.target.value)}
-                      />
-                      {accessSearch && (
-                        <button className="bam-search-clear" onClick={() => setAccessSearch("")}><X size={12} /></button>
+                    <div className="bl-profile-actions">
+                      {deleteTarget === selectedBanker.name ? (
+                        <div className="bl-confirm" role="group" aria-label="Confirm removal">
+                          <span>Remove this officer?</span>
+                          <button type="button" className="bl-btn bl-btn--danger" disabled={deleteLoading} onClick={() => handleDelete(selectedBanker)}>
+                            {deleteLoading ? <RefreshCw size={14} className="spin" /> : "Remove"}
+                          </button>
+                          <button type="button" className="bl-btn" disabled={deleteLoading} onClick={() => setDeleteTarget(null)}>Cancel</button>
+                        </div>
+                      ) : (
+                        <>
+                          <button type="button" className="bl-btn" onClick={() => openEdit(selectedBanker)}>
+                            <Pencil size={14} /> Edit
+                          </button>
+                          <button type="button" className="bl-btn bl-btn--quiet-danger" onClick={() => setDeleteTarget(selectedBanker.name)}>
+                            <Trash2 size={14} /> Remove
+                          </button>
+                        </>
                       )}
                     </div>
-                    <div className="bam-student-list bam-grant-list">
-                      {visibleAvailable.length === 0 ? (
-                        <p className="bam-no-students">
-                          {accessSearch ? "No matching students." : "All students already have access."}
-                        </p>
+                  </header>
+
+                  {accessError && <p className="bl-error" role="alert"><AlertCircle size={15} /> {accessError}</p>}
+
+                  <div className="bl-columns">
+                    <section className="bl-group" aria-label="Students this officer can see">
+                      <header className="bl-group-head">
+                        <h3>Has access</h3>
+                        <span className="bl-group-count">{grantedStudents.length}</span>
+                      </header>
+                      {grantedStudents.length === 0 ? (
+                        <p className="bl-empty">No students shared yet. Grant access from the list.</p>
                       ) : (
-                        visibleAvailable.map((s) => {
-                          const isPending = pendingForSelected.has(s.name);
-                          return (
-                            <div key={s.name} className="bam-student-row">
-                              <div className="bam-student-avatar">{(s.name || "?")[0].toUpperCase()}</div>
-                              <div className="bam-student-info">
-                                <span className="bam-student-name">{s.name}</span>
-                                <span className="bam-student-contact">{s.email || s.phone || "—"}</span>
-                              </div>
-                              {isPending ? (
-                                <span className="bam-pending-tag"><Hourglass size={11} /> Pending approval</span>
-                              ) : (
-                                <button className="bam-grant-btn" disabled={togglingName === s.name} onClick={() => toggleAccess(s, true)}>
-                                  {togglingName === s.name ? <RefreshCw size={11} className="spin" /> : "Grant"}
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })
+                        <ul className="bl-students">
+                          {grantedStudents.map((st) => studentRow(st, (
+                            <button type="button" className="bl-btn bl-btn--sm bl-btn--quiet-danger" disabled={togglingName === st.name} onClick={() => toggleAccess(st, false)}>
+                              {togglingName === st.name ? <RefreshCw size={13} className="spin" /> : "Revoke"}
+                            </button>
+                          )))}
+                        </ul>
+                      )}
+                    </section>
+
+                    <section className="bl-group" aria-label="Share more students">
+                      <header className="bl-group-head">
+                        <h3>Grant access</h3>
+                        <span className="bl-group-count">{availableStudents.length}</span>
+                      </header>
+                      <label className="bl-search bl-search--group">
+                        <span className="sr-only">Search students</span>
+                        <Search size={16} aria-hidden="true" />
+                        <input
+                          type="search"
+                          placeholder="Search name, email or phone…"
+                          value={accessSearch}
+                          onChange={(e) => setAccessSearch(e.target.value)}
+                        />
+                      </label>
+                      {visibleAvailable.length === 0 ? (
+                        <p className="bl-empty">{accessSearch ? "No matching students." : "Every student is already shared."}</p>
+                      ) : (
+                        <ul className="bl-students">
+                          {visibleAvailable.map((st) => studentRow(st, pendingForSelected.has(st.name) ? (
+                            <span className="bl-pill bl-pill--pending"><Hourglass size={12} /> Pending</span>
+                          ) : (
+                            <button type="button" className="bl-btn bl-btn--sm bl-btn--primary-soft" disabled={togglingName === st.name} onClick={() => toggleAccess(st, true)}>
+                              {togglingName === st.name ? <RefreshCw size={13} className="spin" /> : <><Plus size={13} /> Grant</>}
+                            </button>
+                          )))}
+                        </ul>
                       )}
                       {availableStudents.length > visibleAvailable.length && (
-                        <p className="bam-more-hint">+{availableStudents.length - visibleAvailable.length} more — type to search</p>
+                        <p className="bl-more">+{availableStudents.length - visibleAvailable.length} more — search to find them</p>
                       )}
-                    </div>
-                    {accessError && <p className="bam-error-inline">{accessError}</p>}
+                    </section>
                   </div>
-                </div>
+                </>
               ) : (
-                <div className="bam-empty-main">
-                  <div className="bam-empty-icon-wrap"><Building2 size={36} /></div>
-                  <h3>No loan officers yet</h3>
-                  <p>Add your first loan officer using the button above.</p>
-                  <button className="btn btn-primary" onClick={openAdd}><Plus size={13} /> Add Loan Officer</button>
+                <div className="bl-blank">
+                  <span className="bl-blank-icon"><Building2 size={28} /></span>
+                  <h2>No loan officers yet</h2>
+                  <p>Add a loan officer so you can share student files with their bank.</p>
+                  <button type="button" className="adm-btn adm-btn--primary" onClick={openAdd}><Plus size={16} /> Add loan officer</button>
                 </div>
               )
             )}
 
-            {/* ── Add form ── */}
-            {panel === "add" && (
-              <div className="bam-form-panel animate-fade-in">
-                <div className="bam-form-titlebar">
-                  <div className="bam-form-titlebar-icon add"><Plus size={16} /></div>
-                  <div>
-                    <h3 className="bam-form-h">Add Loan Officer</h3>
-                    <p className="bam-form-sub">Register a new banker who can log in and view student documents.</p>
-                  </div>
-                  <button className="icon-btn" onClick={() => setPanel("access")}><X size={16} /></button>
-                </div>
-                <form onSubmit={handleAdd} className="bam-form">
-                  <div className="bam-field">
-                    <label>Bank <span className="req">*</span></label>
-                    <div className="bam-select-wrap">
-                      {addBank && <img src={getBankLogo(addBank)} alt={addBank} className="bam-select-logo" />}
-                      <select className={`bam-select${addBank ? " has-logo" : ""}`} value={addBank} onChange={(e) => setAddBank(e.target.value)}>
-                        <option value="">— Select bank —</option>
-                        {BANK_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="bam-field">
-                    <label>Full Name <span className="req">*</span> <span className="bam-hint">(login username)</span></label>
-                    <input className="bam-input" type="text" placeholder="e.g. Rajesh Kumar" value={addName} onChange={(e) => setAddName(e.target.value)} />
-                  </div>
-                  <div className="bam-field">
-                    <label>Password <span className="req">*</span></label>
-                    <div className="bam-pw-wrap">
-                      <input className="bam-input" type={addShowPass ? "text" : "password"} placeholder="Min. 6 characters" value={addPass} onChange={(e) => setAddPass(e.target.value)} />
-                      <button type="button" className="bam-pw-toggle" onClick={() => setAddShowPass(!addShowPass)}>
-                        {addShowPass ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                    </div>
-                  </div>
-                  {addMsg && <div className={`bam-msg ${addMsg.type}`}>{addMsg.text}</div>}
-                  <div className="bam-form-actions">
-                    <button type="submit" className="bam-submit-btn" disabled={addLoading}>
-                      {addLoading ? <><RefreshCw size={13} className="spin" /> Creating…</> : <><Plus size={13} /> Create Officer</>}
-                    </button>
-                    <button type="button" className="bam-cancel-btn" onClick={() => setPanel("access")}>Cancel</button>
-                  </div>
-                </form>
-              </div>
-            )}
+            {(panel === "add" || (panel === "edit" && editBanker)) && (
+              <form onSubmit={panel === "add" ? handleAdd : handleEdit} className="bl-form animate-fade-in">
+                <header className="bl-form-head">
+                  <h2>{panel === "add" ? "Add loan officer" : `Edit ${editBanker.name}`}</h2>
+                  <p>{panel === "add"
+                    ? "They sign in on the workspace login and only see students you share with them."
+                    : "Change their bank or set a new password."}</p>
+                </header>
 
-            {/* ── Edit form ── */}
-            {panel === "edit" && editBanker && (
-              <div className="bam-form-panel animate-fade-in">
-                <div className="bam-form-titlebar">
-                  <div className="bam-edit-logo-wrap">
-                    <img src={getBankLogo(editBanker.bank)} alt={editBanker.bank || "Bank"} className="bam-edit-thumb"
-                      onError={(e) => { e.target.style.display = "none"; }} />
-                  </div>
-                  <div>
-                    <h3 className="bam-form-h">{editBanker.name}</h3>
-                    <p className="bam-form-sub">Since {new Date(editBanker.createdAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}</p>
-                  </div>
-                  <button className="icon-btn" onClick={() => { setPanel("access"); setEditBanker(null); }}><X size={16} /></button>
-                </div>
-                <form onSubmit={handleEdit} className="bam-form">
-                  <div className="bam-field">
-                    <label>Bank</label>
-                    <div className="bam-select-wrap">
-                      {editBank && <img src={getBankLogo(editBank)} alt={editBank} className="bam-select-logo" />}
-                      <select className={`bam-select${editBank ? " has-logo" : ""}`} value={editBank} onChange={(e) => setEditBank(e.target.value)}>
-                        <option value="">— Select bank —</option>
-                        {BANK_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="bam-field">
-                    <label>New Password <span className="bam-hint">(leave blank to keep current)</span></label>
-                    <div className="bam-pw-wrap">
-                      <input className="bam-input" type={editShowPass ? "text" : "password"} placeholder="Min. 6 characters" value={editPass} onChange={(e) => setEditPass(e.target.value)} />
-                      <button type="button" className="bam-pw-toggle" onClick={() => setEditShowPass(!editShowPass)}>
-                        {editShowPass ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                    </div>
-                  </div>
-                  {editMsg && <div className={`bam-msg ${editMsg.type}`}>{editMsg.text}</div>}
-                  <div className="bam-form-actions">
-                    <button type="submit" className="bam-submit-btn" disabled={editLoading}>
-                      {editLoading ? <><RefreshCw size={13} className="spin" /> Saving…</> : <><CheckCircle size={13} /> Save Changes</>}
-                    </button>
-                    <button type="button" className="bam-cancel-btn" onClick={() => { setPanel("access"); setEditBanker(null); }}>Cancel</button>
-                  </div>
-                </form>
-              </div>
-            )}
-
-            {/* ── Access Requests panel ── */}
-            {panel === "requests" && (
-              <div className="bam-requests-panel animate-fade-in">
-                <div className="bam-form-titlebar">
-                  <div className="bam-form-titlebar-icon requests"><Hourglass size={16} /></div>
-                  <div>
-                    <h3 className="bam-form-h">Access Requests</h3>
-                    <p className="bam-form-sub">
-                      {adminRole === "superadmin"
-                        ? "Review banker-access requests submitted by advisors before they take effect."
-                        : "Requests you've submitted, and whether they're still waiting on a superadmin."}
-                    </p>
-                  </div>
-                  <button className="icon-btn" onClick={() => setPanel("access")}><X size={16} /></button>
-                </div>
-
-                <div className="bam-requests-tabs">
-                  {[
-                    { id: "pending", label: "Pending", count: requests.filter((r) => r.status === "pending").length },
-                    { id: "approved", label: "Approved", count: requests.filter((r) => r.status === "approved").length },
-                    { id: "rejected", label: "Rejected", count: requests.filter((r) => r.status === "rejected").length },
-                    { id: "all", label: "All", count: requests.length },
-                  ].map((t) => (
-                    <button
-                      key={t.id}
-                      className={`bam-requests-tab${requestStatusFilter === t.id ? " active" : ""}`}
-                      onClick={() => setRequestStatusFilter(t.id)}
+                <label className="bl-field">
+                  <span>Bank {panel === "add" && <em className="bl-req">*</em>}</span>
+                  <span className="bl-select-wrap">
+                    {(panel === "add" ? addBank : editBank) && (
+                      <img src={getBankLogo(panel === "add" ? addBank : editBank)} alt="" className="bl-select-logo" />
+                    )}
+                    <select
+                      className={`bl-input${(panel === "add" ? addBank : editBank) ? " has-logo" : ""}`}
+                      value={panel === "add" ? addBank : editBank}
+                      onChange={(e) => (panel === "add" ? setAddBank : setEditBank)(e.target.value)}
                     >
-                      {t.label} <span className="bam-requests-tab-count">{t.count}</span>
-                    </button>
-                  ))}
-                </div>
+                      <option value="">Select a bank</option>
+                      {BANK_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </span>
+                </label>
 
-                {requestsError && <p className="bam-error-inline">{requestsError}</p>}
-
-                {requestsLoading ? (
-                  <div className="admin-loading bank-modal-loading">
-                    <div className="loading-dots"><span /><span /><span /></div>
-                  </div>
-                ) : visibleRequests.length === 0 ? (
-                  <div className="bam-requests-empty">
-                    <Hourglass size={28} />
-                    <p>{requestStatusFilter === "pending" ? "Nothing waiting on review." : "No requests here yet."}</p>
-                  </div>
-                ) : (
-                  <div className="bam-requests-list">
-                    {visibleRequests.map((r) => (
-                      <div key={r.id} className={`bam-request-card status-${r.status}`}>
-                        <div className="bam-student-avatar">{(r.studentName || "?")[0].toUpperCase()}</div>
-                        <div className="bam-request-body">
-                          <div className="bam-request-top">
-                            <span className="bam-student-name">{r.studentName}</span>
-                            <span className="bam-request-arrow">→</span>
-                            <span className="bam-request-banker">
-                              <img
-                                src={getBankLogo(allBankers.find((b) => b.name === r.bankerName)?.bank)}
-                                alt=""
-                                className="bam-request-bank-logo"
-                                onError={(e) => { e.target.style.display = "none"; }}
-                              />
-                              {r.bankerName}
-                            </span>
-                            <span className={`bam-request-status-badge status-${r.status}`}>
-                              {r.status === "pending" && <Hourglass size={11} />}
-                              {r.status === "approved" && <CheckCircle size={11} />}
-                              {r.status === "rejected" && <XCircle size={11} />}
-                              {r.status === "pending" ? "Pending" : r.status === "approved" ? "Approved" : "Rejected"}
-                            </span>
-                          </div>
-                          <p className="bam-request-meta">
-                            Requested by <strong>{r.requestedBy === adminName ? "you" : r.requestedBy}</strong> · {timeAgo(r.requestedAt)}
-                            {r.status !== "pending" && r.decidedBy && (
-                              <> · {r.status === "approved" ? "Approved" : "Rejected"} by <strong>{r.decidedBy}</strong> · {timeAgo(r.decidedAt)}</>
-                            )}
-                          </p>
-                          {r.note && <p className="bam-request-note">"{r.note}"</p>}
-
-                          {r.status === "pending" && adminRole === "superadmin" && (
-                            rejectDraftId === r.id ? (
-                              <div className="bam-reject-draft">
-                                <input
-                                  className="bam-reject-input"
-                                  placeholder="Reason (optional)"
-                                  value={rejectNote}
-                                  onChange={(e) => setRejectNote(e.target.value)}
-                                  autoFocus
-                                />
-                                <div className="bam-reject-draft-actions">
-                                  <button className="bam-del-yes" disabled={decidingId === r.id} onClick={() => handleReject(r)}>
-                                    {decidingId === r.id ? <RefreshCw size={10} className="spin" /> : "Confirm"}
-                                  </button>
-                                  <button className="bam-del-no" disabled={decidingId === r.id} onClick={() => { setRejectDraftId(null); setRejectNote(""); }}>
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="bam-request-actions">
-                                <button className="bam-approve-btn" disabled={decidingId === r.id} onClick={() => handleApprove(r)}>
-                                  {decidingId === r.id ? <RefreshCw size={11} className="spin" /> : <><CheckCircle size={12} /> Approve</>}
-                                </button>
-                                <button className="bam-reject-btn" disabled={decidingId === r.id} onClick={() => { setRejectDraftId(r.id); setRejectNote(""); }}>
-                                  <XCircle size={12} /> Reject
-                                </button>
-                              </div>
-                            )
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                {panel === "add" && (
+                  <label className="bl-field">
+                    <span>Full name <em className="bl-req">*</em></span>
+                    <input className="bl-input" type="text" placeholder="e.g. Rajesh Kumar" value={addName} onChange={(e) => setAddName(e.target.value)} autoComplete="off" />
+                  </label>
                 )}
-              </div>
-            )}
 
-          </div>
+                <label className="bl-field">
+                  <span>Email {panel === "add" && <em className="bl-req">*</em>} <small>they sign in with this</small></span>
+                  <input
+                    className="bl-input"
+                    type="email"
+                    placeholder="name@bank.com"
+                    value={panel === "add" ? addEmail : editEmail}
+                    onChange={(e) => (panel === "add" ? setAddEmail : setEditEmail)(e.target.value)}
+                    autoComplete="off"
+                  />
+                </label>
+
+                <label className="bl-field">
+                  <span>
+                    {panel === "add" ? <>Password <em className="bl-req">*</em></> : <>New password <small>leave blank to keep the current one</small></>}
+                  </span>
+                  <span className="bl-pw">
+                    <input
+                      className="bl-input"
+                      type={(panel === "add" ? addShowPass : editShowPass) ? "text" : "password"}
+                      placeholder="At least 10 characters, with a number"
+                      value={panel === "add" ? addPass : editPass}
+                      onChange={(e) => (panel === "add" ? setAddPass : setEditPass)(e.target.value)}
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      className="bl-pw-toggle"
+                      aria-label={(panel === "add" ? addShowPass : editShowPass) ? "Hide password" : "Show password"}
+                      onClick={() => (panel === "add" ? setAddShowPass(!addShowPass) : setEditShowPass(!editShowPass))}
+                    >
+                      {(panel === "add" ? addShowPass : editShowPass) ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </span>
+                </label>
+
+                {(panel === "add" ? addMsg : editMsg) && (
+                  <p className={`bl-msg bl-msg--${(panel === "add" ? addMsg : editMsg).type}`} role="status">
+                    {(panel === "add" ? addMsg : editMsg).text}
+                  </p>
+                )}
+
+                <div className="bl-form-actions">
+                  <button type="submit" className="adm-btn adm-btn--primary" disabled={panel === "add" ? addLoading : editLoading}>
+                    {(panel === "add" ? addLoading : editLoading)
+                      ? <><RefreshCw size={15} className="spin" /> {panel === "add" ? "Creating…" : "Saving…"}</>
+                      : panel === "add" ? <><Plus size={15} /> Create officer</> : <><CheckCircle size={15} /> Save changes</>}
+                  </button>
+                  <button type="button" className="adm-btn adm-btn--outline" onClick={() => { setPanel("access"); setEditBanker(null); }}>Cancel</button>
+                </div>
+              </form>
+            )}
+          </section>
         </div>
-      </div>
+      )}
+
+      {/* ── Access requests ──────────────────────────────────────── */}
+      {!officersTab && (
+        <section className="bl-requests" aria-label="Access requests">
+          <div className="bl-requests-head">
+            <p className="bl-requests-intro">
+              {isAdminLevel(adminRole)
+                ? "Advisors asked to share these students with a loan officer. Nothing is shared until you approve."
+                : "Requests you've sent, and whether a superadmin has decided on them yet."}
+            </p>
+            <div className="bl-seg" role="group" aria-label="Filter requests">
+              {[
+                { id: "pending", label: "Pending" },
+                { id: "approved", label: "Approved" },
+                { id: "rejected", label: "Rejected" },
+                { id: "all", label: "All" },
+              ].map((t) => {
+                const count = t.id === "all" ? requests.length : requests.filter((r) => r.status === t.id).length;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`bl-seg-btn${requestStatusFilter === t.id ? " is-active" : ""}`}
+                    aria-pressed={requestStatusFilter === t.id}
+                    onClick={() => setRequestStatusFilter(t.id)}
+                  >
+                    {t.label} <span className="bl-seg-count">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {requestsError && <p className="bl-error" role="alert"><AlertCircle size={15} /> {requestsError}</p>}
+
+          {requestsLoading ? (
+            <div className="bl-state"><div className="loading-dots"><span /><span /><span /></div></div>
+          ) : visibleRequests.length === 0 ? (
+            <div className="bl-blank bl-blank--inline">
+              <span className="bl-blank-icon"><Hourglass size={26} /></span>
+              <h2>{requestStatusFilter === "pending" ? "All caught up" : "No requests here"}</h2>
+              <p>{requestStatusFilter === "pending" ? "Nothing is waiting for review." : "Requests will show up here once advisors send them."}</p>
+            </div>
+          ) : (
+            <ul className="bl-request-list">
+              {visibleRequests.map((r) => {
+                const bank = allBankers.find((b) => b.name === r.bankerName)?.bank;
+                return (
+                  <li key={r.id} className={`bl-request status-${r.status}`}>
+                    <span className="bl-avatar" aria-hidden="true">{getInitials(displayName(r.studentName))}</span>
+                    <div className="bl-request-main">
+                      <p className="bl-request-title">
+                        <strong>{displayName(r.studentName)}</strong>
+                        <ArrowRight size={14} aria-label="shared with" />
+                        <span className="bl-request-banker">
+                          {bank && (
+                            <span className="bl-logo bl-logo--xs">
+                              <img src={getBankLogo(bank)} alt="" onError={(e) => { e.target.style.display = "none"; }} />
+                            </span>
+                          )}
+                          {r.bankerName}{bank ? ` · ${bank}` : ""}
+                        </span>
+                      </p>
+                      <p className="bl-request-meta">
+                        Requested by {r.requestedBy === adminName ? "you" : r.requestedBy} · {timeAgo(r.requestedAt)}
+                        {r.status !== "pending" && r.decidedBy && (
+                          <> · {r.status === "approved" ? "approved" : "rejected"} by {r.decidedBy} · {timeAgo(r.decidedAt)}</>
+                        )}
+                      </p>
+                      {r.note && <p className="bl-request-note">“{r.note}”</p>}
+                      {r.status === "pending" && isAdminLevel(adminRole) && rejectDraftId === r.id && (
+                        <div className="bl-reject">
+                          <input
+                            className="bl-input"
+                            placeholder="Reason for rejecting (optional)"
+                            value={rejectNote}
+                            onChange={(e) => setRejectNote(e.target.value)}
+                            autoFocus
+                          />
+                          <button type="button" className="bl-btn bl-btn--danger" disabled={decidingId === r.id} onClick={() => handleReject(r)}>
+                            {decidingId === r.id ? <RefreshCw size={14} className="spin" /> : "Reject"}
+                          </button>
+                          <button type="button" className="bl-btn" disabled={decidingId === r.id} onClick={() => { setRejectDraftId(null); setRejectNote(""); }}>Cancel</button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="bl-request-side">
+                      <span className={`bl-pill bl-pill--${r.status}`}>
+                        {r.status === "pending" ? "Pending" : r.status === "approved" ? "Approved" : "Rejected"}
+                      </span>
+                      {r.status === "pending" && isAdminLevel(adminRole) && rejectDraftId !== r.id && (
+                        <div className="bl-request-actions">
+                          <button type="button" className="bl-btn bl-btn--sm bl-btn--success" disabled={decidingId === r.id} onClick={() => handleApprove(r)}>
+                            {decidingId === r.id ? <RefreshCw size={13} className="spin" /> : <><CheckCircle size={14} /> Approve</>}
+                          </button>
+                          <button type="button" className="bl-btn bl-btn--sm" disabled={decidingId === r.id} onClick={() => { setRejectDraftId(r.id); setRejectNote(""); }}>
+                            <XCircle size={14} /> Reject
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
+    </div>
   );
 }
 
 /* ─── Settings Panel ───────────────────────────────────────────── */
 
-const API_URL = import.meta.env.VITE_API_URL ?? '';
+// Staff API calls live in utils/adminApi.js (callAPI).
 
-function getToken() {
-  try { return JSON.parse(localStorage.getItem("abroad_admin_session") || "{}").token || ""; }
-  catch { return ""; }
-}
-
-async function callAPI(method, path, body) {
-  const token = getToken();
-  const opts = {
-    method,
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-  };
-  if (body && method !== "GET") opts.body = JSON.stringify(body);
-  const res = await fetch(`${API_URL}${path}`, opts);
-  return res.json();
-}
-
-function SettingsPanel({ onClose, adminName, adminRole }) {
-  const [tab, setTab] = useState("password");
-
+function SettingsPanel({ onClose }) {
+  const { loginAdmin } = useStudent();
   const [curPass, setCurPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
@@ -3109,63 +3878,19 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
   const [passMsg, setPassMsg] = useState(null);
   const [passLoading, setPassLoading] = useState(false);
 
-  const [teamPass, setTeamPass] = useState("");
-  const [teamVerified, setTeamVerified] = useState(false);
-  const [teamVerifying, setTeamVerifying] = useState(false);
-  const [teamErr, setTeamErr] = useState("");
-  const [admins, setAdmins] = useState([]);
-  const [adminsLoading, setAdminsLoading] = useState(false);
-
-  const [newName, setNewName] = useState("");
-  const [newRole, setNewRole] = useState("advisor");
-  const [newAdminPass, setNewAdminPass] = useState("");
-  const [showNewAdminPass, setShowNewAdminPass] = useState(false);
-  const [createMsg, setCreateMsg] = useState(null);
-  const [createLoading, setCreateLoading] = useState(false);
-
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
-
-  const [resetPwTarget, setResetPwTarget] = useState(null);
-  const [resetPwValue, setResetPwValue] = useState("");
-  const [resetPwLoading, setResetPwLoading] = useState(false);
-  const [resetPwMsg, setResetPwMsg] = useState(null);
-
-  const loadAdmins = async () => {
-    setAdminsLoading(true);
-    try {
-      const d = await callAPI("GET", "/api/admins");
-      if (d.success) setAdmins(d.admins || []);
-    } catch { /* silent */ }
-    finally { setAdminsLoading(false); }
-  };
-
-  const handleResetPassword = async (e) => {
-    e.preventDefault();
-    if (resetPwValue.length < 6) { setResetPwMsg({ type: "err", text: "Password must be at least 6 characters." }); return; }
-    setResetPwLoading(true); setResetPwMsg(null);
-    try {
-      const r = await callAPI("PUT", `/api/admins/${encodeURIComponent(resetPwTarget)}/reset-password`, { newPassword: resetPwValue });
-      if (r.success) {
-        setResetPwMsg({ type: "ok", text: `Password reset for ${resetPwTarget}.` });
-        setResetPwValue("");
-        setTimeout(() => { setResetPwTarget(null); setResetPwMsg(null); }, 1500);
-      } else {
-        setResetPwMsg({ type: "err", text: r.error || "Failed to reset password." });
-      }
-    } catch { setResetPwMsg({ type: "err", text: "Network error. Try again." }); }
-    finally { setResetPwLoading(false); }
-  };
-
   const handleChangePassword = async (e) => {
     e.preventDefault();
-    if (newPass.length < 6) { setPassMsg({ type: "err", text: "New password must be at least 6 characters." }); return; }
+    const problem = passwordProblem(newPass);
+    if (problem) { setPassMsg({ type: "err", text: `${problem}.` }); return; }
     if (newPass !== confirmPass) { setPassMsg({ type: "err", text: "Passwords do not match." }); return; }
     setPassLoading(true); setPassMsg(null);
     try {
       const r = await callAPI("PUT", "/api/admins/password", { currentPassword: curPass, newPassword: newPass });
       if (r.success) {
-        setPassMsg({ type: "ok", text: "Password updated successfully." });
+        // A password change signs out every other device; this one keeps
+        // working with the session that came back.
+        loginAdmin(r.role, r.advisorName, r.name, r.token, r.bank, r.account);
+        setPassMsg({ type: "ok", text: "Password updated. Other devices have been signed out." });
         setCurPass(""); setNewPass(""); setConfirmPass("");
       } else {
         setPassMsg({ type: "err", text: r.error || "Failed to update password." });
@@ -3174,228 +3899,45 @@ function SettingsPanel({ onClose, adminName, adminRole }) {
     finally { setPassLoading(false); }
   };
 
-  const handleVerifyTeamPass = async (e) => {
-    e.preventDefault(); setTeamVerifying(true); setTeamErr("");
-    try {
-      const r = await callAPI("POST", "/api/auth/login", { name: adminName, password: teamPass });
-      if (r.success && (r.role === "superadmin" || r.role === "advisor")) {
-        setTeamVerified(true);
-        if (r.role === "superadmin") loadAdmins();
-      } else {
-        setTeamErr("Incorrect password.");
-      }
-    } catch { setTeamErr("Network error. Try again."); }
-    finally { setTeamVerifying(false); }
-  };
-
-  const handleCreateAdmin = async (e) => {
-    e.preventDefault();
-    if (!newName.trim()) { setCreateMsg({ type: "err", text: "Name is required." }); return; }
-    if (newAdminPass.length < 6) { setCreateMsg({ type: "err", text: "Password must be at least 6 characters." }); return; }
-    setCreateLoading(true); setCreateMsg(null);
-    try {
-      const r = await callAPI("POST", "/api/admins", { name: newName.trim(), role: newRole, password: newAdminPass });
-      if (r.success) {
-        setCreateMsg({ type: "ok", text: `${newName.trim()} created successfully.` });
-        setNewName(""); setNewAdminPass(""); setNewRole("advisor");
-        loadAdmins();
-      } else {
-        setCreateMsg({ type: "err", text: r.error || "Failed to create admin." });
-      }
-    } catch { setCreateMsg({ type: "err", text: "Network error. Try again." }); }
-    finally { setCreateLoading(false); }
-  };
-
-  const handleDeleteAdmin = async (name) => {
-    setDeleteLoading(true);
-    try {
-      const r = await callAPI("DELETE", `/api/admins/${encodeURIComponent(name)}`);
-      if (r.success) { setDeleteTarget(null); loadAdmins(); }
-      else { alert(r.error || "Failed to delete."); }
-    } catch { alert("Network error. Try again."); }
-    finally { setDeleteLoading(false); }
-  };
-
   return (
     <>
       <div className="settings-overlay" onClick={onClose} />
       <div className="settings-panel animate-fade-in">
         <div className="settings-header">
           <div className="settings-title"><Settings size={16} /> Settings</div>
-          <button className="icon-btn" onClick={onClose}><X size={16} /></button>
-        </div>
-
-        <div className="settings-tabs">
-          <button className={`settings-tab${tab === "password" ? " active" : ""}`} onClick={() => setTab("password")}>
-            <KeyRound size={16} />
-            <span>Password</span>
-          </button>
-          {adminRole === "superadmin" && (
-            <button
-              className={`settings-tab${tab === "team" ? " active" : ""}`}
-              onClick={() => { setTab("team"); if (teamVerified) loadAdmins(); }}
-            >
-              <UserCheck size={16} />
-              <span>Team</span>
-            </button>
-          )}
+          <button className="icon-btn" onClick={onClose} aria-label="Close settings"><X size={16} /></button>
         </div>
 
         <div className="settings-body">
-          {tab === "password" && (
-            <form onSubmit={handleChangePassword} className="settings-form">
-              <p className="settings-section-label">Update your login password</p>
-              <div className="input-group">
-                <label>Current Password</label>
-                <div className="password-wrap">
-                  <input className="input-field" type={showPass ? "text" : "password"} placeholder="Your current password"
-                    value={curPass} onChange={(e) => setCurPass(e.target.value)} />
-                  <button type="button" className="show-pass" onClick={() => setShowPass(!showPass)}>
-                    {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
-                </div>
-              </div>
-              <div className="input-group">
-                <label>New Password</label>
-                <input className="input-field" type={showPass ? "text" : "password"} placeholder="Min. 6 characters"
-                  value={newPass} onChange={(e) => setNewPass(e.target.value)} />
-              </div>
-              <div className="input-group">
-                <label>Confirm New Password</label>
-                <input className="input-field" type={showPass ? "text" : "password"} placeholder="Repeat new password"
-                  value={confirmPass} onChange={(e) => setConfirmPass(e.target.value)} />
-              </div>
-              {passMsg && <p className={`settings-msg ${passMsg.type}`}>{passMsg.text}</p>}
-              <button type="submit" className="btn btn-primary btn-sm" disabled={passLoading}>
-                {passLoading ? <><RefreshCw size={13} className="spin" /> Saving…</> : <><KeyRound size={13} /> Update Password</>}
-              </button>
-            </form>
-          )}
-
-          {tab === "team" && (
-            <div>
-              {!teamVerified ? (
-                <form onSubmit={handleVerifyTeamPass} className="settings-form">
-                  <p className="settings-section-label">Enter your password to manage the team</p>
-                  <div className="input-group">
-                    <label>Your Password</label>
-                    <div className="password-wrap">
-                      <input className="input-field" type={showPass ? "text" : "password"} placeholder="Confirm your identity"
-                        value={teamPass} onChange={(e) => setTeamPass(e.target.value)} autoFocus />
-                      <button type="button" className="show-pass" onClick={() => setShowPass(!showPass)}>
-                        {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
-                      </button>
-                    </div>
-                  </div>
-                  {teamErr && <p className="settings-msg err">{teamErr}</p>}
-                  <button type="submit" className="btn btn-primary btn-sm" disabled={teamVerifying}>
-                    {teamVerifying ? <><RefreshCw size={13} className="spin" /> Verifying…</> : <><Shield size={13} /> Verify & Continue</>}
-                  </button>
-                </form>
-              ) : (
-                <div>
-                  <p className="settings-section-label">Current Team</p>
-                  {adminsLoading ? (
-                    <div className="admin-loading" style={{ padding: "24px 0" }}>
-                      <div className="loading-dots"><span /><span /><span /></div>
-                    </div>
-                  ) : (
-                    <div className="team-list">
-                      {admins.map((a) => (
-                        <div key={a.name} className="team-row">
-                          <div className="team-avatar">{a.name[0].toUpperCase()}</div>
-                          <div className="team-info">
-                            <span className="team-name">{a.name}</span>
-                            <span className={`team-role-badge ${a.role}`}>
-                              {a.role === "superadmin" ? "Super Admin" : a.role === "banker" ? "Banker" : "Advisor"}
-                            </span>
-                          </div>
-                          {a.name !== adminName && (
-                            deleteTarget === a.name ? (
-                              <div className="team-delete-confirm">
-                                <span>Delete?</span>
-                                <button className="btn btn-danger btn-sm" onClick={() => handleDeleteAdmin(a.name)} disabled={deleteLoading}>
-                                  {deleteLoading ? <RefreshCw size={12} className="spin" /> : "Yes"}
-                                </button>
-                                <button className="btn btn-secondary btn-sm" onClick={() => setDeleteTarget(null)} disabled={deleteLoading}>No</button>
-                              </div>
-                            ) : (
-                              <>
-                                <button className="icon-btn" title={`Reset ${a.name}'s password`} onClick={() => { setResetPwTarget(a.name); setResetPwValue(""); setResetPwMsg(null); }}>
-                                  <KeyRound size={13} />
-                                </button>
-                                <button className="icon-btn del-btn" title={`Remove ${a.name}`} onClick={() => setDeleteTarget(a.name)}>
-                                  <Trash2 size={13} />
-                                </button>
-                              </>
-                            )
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <p className="settings-section-label" style={{ marginTop: 20 }}>Add New Member</p>
-                  <form onSubmit={handleCreateAdmin} className="settings-form">
-                    <div className="input-group">
-                      <label>Name</label>
-                      <input className="input-field" type="text" placeholder="e.g. Ravi" value={newName} onChange={(e) => setNewName(e.target.value)} />
-                    </div>
-                    <div className="input-group">
-                      <label>Role</label>
-                      <select className="input-field" value={newRole} onChange={(e) => setNewRole(e.target.value)}>
-                        <option value="advisor">Advisor</option>
-                        <option value="banker">Banker</option>
-                        <option value="superadmin">Super Admin</option>
-                      </select>
-                    </div>
-                    <div className="input-group">
-                      <label>Password</label>
-                      <div className="password-wrap">
-                        <input className="input-field" type={showNewAdminPass ? "text" : "password"} placeholder="Min. 6 characters"
-                          value={newAdminPass} onChange={(e) => setNewAdminPass(e.target.value)} />
-                        <button type="button" className="show-pass" onClick={() => setShowNewAdminPass(!showNewAdminPass)}>
-                          {showNewAdminPass ? <EyeOff size={15} /> : <Eye size={15} />}
-                        </button>
-                      </div>
-                    </div>
-                    {createMsg && <p className={`settings-msg ${createMsg.type}`}>{createMsg.text}</p>}
-                    <button type="submit" className="btn btn-primary btn-sm" disabled={createLoading}>
-                      {createLoading ? <><RefreshCw size={13} className="spin" /> Creating…</> : <><Plus size={13} /> Create Member</>}
-                    </button>
-                  </form>
-                </div>
-              )}
-            </div>
-          )}
-
-        </div>
-      </div>
-
-      {resetPwTarget && (
-        <div className="modal-backdrop" onClick={() => !resetPwLoading && setResetPwTarget(null)}>
-          <div className="modal-box animate-fade-in" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-icon"><KeyRound size={28} /></div>
-            <h3>Reset Password</h3>
-            <p>
-              Set a new password for <strong>{resetPwTarget}</strong>. They'll need to use it next time they log in.
-            </p>
-            <form onSubmit={handleResetPassword} className="settings-form" style={{ textAlign: "left" }}>
-              <div className="input-group">
-                <label>New Password</label>
-                <input className="input-field" type="password" placeholder="Min. 6 characters" value={resetPwValue} onChange={(e) => setResetPwValue(e.target.value)} autoFocus />
-              </div>
-              {resetPwMsg && <p className={`settings-msg ${resetPwMsg.type}`}>{resetPwMsg.text}</p>}
-              <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setResetPwTarget(null)} disabled={resetPwLoading}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={resetPwLoading}>
-                  {resetPwLoading ? <><RefreshCw size={13} className="spin" /> Resetting…</> : "Reset Password"}
+          <form onSubmit={handleChangePassword} className="settings-form">
+            <p className="settings-section-label">Change your password</p>
+            <div className="input-group">
+              <label>Current password</label>
+              <div className="password-wrap">
+                <input className="input-field" type={showPass ? "text" : "password"} placeholder="Your current password"
+                  value={curPass} onChange={(e) => setCurPass(e.target.value)} autoComplete="current-password" />
+                <button type="button" className="show-pass" onClick={() => setShowPass(!showPass)} aria-label={showPass ? "Hide passwords" : "Show passwords"}>
+                  {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
-            </form>
-          </div>
+            </div>
+            <div className="input-group">
+              <label>New password</label>
+              <input className="input-field" type={showPass ? "text" : "password"} placeholder="At least 10 characters, with a number"
+                value={newPass} onChange={(e) => setNewPass(e.target.value)} autoComplete="new-password" />
+            </div>
+            <div className="input-group">
+              <label>Confirm new password</label>
+              <input className="input-field" type={showPass ? "text" : "password"} placeholder="Repeat new password"
+                value={confirmPass} onChange={(e) => setConfirmPass(e.target.value)} autoComplete="new-password" />
+            </div>
+            {passMsg && <p className={`settings-msg ${passMsg.type}`} role="status">{passMsg.text}</p>}
+            <button type="submit" className="btn btn-primary btn-sm" disabled={passLoading}>
+              {passLoading ? <><RefreshCw size={13} className="spin" /> Saving…</> : <><KeyRound size={13} /> Update password</>}
+            </button>
+          </form>
         </div>
-      )}
+      </div>
     </>
   );
 }
@@ -3424,20 +3966,35 @@ const LOAN_STATUS_SUBITEMS = [
   { value: "rejected", label: "Rejected" },
   { value: "dropped", label: "Dropped" },
 ];
-const DOC_PROGRESS_SUBITEMS = [
-  { value: "complete", label: "Completed" },
-  { value: "progress", label: "In Progress" },
-  { value: "notStarted", label: "Not Started" },
-];
 
 function AdminSidebar({
   section, setSection, adminRole, adminName,
   onOpenSettings, onLogout,
   mobileOpen, onCloseMobile,
-  setLoanStatusFilter, setDocFilter,
+  setLoanStatusFilter,
   pendingBankerRequests = 0,
 }) {
   const [expanded, setExpanded] = useState(null);
+  const drawerRef = useRef(null);
+  const roleLabel = ROLE_LABELS[adminRole] || "Staff";
+  const initials = getInitials(adminName);
+
+  // Drawer mode (below the desktop breakpoint): Escape closes it, focus moves
+  // into it on open and the page behind stops scrolling.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e) => { if (e.key === "Escape") onCloseMobile?.(); };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    drawerRef.current?.querySelector("button")?.focus();
+    const drawer = drawerRef.current;
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+      if (drawer?.contains(document.activeElement)) document.querySelector(".adm-menu-btn")?.focus();
+    };
+  }, [mobileOpen, onCloseMobile]);
 
   const goStudents = (apply) => {
     setSection("students");
@@ -3446,30 +4003,26 @@ function AdminSidebar({
   };
 
   const NAV_ITEMS = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutGrid, roles: ["superadmin", "advisor"] },
-    { id: "students",  label: "Students",  icon: Users,      roles: ["superadmin", "advisor"] },
-    { id: "advisors",  label: "Advisors",  icon: UserCheck,  roles: ["superadmin"] },
+    { id: "dashboard", label: "Dashboard", icon: LayoutGrid, roles: ["superadmin", "admin", "advisor"] },
+    { id: "students",  label: adminRole === "advisor" ? "My Students" : "Students", icon: Users, roles: ["superadmin", "admin", "advisor"] },
+    { id: "advisors",  label: "Advisors",  icon: UserCheck,  roles: ["superadmin", "admin"] },
     {
-      id: "loanApps", label: "Loan Applications", icon: FileText, roles: ["superadmin", "advisor"],
+      id: "loanApps", label: "Loan Applications", icon: FileText, roles: ["superadmin", "admin", "advisor"],
       subItems: LOAN_STATUS_SUBITEMS.map((s) => ({
         label: s.label,
         onSelect: () => goStudents(() => setLoanStatusFilter(s.value)),
       })),
     },
+    { id: "documents", label: "Document Management", icon: FolderOpen, roles: ["superadmin", "admin"] },
+    { id: "banks", label: "Banks & Lenders", icon: Landmark, roles: ["superadmin", "admin", "advisor"] },
+    { id: "docReader", label: "Document Reader", icon: ScanSearch, roles: ["superadmin", "admin", "advisor"] },
+    { id: "team", label: "Team", icon: UsersRound, roles: ["superadmin", "admin"] },
+    { id: "companies", label: adminRole === "superadmin" ? "Companies" : "Company", icon: Building2, roles: ["superadmin", "admin"] },
     {
-      id: "documents", label: "Document Management", icon: FolderOpen, roles: ["superadmin", "advisor"],
-      subItems: DOC_PROGRESS_SUBITEMS.map((s) => ({
-        label: s.label,
-        onSelect: () => goStudents(() => setDocFilter(s.value)),
-      })),
-    },
-    { id: "banks", label: "Banks & Lenders", icon: Landmark, roles: ["superadmin", "advisor"] },
-    { id: "docReader", label: "Document Reader", icon: ScanSearch, roles: ["superadmin", "advisor"] },
-    {
-      id: "reports", label: "Reports", icon: BarChart3, roles: ["superadmin"],
+      id: "reports", label: "Reports", icon: BarChart3, roles: ["superadmin", "admin"],
       subItems: [
-        { label: "Audit Log", onSelect: () => { setSection("audit"); onCloseMobile?.(); } },
-        { label: "Bank Activity", onSelect: () => { setSection("bankActivity"); onCloseMobile?.(); } },
+        { label: "Audit Log", active: section === "audit", onSelect: () => { setSection("audit"); onCloseMobile?.(); } },
+        { label: "Bank Activity", active: section === "bankActivity", onSelect: () => { setSection("bankActivity"); onCloseMobile?.(); } },
       ],
     },
   ];
@@ -3477,47 +4030,62 @@ function AdminSidebar({
 
   return (
     <>
-      {mobileOpen && <div className="admin-sidebar-scrim" onClick={onCloseMobile} />}
-      <aside className={`admin-sidebar${mobileOpen ? " is-open" : ""}`}>
-        <div className="admin-sidebar-brand">
-          <div className="admin-sidebar-brand-icon"><img src={logoImg} alt="" /></div>
-          <div className="admin-sidebar-brand-text">
-            <span className="admin-sidebar-brand-name">DocLocker</span>
-            <span className="admin-sidebar-brand-tag">Admin Console</span>
+      {mobileOpen && <div className="adm-scrim" onClick={onCloseMobile} aria-hidden="true" />}
+      <aside
+        ref={drawerRef}
+        id="adm-sidebar"
+        className={`adm-sidebar${mobileOpen ? " is-open" : ""}`}
+        aria-label="Admin navigation"
+      >
+        <div className="adm-sidebar-top">
+          <div className="adm-sidebar-brand">
+            <BrandLogo size="sm" tone="dark" />
+            <button type="button" className="adm-sidebar-close" onClick={onCloseMobile} aria-label="Close menu">
+              <X size={18} />
+            </button>
+          </div>
+          {/* A partner team's own logo is the BrandLogo above */}
+          <div className="adm-sidebar-role">
+            <span className="adm-avatar adm-avatar--xs" aria-hidden="true">{initials}</span>
+            <span>{roleLabel}</span>
           </div>
         </div>
 
-        <nav className="admin-sidebar-nav">
-          <p className="admin-sidebar-nav-label">Workspace</p>
+        <nav className="adm-nav" aria-label="Sections">
           {visibleNav.map(({ id, label, icon: Icon, subItems }) => {
-            const isActiveSection = id === "reports" ? (section === "audit" || section === "bankActivity") : section === id;
+            const isActive = id === "reports" ? (section === "audit" || section === "bankActivity") : section === id;
             const isExpanded = expanded === id;
             return (
-              <div key={id}>
+              <div key={id} className="adm-nav-group">
                 <button
-                  className={`admin-sidebar-link${isActiveSection && !subItems ? " active" : ""}`}
+                  type="button"
+                  className={`adm-nav-link${isActive && !subItems ? " is-active" : ""}${isActive && subItems ? " is-current" : ""}`}
+                  aria-current={isActive && !subItems ? "page" : undefined}
+                  aria-expanded={subItems ? isExpanded : undefined}
                   onClick={() => {
                     if (subItems) setExpanded(isExpanded ? null : id);
                     else { setSection(id); onCloseMobile?.(); }
                   }}
                 >
-                  <Icon size={18} />
-                  <span className="admin-sidebar-link-label">{label}</span>
+                  <Icon size={19} className="adm-nav-icon" />
+                  <span className="adm-nav-label">{label}</span>
                   {id === "banks" && pendingBankerRequests > 0 && (
-                    <span className="admin-sidebar-link-badge" title={`${pendingBankerRequests} banker access request${pendingBankerRequests === 1 ? "" : "s"} awaiting review`}>
+                    <span className="adm-nav-badge" title={`${pendingBankerRequests} banker access request${pendingBankerRequests === 1 ? "" : "s"} awaiting review`}>
                       {pendingBankerRequests > 99 ? "99+" : pendingBankerRequests}
                     </span>
                   )}
-                  {subItems ? (
-                    <ChevronRight size={14} className={`admin-sidebar-link-chevron${isExpanded ? " is-expanded" : ""}`} />
-                  ) : (
-                    isActiveSection && <span className="admin-sidebar-link-dot" />
-                  )}
+                  {subItems && <ChevronDown size={15} className={`adm-nav-chevron${isExpanded ? " is-expanded" : ""}`} />}
                 </button>
                 {subItems && isExpanded && (
-                  <div className="admin-sidebar-sublinks">
+                  <div className="adm-nav-sub">
                     {subItems.map((s) => (
-                      <button key={s.label} className="admin-sidebar-sublink" onClick={s.onSelect}>
+                      <button
+                        key={s.label}
+                        type="button"
+                        className={`adm-nav-sublink${s.active ? " is-active" : ""}`}
+                        aria-current={s.active ? "page" : undefined}
+                        onClick={s.onSelect}
+                      >
                         {s.label}
                       </button>
                     ))}
@@ -3527,26 +4095,24 @@ function AdminSidebar({
             );
           })}
 
-          <p className="admin-sidebar-nav-label">Manage</p>
-          <button className="admin-sidebar-link" onClick={() => { onOpenSettings(); onCloseMobile?.(); }}>
-            <Settings size={18} />
-            <span>Settings</span>
-            <ArrowUpRight size={13} className="admin-sidebar-link-ext" />
+          <div className="adm-nav-divider" role="separator" />
+          <button type="button" className="adm-nav-link" onClick={() => { onOpenSettings(); onCloseMobile?.(); }}>
+            <Settings size={19} className="adm-nav-icon" />
+            <span className="adm-nav-label">Settings</span>
           </button>
         </nav>
 
-        <div className="admin-sidebar-footer">
-          <div className="admin-sidebar-user">
-            <div className="admin-sidebar-user-avatar">{(adminName || "?")[0].toUpperCase()}</div>
-            <div className="admin-sidebar-user-info">
-              <span className="admin-sidebar-user-name">{adminName}</span>
-              <span className="admin-sidebar-user-role">{adminRole === "superadmin" ? "Super Admin" : "Advisor"}</span>
-            </div>
+        <div className="adm-sidebar-footer">
+          <div className="adm-user-card">
+            <span className="adm-avatar adm-avatar--lg" aria-hidden="true">{initials}</span>
+            <span className="adm-user-text">
+              <span className="adm-user-name">{adminName || roleLabel}</span>
+              <span className="adm-user-role">{roleLabel}</span>
+            </span>
           </div>
-
-          <button className="admin-sidebar-logout" onClick={onLogout}>
-            <LogOut size={16} />
-            <span>Logout</span>
+          <button type="button" className="adm-logout" onClick={onLogout}>
+            <LogOut size={17} />
+            <span>Log out</span>
           </button>
         </div>
       </aside>
@@ -3554,62 +4120,23 @@ function AdminSidebar({
   );
 }
 
-/* ─── Top header bar: global quick-search + notifications + account ─── */
+/* ─── Compact top bar below the desktop breakpoint: menu + logo ─── */
 
-function AdminTopbar({ search, setSearch, section, setSection, adminName, adminRole, onOpenSettings, onLogout }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-
+function AdminMobileBar({ onOpenMenu, menuOpen }) {
   return (
-    <div className="admin-topbar">
-      <label className="admin-topbar-search">
-        <Search size={16} />
-        <input
-          type="text"
-          placeholder="Search by student name, email or phone…"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            if (e.target.value && section !== "students") setSection("students");
-          }}
-        />
-        {!search && <kbd className="admin-topbar-kbd">/</kbd>}
-        {search && (
-          <button type="button" className="admin-topbar-search-clear" onClick={() => setSearch("")} aria-label="Clear search">
-            <X size={13} />
-          </button>
-        )}
-      </label>
-
-      <div className="admin-topbar-actions">
-        <button type="button" className="admin-topbar-icon-btn" title="Notifications" aria-label="Notifications">
-          <Bell size={18} />
-        </button>
-        <div className="admin-topbar-divider" />
-        <div className="admin-topbar-user-wrap">
-          <button type="button" className="admin-topbar-user" onClick={() => setMenuOpen((o) => !o)}>
-            <div className="admin-topbar-avatar">{(adminName || "?")[0].toUpperCase()}</div>
-            <div className="admin-topbar-user-text">
-              <span className="admin-topbar-user-name">{adminName}</span>
-              <span className="admin-topbar-user-role">{adminRole === "superadmin" ? "Super Admin" : "Advisor"}</span>
-            </div>
-            <ChevronDown size={14} />
-          </button>
-          {menuOpen && (
-            <>
-              <div className="admin-topbar-menu-scrim" onClick={() => setMenuOpen(false)} />
-              <div className="admin-topbar-menu">
-                <button onClick={() => { onOpenSettings(); setMenuOpen(false); }}>
-                  <Settings size={14} /> Settings
-                </button>
-                <button className="danger" onClick={() => { onLogout(); setMenuOpen(false); }}>
-                  <LogOut size={14} /> Logout
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    <header className="adm-mobilebar">
+      <button
+        type="button"
+        className="adm-icon-btn adm-menu-btn"
+        onClick={onOpenMenu}
+        aria-label="Open menu"
+        aria-controls="adm-sidebar"
+        aria-expanded={menuOpen}
+      >
+        <Menu size={20} />
+      </button>
+      <BrandLogo size="sm" />
+    </header>
   );
 }
 
@@ -3688,9 +4215,11 @@ function auditActionLabel(action) {
 const AUDIT_ACTION_ICON = {
   auth: LogIn,
   admin: Shield,
-  student: Trash2,
+  student: UserRound,
   loan_status: Banknote,
   banker_access: Landmark,
+  company: Building2,
+  document_reader: ScanSearch,
 };
 const AUDIT_ACTION_TONE = {
   auth: "blue",
@@ -3698,6 +4227,8 @@ const AUDIT_ACTION_TONE = {
   student: "rose",
   loan_status: "orange",
   banker_access: "teal",
+  company: "violet",
+  document: "blue",
 };
 
 // "2m ago" / "Just now" — recomputed on a slow tick (see the second effect
@@ -3712,6 +4243,274 @@ function timeAgo(ts) {
   return `${Math.round(diffHr / 24)}d ago`;
 }
 
+/* ─── Activity detail panel ─────────────────────────────────────────
+   One side panel for every activity list (dashboard feed, Audit Log,
+   Bank Activity): what changed, which student, who did it and when. */
+
+const FULL_DATE = { weekday: "short", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" };
+const ACTIVITY_ROLE_LABELS = { ...ROLE_LABELS, student: "Student" };
+const DOC_CHECK_LABELS = { pass: "Passed", review: "Needs review", fail: "Failed" };
+
+// Student lookup by the folder key audit entries carry as their target.
+function buildStudentIndex(students) {
+  const map = new Map();
+  for (const st of students || []) {
+    map.set(studentAuditTarget(st), st);
+    if (st.studentKey) map.set(st.studentKey, st);
+  }
+  return map;
+}
+
+// Status before a loan-status change. Newer entries record it; for older
+// ones it's the previous change to the same student in the loaded log.
+function previousLoanStatus(entry, entries) {
+  if (entry.details?.previousStatus) return { status: entry.details.previousStatus, derived: false };
+  const earlier = (entries || [])
+    .filter((x) => x.action === "loan_status.update" && x.target === entry.target && x.ts < entry.ts)
+    .sort((a, b) => (a.ts < b.ts ? 1 : -1))[0];
+  return earlier?.details?.loanStatus ? { status: earlier.details.loanStatus, derived: true } : null;
+}
+
+function formatInr(n) {
+  const v = Number(n);
+  return Number.isFinite(v) ? `₹${v.toLocaleString("en-IN")}` : String(n);
+}
+
+function formatDisbursement(key, value) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (key === "tenureMonths") return `${value} months`;
+  if (key === "interestRate") return `${value}%`;
+  return formatInr(value);
+}
+
+// Label/value rows describing what an entry did, by action.
+function activityChangeRows(entry, bankers) {
+  const d = entry.details || {};
+  const bankOf = (name) => bankers.find((b) => b.name === name)?.bank;
+  const rows = [];
+  const officer = (name) => name && rows.push({
+    label: "Loan officer",
+    value: (
+      <span className="ad-officer">
+        {bankOf(name) && <img src={getBankLogo(bankOf(name))} alt="" onError={(e) => { e.target.style.display = "none"; }} />}
+        <span>{name}{bankOf(name) ? ` · ${bankOf(name)}` : ""}</span>
+      </span>
+    ),
+  });
+  switch (entry.action.split(".")[0]) {
+    case "banker_access":
+      officer(d.banker);
+      if (d.requestedBy) rows.push({ label: "Requested by", value: d.requestedBy });
+      if (d.note) rows.push({ label: "Reason", value: d.note });
+      break;
+    case "document":
+      if (d.fileName || d.file) rows.push({ label: "File", value: d.fileName || d.file });
+      if (d.subFolder) rows.push({ label: "Section", value: d.subFolder });
+      if (d.docType) rows.push({ label: "Document type", value: d.docType });
+      if (d.check) rows.push({ label: "Automatic check", value: DOC_CHECK_LABELS[d.check] || d.check });
+      if (d.files) rows.push({ label: "Files", value: d.files });
+      if (d.fileCount) rows.push({ label: "Files read", value: d.fileCount });
+      if (d.review) rows.push({ label: "Review", value: d.review });
+      break;
+    case "document_reader":
+      rows.push({ label: "Document type", value: entry.target || "—" });
+      if (d.fileCount) rows.push({ label: "Files read", value: d.fileCount });
+      if (d.seconds) rows.push({ label: "Time taken", value: `${d.seconds}s` });
+      break;
+    case "admin":
+      rows.push({ label: "Account", value: entry.target || "—" });
+      if (d.role) rows.push({ label: "Role", value: ACTIVITY_ROLE_LABELS[d.role] || d.role });
+      break;
+    case "student":
+      if (d.count) rows.push({ label: "Records removed", value: d.count });
+      if (d.documents) rows.push({ label: "Documents removed", value: d.documents });
+      break;
+    default:
+      break;
+  }
+  return rows;
+}
+
+const ACTIVITY_SUMMARY = {
+  "auth.login": "Signed in to the workspace.",
+  "student.save": "The student saved their application details.",
+  "summary.generate": "A new Application Form PDF was generated.",
+  "banker_access.grant": "This student's files were shared with the loan officer.",
+  "banker_access.revoke": "The loan officer can no longer see this student.",
+  "banker_access.request": "An advisor asked to share this student with a loan officer.",
+  "banker_access.approve": "The request was approved and the files were shared.",
+  "banker_access.reject": "The request was rejected; nothing was shared.",
+  "document.view": "A document was opened in the viewer.",
+  "document.download": "A document was downloaded.",
+  "document.upload": "A document was uploaded.",
+  "document.rejected": "An upload was rejected by the automatic check.",
+  "student.delete": "The student and their documents were deleted.",
+};
+
+function ActivityDetail({ entry, entries, students, bankers = [], label = auditActionLabel, onClose, onOpenStudent }) {
+  const closeRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
+
+  useEffect(() => {
+    const opener = document.activeElement;
+    closeRef.current?.focus();
+    const onKey = (e) => { if (e.key === "Escape") onCloseRef.current(); };
+    document.addEventListener("keydown", onKey);
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
+      if (opener instanceof HTMLElement) opener.focus();
+    };
+  }, []);
+
+  const prefix = entry.action.split(".")[0];
+  const Icon = BANK_ACTIVITY_ACTION_ICON[prefix] || History;
+  const tone = AUDIT_ACTION_TONE[prefix] || "slate";
+  const student = buildStudentIndex(students).get(entry.target) || null;
+  const isStudentTarget = !["auth", "admin", "document_reader"].includes(prefix) && Boolean(entry.target);
+  const d = entry.details || {};
+  const isLoan = entry.action === "loan_status.update";
+  const prev = isLoan ? previousLoanStatus(entry, entries) : null;
+  const rows = activityChangeRows(entry, bankers);
+  const disbursement = isLoan && d.disbursement ? DISBURSEMENT_FIELDS.filter((f) => d.disbursement[f.key] !== undefined) : [];
+  const when = new Date(entry.ts);
+
+  return createPortal(
+    <div className="ad-backdrop" onClick={onClose}>
+      <aside
+        className="ad-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ad-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className={`ad-head tone-${tone}`}>
+          <span className="ad-head-icon" aria-hidden="true"><Icon size={20} /></span>
+          <div className="ad-head-text">
+            <h2 id="ad-title">{label(entry.action)}</h2>
+            <p><time dateTime={entry.ts}>{when.toLocaleString("en-IN", FULL_DATE)}</time> · {timeAgo(entry.ts)}</p>
+          </div>
+          <button type="button" ref={closeRef} className="ad-close" onClick={onClose} aria-label="Close details">
+            <X size={18} />
+          </button>
+        </header>
+
+        <div className="ad-body">
+          {/* What changed */}
+          <section className="ad-section" aria-label="What changed">
+            <h3 className="ad-section-title">What happened</h3>
+            {isLoan ? (
+              <>
+                <div className="ad-change">
+                  <div className="ad-change-side">
+                    <span className="ad-change-label">From</span>
+                    {prev ? <LoanStatusBadge status={prev.status} /> : <span className="ad-muted">Not recorded</span>}
+                  </div>
+                  <ArrowRight size={18} className="ad-change-arrow" aria-label="changed to" />
+                  <div className="ad-change-side">
+                    <span className="ad-change-label">To</span>
+                    <LoanStatusBadge status={d.loanStatus} />
+                  </div>
+                </div>
+                {prev?.derived && <p className="ad-hint">Previous status taken from the earlier change in the log.</p>}
+                {d.remark && (
+                  <div className="ad-note">
+                    <span className="ad-change-label">Remark</span>
+                    <p>{d.remark}</p>
+                  </div>
+                )}
+                {disbursement.length > 0 && (
+                  <dl className="ad-grid">
+                    {disbursement.map((f) => (
+                      <div key={f.key}>
+                        <dt>{f.label}</dt>
+                        <dd>{formatDisbursement(f.key, d.disbursement[f.key])}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </>
+            ) : (
+              <>
+                {ACTIVITY_SUMMARY[entry.action] && <p className="ad-summary">{ACTIVITY_SUMMARY[entry.action]}</p>}
+                {rows.length > 0 && (
+                  <dl className="ad-rows">
+                    {rows.map((r) => (
+                      <div key={r.label}>
+                        <dt>{r.label}</dt>
+                        <dd>{r.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                {!ACTIVITY_SUMMARY[entry.action] && rows.length === 0 && <p className="ad-summary">{label(entry.action)}.</p>}
+              </>
+            )}
+          </section>
+
+          {/* Student */}
+          {isStudentTarget && (
+            <section className="ad-section" aria-label="Student">
+              <h3 className="ad-section-title">Student</h3>
+              {student ? (
+                <div className="ad-student">
+                  <div className="ad-student-top">
+                    <span className="ad-avatar" aria-hidden="true">{getInitials(displayName(student.name))}</span>
+                    <div className="ad-student-text">
+                      <p className="ad-student-name">{displayName(student.name)}</p>
+                      <p className="ad-student-id">{getApplicationId(student)}</p>
+                    </div>
+                    <span className="ad-current" title="Current loan status">
+                      <span>Now</span>
+                      <LoanStatusBadge status={student.loanStatus} />
+                    </span>
+                  </div>
+                  <dl className="ad-rows ad-rows--compact">
+                    {student.email && <div><dt>Email</dt><dd>{student.email}</dd></div>}
+                    {student.phone && <div><dt>Phone</dt><dd>{student.phone}</dd></div>}
+                    {student.advisor && <div><dt>Advisor</dt><dd>{student.advisor}</dd></div>}
+                    {(student.sharedBankers || []).length > 0 && (
+                      <div><dt>Shared with</dt><dd>{student.sharedBankers.join(", ")}</dd></div>
+                    )}
+                  </dl>
+                  {onOpenStudent && (
+                    <button type="button" className="ad-open" onClick={() => { onClose(); onOpenStudent(student); }}>
+                      Open student file <ArrowUpRight size={15} aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="ad-student ad-student--missing">
+                  <p className="ad-student-name">{displayName(entry.target)}</p>
+                  <p className="ad-muted">Not in the current student list. They may have been deleted.</p>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Who */}
+          <section className="ad-section" aria-label="Done by">
+            <h3 className="ad-section-title">Done by</h3>
+            <div className="ad-actor">
+              <span className={`ad-avatar ad-avatar--${entry.role || "other"}`} aria-hidden="true">{getInitials(entry.actor)}</span>
+              <div>
+                <p className="ad-student-name">{entry.actor || "Unknown"}</p>
+                <p className="ad-muted">{ACTIVITY_ROLE_LABELS[entry.role] || entry.role || "—"}</p>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <footer className="ad-foot">Reference {String(entry.id).replace(/^db-/, "#")}</footer>
+      </aside>
+    </div>,
+    document.body,
+  );
+}
+
 // Right-rail companion to the dashboard's KPI cards — a running feed of the
 // same audit log the full Audit Log screen shows, trimmed to the most
 // recent entries and polished for a glance rather than an investigation.
@@ -3719,11 +4518,12 @@ function timeAgo(ts) {
 // entries that weren't in the previous poll get a brief highlight so a
 // genuinely new event is visible, without replaying that animation on
 // every 30s poll for rows that were already there.
-function LiveActivityFeed() {
+function LiveActivityFeed({ onViewAll, students, bankers, onOpenStudent }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newIds, setNewIds] = useState(() => new Set());
   const [, setClock] = useState(0);
+  const [openEntry, setOpenEntry] = useState(null);
   const seenIds = useRef(null);
 
   const load = useCallback(async () => {
@@ -3759,58 +4559,69 @@ function LiveActivityFeed() {
   }, []);
 
   return (
-    <aside className="live-feed animate-fade-in">
-      <div className="live-feed-head">
-        <p className="live-feed-title">
-          <span className="live-feed-pulse" />
-          Live Activity
-        </p>
-        <span className="live-feed-tag">Audit log</span>
-      </div>
+    <section className="ov-card ov-activity" aria-label="Recent activity">
+      <header className="ov-card-head">
+        <span className="ov-live" aria-hidden="true" />
+        <div className="ov-card-heading">
+          <p className="ov-card-title">Recent activity</p>
+          <p className="ov-card-sub">Live from the audit log</p>
+        </div>
+        <button type="button" className="ov-link" onClick={onViewAll}>
+          View all <ArrowUpRight size={14} aria-hidden="true" />
+        </button>
+      </header>
 
-      <div className="live-feed-list">
+      <div className="ov-activity-list">
         {loading ? (
-          <div className="live-feed-loading">
-            <div className="loading-dots"><span /><span /><span /></div>
-          </div>
+          <div className="ov-activity-state"><div className="loading-dots"><span /><span /><span /></div></div>
         ) : entries.length === 0 ? (
-          <p className="live-feed-empty">No recent activity yet.</p>
+          <p className="ov-activity-state">No recent activity yet.</p>
         ) : (
-          entries.map((e, i) => {
-            const prefix = e.action.split(".")[0];
-            const Icon = AUDIT_ACTION_ICON[prefix] || History;
-            const tone = AUDIT_ACTION_TONE[prefix] || "slate";
-            return (
-              <div
-                key={e.id}
-                className={`live-feed-row tone-${tone}${newIds.has(e.id) ? " is-new" : ""}${i === entries.length - 1 ? " is-last" : ""}`}
-              >
-                <span className="live-feed-row-rail">
-                  <span className="live-feed-row-marker"><Icon size={13} /></span>
-                  <span className="live-feed-row-line" />
-                </span>
-                <div className="live-feed-row-body">
-                  <p className="live-feed-row-action">{auditActionLabel(e.action)}</p>
-                  <p className="live-feed-row-meta">
-                    {e.actor}
-                    <span className="live-feed-row-dot">·</span>
-                    {timeAgo(e.ts)}
-                  </p>
-                </div>
-              </div>
-            );
-          })
+          <ol>
+            {entries.map((e) => {
+              const prefix = e.action.split(".")[0];
+              const Icon = BANK_ACTIVITY_ACTION_ICON[prefix] || History;
+              const tone = AUDIT_ACTION_TONE[prefix] || "slate";
+              return (
+                <li key={e.id}>
+                  <button
+                    type="button"
+                    className={`ov-activity-row tone-${tone}${newIds.has(e.id) ? " is-new" : ""}`}
+                    onClick={() => setOpenEntry(e)}
+                  >
+                    <span className="ov-activity-icon" aria-hidden="true"><Icon size={14} /></span>
+                    <span className="ov-activity-body">
+                      <span className="ov-activity-action">{bankActivityActionLabel(e.action)}</span>
+                      <span className="ov-activity-actor">{e.actor}</span>
+                    </span>
+                    <time className="ov-activity-time" dateTime={e.ts}>{timeAgo(e.ts)}</time>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
         )}
       </div>
-    </aside>
+      {openEntry && (
+        <ActivityDetail
+          entry={openEntry}
+          entries={entries}
+          students={students}
+          bankers={bankers}
+          onClose={() => setOpenEntry(null)}
+          onOpenStudent={onOpenStudent}
+        />
+      )}
+    </section>
   );
 }
 
-function AuditLogSection() {
+function AuditLogSection({ students, bankers, onOpenStudent }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [logErr, setLogErr] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
+  const [openEntry, setOpenEntry] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -3840,7 +4651,7 @@ function AuditLogSection() {
           <Filter size={13} />
           <select className="advisor-filter-select" value={actionFilter} onChange={(e) => setActionFilter(e.target.value)}>
             <option value="all">All actions</option>
-            {actionOptions.map((a) => <option key={a} value={a}>{auditActionLabel(a)}</option>)}
+            {actionOptions.map((a) => <option key={a} value={a}>{bankActivityActionLabel(a)}</option>)}
           </select>
         </div>
         <button className="btn btn-secondary btn-sm" onClick={load} disabled={loading}>
@@ -3876,22 +4687,32 @@ function AuditLogSection() {
             <span>When</span>
           </div>
           {filtered.map((e) => (
-            <div className="audit-row" key={e.id}>
+            <button type="button" className="audit-row audit-row--button" key={e.id} onClick={() => setOpenEntry(e)}>
               <span className="audit-action">
                 <span className={`audit-dot audit-dot--${e.action.split(".")[0]}`} />
-                {auditActionLabel(e.action)}
+                {bankActivityActionLabel(e.action)}
               </span>
               <span className="audit-actor">
                 {e.actor}
                 {e.role && <span className="audit-role-pill">{e.role}</span>}
               </span>
-              <span className="audit-target" title={e.target}>{e.target || "—"}</span>
+              <span className="audit-target" title={e.target}>{e.target ? displayName(e.target) : "—"}</span>
               <span className="audit-time">
                 {new Date(e.ts).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
               </span>
-            </div>
+            </button>
           ))}
         </div>
+      )}
+      {openEntry && (
+        <ActivityDetail
+          entry={openEntry}
+          entries={entries}
+          students={students}
+          bankers={bankers}
+          onClose={() => setOpenEntry(null)}
+          onOpenStudent={onOpenStudent}
+        />
       )}
     </div>
   );
@@ -3915,7 +4736,23 @@ function AuditLogSection() {
 const BANK_ACTIVITY_ACTION_LABELS = {
   ...AUDIT_ACTION_LABELS,
   "document.upload": "Uploaded a document",
+  "document.rejected": "Upload rejected by the check",
+  "document.view": "Opened a document",
+  "document.download": "Downloaded a document",
+  "document.download_all": "Downloaded all documents",
+  "document.download_bundle": "Downloaded a document bundle",
+  "document.extract": "Read a document automatically",
+  "document_reader.extract": "Used the Document Reader",
   "student.save": "Saved application details",
+  "auth.login_failed": "Failed sign-in attempt",
+  "admin.update": "Updated an account",
+  "admin.change_own_email": "Changed own email",
+  "company.create": "Created a company",
+  "company.update": "Updated company details",
+  "company.suspend": "Suspended a company",
+  "company.reactivate": "Reactivated a company",
+  "company.logo_update": "Updated the company logo",
+  "company.logo_remove": "Removed the company logo",
   "summary.generate": "Generated application form",
 };
 function bankActivityActionLabel(action) {
@@ -3941,13 +4778,14 @@ function studentAuditTarget(s) {
   return sanitizeFolderKeyPart(buildFolderKey(s.name, s.email || s.phone || ""));
 }
 
-function BankActivityReportSection({ students, bankers }) {
+function BankActivityReportSection({ students, bankers, onOpenStudent }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [selectedBank, setSelectedBank] = useState("all");
   const [actionFilter, setActionFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [openEntry, setOpenEntry] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -4081,7 +4919,7 @@ function BankActivityReportSection({ students, bankers }) {
             const Icon = BANK_ACTIVITY_ACTION_ICON[prefix] || History;
             const tone = ACTOR_ROLE_TONE[e.role] || "slate";
             return (
-              <div key={e.id} className={`bar-row tone-${tone}`}>
+              <button type="button" key={e.id} className={`bar-row bar-row--button tone-${tone}`} onClick={() => setOpenEntry(e)}>
                 <span className="bar-row-rail">
                   <span className="bar-row-marker"><Icon size={13} /></span>
                   <span className="bar-row-line" />
@@ -4104,28 +4942,50 @@ function BankActivityReportSection({ students, bankers }) {
                     {e.studentName && (
                       <>
                         <span className="bar-row-dot">·</span>
-                        {e.studentName}
+                        {displayName(e.studentName)}
                       </>
                     )}
                     <span className="bar-row-dot">·</span>
                     {new Date(e.ts).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                   </p>
                 </div>
-              </div>
+                <ChevronRight size={16} className="bar-row-chevron" aria-hidden="true" />
+              </button>
             );
           })}
         </div>
+      )}
+      {openEntry && (
+        <ActivityDetail
+          entry={openEntry}
+          entries={entries}
+          students={students}
+          bankers={bankers}
+          label={bankActivityActionLabel}
+          onClose={() => setOpenEntry(null)}
+          onOpenStudent={onOpenStudent}
+        />
       )}
     </div>
   );
 }
 
 export default function Admin() {
-  const { isAdmin, adminRole, adminAdvisorName, adminName, logoutAdmin, clearStudent } = useStudent();
+  const { isAdmin, adminRole, adminAdvisorName, adminName, adminAccount, updateAdminAccount, logoutAdmin, clearStudent } = useStudent();
+  // Keeps role, company and logo current for sessions started before a change.
+  const refreshAccount = useCallback(async () => {
+    const r = await callAPI("GET", "/api/auth/me");
+    if (r.success && r.account) updateAdminAccount(r.account);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => { void refreshAccount(); }, [refreshAccount]);
+  const adminId = adminAccount?.id || "";
   const navigate = useNavigate();
 
   const [section, setSection] = useState("dashboard");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Frozen at mount rather than read fresh on every render — a "this week"
   // stat doesn't need millisecond accuracy, and calling Date.now() directly
@@ -4141,6 +5001,12 @@ export default function Admin() {
   const [bankerFilter, setBankerFilter] = useState("all");
   const [loanStatusFilter, setLoanStatusFilter] = useState("all");
   const [consultancyFilter, setConsultancyFilter] = useState("");
+  const [companyFilter, setCompanyFilter] = useState("all");
+  // Superadmin: every company with its team counts (dashboard + filters)
+  const [companies, setCompanies] = useState([]);
+  // Students a profile opened from the dashboard can step through; null =
+  // the Students table's current (filtered) list.
+  const [profileList, setProfileList] = useState(null);
   const [bankers, setBankers] = useState([]);
   const [allAdvisors, setAllAdvisors] = useState([]);
   // Superadmin: count of ALL requests awaiting their review. Advisor: count
@@ -4175,6 +5041,11 @@ export default function Admin() {
   useEffect(() => {
     if (!isAdmin) navigate("/admin-login");
   }, [isAdmin, navigate]);
+
+  useEffect(() => {
+    if (adminRole !== "superadmin") return;
+    callAPI("GET", "/api/companies").then((r) => { if (r.success) setCompanies(r.companies || []); });
+  }, [adminRole]);
 
   const loadStudents = useCallback(async () => {
     setLoading(true);
@@ -4322,10 +5193,13 @@ export default function Admin() {
     if (url) window.open(url, "_blank");
   };
 
+  // A full page load to the home page: it gets past this route's guard
+  // (which would otherwise bounce to the sign-in page) and drops every
+  // piece of student data still held in memory.
   const handleLogout = () => {
     clearStudent();
     logoutAdmin();
-    navigate("/");
+    window.location.replace("/");
   };
 
   // Flags students sharing a non-empty email or phone with another student —
@@ -4366,6 +5240,9 @@ export default function Admin() {
     complete: scopedStudents.filter((s) => getOverallProgress(s) === 100).length,
     inProgress: scopedStudents.filter((s) => { const p = getOverallProgress(s); return p > 0 && p < 100; }).length,
     notStarted: scopedStudents.filter((s) => getOverallProgress(s) === 0).length,
+    avgProgress: scopedStudents.length
+      ? Math.round(scopedStudents.reduce((sum, s) => sum + getOverallProgress(s), 0) / scopedStudents.length)
+      : 0,
     // Real, not fabricated — a genuine count of students created in the last
     // 7 days, used as the KPI card's trend line instead of a fake "vs last
     // month" percentage we have no historical snapshots to actually compute.
@@ -4406,13 +5283,15 @@ export default function Admin() {
       !search ||
       (s.name || "").toLowerCase().includes(q) ||
       (s.email || "").toLowerCase().includes(q) ||
-      (s.phone || "").includes(q);
+      (s.phone || "").includes(q) ||
+      getApplicationId(s).toLowerCase().includes(q);
     const p = getOverallProgress(s);
     const matchesFilter =
       filter === "all" ||
       (filter === "complete" && p === 100) ||
       (filter === "progress" && p > 0 && p < 100) ||
-      (filter === "notStarted" && p === 0);
+      (filter === "notStarted" && p === 0) ||
+      (filter === "incomplete" && p < 100);
     const matchesLoanStatus =
       loanStatusFilter === "all" ||
       (loanStatusFilter === "pending" && (!s.loanStatus || s.loanStatus === "pending")) ||
@@ -4425,7 +5304,8 @@ export default function Admin() {
       (consultancyFilter === "__none__"
         ? !consultancyValue
         : consultancyValue === consultancyFilter);
-    return matchesSearch && matchesFilter && matchesLoanStatus && matchesConsultancy;
+    const matchesCompany = companyFilter === "all" || s.company?.id === companyFilter;
+    return matchesSearch && matchesFilter && matchesLoanStatus && matchesConsultancy && matchesCompany;
   });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -4524,29 +5404,86 @@ export default function Admin() {
 
   if (!isAdmin) return null;
 
-  const roleEyebrow = adminRole === "advisor" ? `Advisor — ${adminAdvisorName}` : "Super Admin";
+  const isAdvisor = adminRole === "advisor";
   const SECTION_META = {
     dashboard: {
-      title: "Admin Dashboard",
-      sub: adminRole === "advisor"
-        ? `Showing students assigned to ${adminAdvisorName} only.`
-        : "Manage all students, applications and documents from one place.",
+      title: `${greeting()}, ${(adminName || "").split(/\s+/)[0] || "there"}`,
+      sub: `${new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })} · here’s where every application stands`,
     },
     students: {
-      eyebrow: roleEyebrow,
-      title: "Students",
-      sub: adminRole === "advisor" ? `Advisor: ${adminAdvisorName} — showing your students only` : "Search, filter, and manage every student file",
+      title: isAdvisor ? "My Students" : "Students",
+      sub: isAdvisor ? "Search, filter and manage the students assigned to you." : "Search, filter, and manage every student file.",
     },
-    advisors: { eyebrow: roleEyebrow, title: "Advisors", sub: "Workload and progress by advisor" },
-    banks:    { eyebrow: roleEyebrow, title: "Banks & Lenders", sub: "Manage loan officers and control which students each one can see" },
-    docReader: { eyebrow: roleEyebrow, title: "Document Reader", sub: "Extract structured data from a 10th or 12th certificate, passport, Aadhaar or PAN card in seconds" },
-    audit:    { eyebrow: roleEyebrow, title: "Audit Log", sub: "Who did what, and when" },
-    bankActivity: { eyebrow: roleEyebrow, title: "Bank Activity", sub: "Student, advisor, and banker actions, grouped by lender" },
+    advisors: { title: "Advisors", sub: "Workload and progress by advisor" },
+    banks:    { title: "Banks & Lenders", sub: "Manage loan officers and control which students each one can see" },
+    team: { title: "Team", sub: "Who can sign in, their role and their company" },
+    companies: adminRole === "superadmin"
+      ? { title: "Companies", sub: "Partner companies, their teams and signup links" }
+      : { title: "Company", sub: "Your company’s details, logo and signup link" },
+    documents: { title: "Document Management", sub: "Every student document, sorted into folders by type" },
+    docReader: { title: "Document Reader", sub: "Extract structured data from a 10th or 12th certificate, passport, Aadhaar or PAN card in seconds" },
+    audit:    { title: "Audit Log", sub: "Who did what, and when" },
+    bankActivity: { title: "Bank Activity", sub: "Student, advisor, and banker actions, grouped by lender" },
   };
   const activeMeta = SECTION_META[section] || SECTION_META.dashboard;
+  const showStudents = section === "students";
+  const showAdvisorCol = !isAdvisor;
+
+  // Quick-filter pills: each is a preset over the existing document-progress
+  // and loan-status filters, so the full Filter panel stays in sync.
+  const pendingDocs = stats.inProgress + stats.notStarted;
+  const QUICK_TABS = [
+    { id: "all", label: "All Students", count: stats.total, doc: "all", loan: "all" },
+    { id: "pendingDocs", label: "Pending Docs", count: pendingDocs, doc: "incomplete", loan: "all" },
+    { id: "inprocess", label: "In Process", count: loanStats.inprocess, doc: "all", loan: "inprocess" },
+    { id: "sanctioned", label: "Sanctioned", count: loanStats.sanctioned, doc: "all", loan: "sanctioned" },
+  ];
+  const activeQuickTab = QUICK_TABS.find((t) => t.doc === filter && t.loan === loanStatusFilter)?.id || null;
+  const activeFilterCount =
+    [filter !== "all", loanStatusFilter !== "all", !!consultancyFilter, advisorFilter !== "all", bankerFilter !== "all", companyFilter !== "all"].filter(Boolean).length
+    - (activeQuickTab && activeQuickTab !== "all" ? 1 : 0);
+  const clearAllFilters = () => {
+    setFilter("all");
+    setLoanStatusFilter("all");
+    setConsultancyFilter("");
+    setAdvisorFilter("all");
+    setBankerFilter("all");
+    setCompanyFilter("all");
+  };
+
+  // Dashboard → the Students page with exactly this slice showing.
+  const openStudents = ({ doc = "all", loan = "all", company = "all", advisor = "all", query = "" } = {}) => {
+    clearAllFilters();
+    setFilter(doc);
+    setLoanStatusFilter(loan);
+    setCompanyFilter(company);
+    if (adminRole !== "advisor") setAdvisorFilter(advisor);
+    setSearch(query);
+    setPage(1);
+    setSection("students");
+    window.scrollTo({ top: 0 });
+  };
+
+  // Open a student's profile over whatever page is showing; `list` is what
+  // its previous / next buttons step through.
+  const openProfile = (s, list = [s]) => {
+    setProfileList(list.map(studentKey));
+    setExpandedKey(studentKey(s));
+  };
+
+  // From an activity entry: back to the dashboard with just this student
+  // listed and their details expanded.
+  const openStudentFile = (s) => openProfile(s);
+
+
+  const headerMenuItems = [
+    ...(rootUrl ? [{ label: "Open root Drive", icon: FolderOpen, onSelect: () => window.open(rootUrl, "_blank", "noreferrer") }] : []),
+    { label: "Banker access", icon: Send, onSelect: () => setSection("banks") },
+    { label: "Settings", icon: Settings, onSelect: () => setShowSettings(true) },
+  ];
 
   return (
-    <div className="admin-shell">
+    <div className="admin-shell theme-orbit">
       <AdminSidebar
         section={section}
         setSection={setSection}
@@ -4555,80 +5492,45 @@ export default function Admin() {
         onOpenSettings={() => setShowSettings(true)}
         onLogout={handleLogout}
         mobileOpen={mobileNavOpen}
-        onCloseMobile={() => setMobileNavOpen(false)}
+        onCloseMobile={closeMobileNav}
         setLoanStatusFilter={setLoanStatusFilter}
-        setDocFilter={setFilter}
         pendingBankerRequests={pendingBankerRequests}
       />
 
     <div className="admin-page admin-page--shell">
-      {/* Same ambient background stack as the Home page (art + color fields +
-          grid + veil) — fixed rather than absolute since this page actually
-          scrolls, unlike Home's hero. */}
-      <div className="admin-bg" aria-hidden="true">
-        <span className="admin-bg__art" style={{ backgroundImage: `url(${heroImg})` }} />
-        <span className="admin-bg__field admin-bg__field--indigo" />
-        <span className="admin-bg__field admin-bg__field--amber" />
-        <span className="admin-bg__grid" />
-        <span className="admin-bg__veil" />
-      </div>
+      <AdminMobileBar onOpenMenu={() => setMobileNavOpen(true)} menuOpen={mobileNavOpen} />
 
-      <AdminTopbar
-        search={search}
-        setSearch={setSearch}
-        section={section}
-        setSection={setSection}
-        adminName={adminName}
-        adminRole={adminRole}
-        onOpenSettings={() => setShowSettings(true)}
-        onLogout={handleLogout}
-      />
-      <div className="admin-container">
-        {/* Header */}
-        <div className="admin-header animate-fade-in">
-          <div className="admin-header-left">
-            <div className="admin-title-row">
-              <button className="admin-mobile-nav-toggle" onClick={() => setMobileNavOpen(true)} aria-label="Open menu">
-                <Menu size={18} />
+      <main className="admin-container">
+        <div className="adm-header">
+          <div className="adm-header-text">
+            <h1 className="adm-title">{activeMeta.title}</h1>
+            <p className="adm-sub">{activeMeta.sub}</p>
+          </div>
+
+          {(showStudents || section === "dashboard") && (
+            <div className="adm-header-actions">
+              <button
+                type="button"
+                className="adm-icon-btn adm-icon-btn--outline"
+                onClick={loadStudents}
+                disabled={loading}
+                aria-label="Refresh students"
+                title="Refresh students"
+              >
+                <RefreshCw size={18} className={loading ? "spin" : ""} />
               </button>
-              <div>
-                <p className="admin-eyebrow">
-                  {section === "dashboard" ? `Welcome back${adminName ? `, ${adminName.split(" ")[0]}` : ""}` : activeMeta.eyebrow}
-                </p>
-                <h1 className="admin-title">{activeMeta.title}</h1>
-                <p className="admin-sub">{activeMeta.sub}</p>
-              </div>
+              <ActionsMenu
+                label="More actions"
+                items={headerMenuItems}
+                icon={MoreHorizontal}
+                className="adm-icon-btn adm-icon-btn--outline"
+              />
+              <button type="button" className="adm-btn adm-btn--primary adm-add-btn" onClick={() => navigate("/")}>
+                <Plus size={18} />
+                <span>Add Student</span>
+              </button>
             </div>
-          </div>
-
-          <div className="header-actions">
-            {(section === "dashboard" || section === "students") && (
-              <>
-                <button className="btn btn-secondary btn-sm" onClick={loadStudents} disabled={loading}>
-                  <RefreshCw size={16} className={loading ? "spin" : ""} />
-                  <span className="btn-label">Refresh</span>
-                </button>
-                <button className="btn btn-secondary btn-sm" onClick={() => navigate("/")}>
-                  <UserPlus size={16} />
-                  <span className="btn-label">Add Student</span>
-                </button>
-                {rootUrl && (
-                  <a className="btn btn-primary btn-sm" href={rootUrl} target="_blank" rel="noreferrer">
-                    <FolderOpen size={16} />
-                    <span className="btn-label">Root Drive</span>
-                  </a>
-                )}
-                <button className="btn btn-secondary btn-sm" onClick={() => setSection("banks")}>
-                  <Send size={16} />
-                  <span className="btn-label">Banker Access</span>
-                </button>
-                <button className="btn btn-secondary btn-sm" onClick={() => setShowSettings(true)}>
-                  <Settings size={16} />
-                  <span className="btn-label">Settings</span>
-                </button>
-              </>
-            )}
-          </div>
+          )}
         </div>
 
         {section === "dashboard" && (
@@ -4638,37 +5540,33 @@ export default function Admin() {
               adminRole={adminRole}
               onOpen={() => { setSection("banks"); setBankPanel("requests"); }}
             />
-
-            {/* Financing partner banks — full width, scrolling strip */}
-            <PartnerBanksShowcase />
-
-            <div className="dashboard-grid">
-              {/* 3/4: Document Progress on top, Loan Application Status below */}
-              <div className="dashboard-grid-main">
-                <StatsPanel
-                  stats={stats}
-                  loanStats={loanStats}
-                  filter={filter}
-                  setFilter={setFilter}
-                  loanStatusFilter={loanStatusFilter}
-                  setLoanStatusFilter={setLoanStatusFilter}
-                />
-              </div>
-
-              {/* Remaining 1/4: the live activity log, running the full height */}
-              {adminRole === "superadmin" && <LiveActivityFeed />}
-            </div>
+            <DashboardHome
+              students={scopedStudents}
+              loading={loading && students.length === 0}
+              adminRole={adminRole}
+              companies={companies}
+              bankers={bankers}
+              stats={stats}
+              loanStats={loanStats}
+              onOpenStudents={openStudents}
+              onOpenProfile={openProfile}
+              onOpenCompanies={() => setSection("companies")}
+              onOpenAudit={() => setSection("audit")}
+              onOpenStudentFile={openStudentFile}
+            />
           </>
         )}
 
-        {section === "advisors" && adminRole === "superadmin" && (
+        {section === "advisors" && isAdminLevel(adminRole) && (
           <AdvisorsSection students={students} allAdvisors={allAdvisors} />
         )}
 
-        {section === "audit" && adminRole === "superadmin" && <AuditLogSection />}
+        {section === "audit" && isAdminLevel(adminRole) && (
+          <AuditLogSection students={students} bankers={bankers} onOpenStudent={openStudentFile} />
+        )}
 
-        {section === "bankActivity" && adminRole === "superadmin" && (
-          <BankActivityReportSection students={students} bankers={bankers} />
+        {section === "bankActivity" && isAdminLevel(adminRole) && (
+          <BankActivityReportSection students={students} bankers={bankers} onOpenStudent={openStudentFile} />
         )}
 
         {section === "banks" && (
@@ -4686,242 +5584,335 @@ export default function Admin() {
 
         {section === "docReader" && <DocumentReader />}
 
-        {(section === "dashboard" || section === "students") && (
-        <>
-        {/* Toolbar */}
-        <div className="admin-toolbar">
-          <div className="toolbar-filter">
-            {[
-              { id: "all", label: "All" },
-              { id: "complete", label: "Complete" },
-              { id: "progress", label: "In Progress" },
-              { id: "notStarted", label: "Not Started" },
-            ].map((f) => (
+        {section === "documents" && isAdminLevel(adminRole) && <DocumentLibrary students={students} />}
+
+        {section === "team" && isAdminLevel(adminRole) && (
+          <TeamSection adminRole={adminRole} adminId={adminId} onTeamChanged={() => { loadBankers(); }} />
+        )}
+
+        {section === "companies" && isAdminLevel(adminRole) && (
+          <CompaniesSection students={students} adminRole={adminRole} onChanged={refreshAccount} />
+        )}
+
+        {showStudents && (
+        <section className="adm-students" aria-label="Students">
+          <div className="adm-tabs" role="group" aria-label="Quick filters">
+            {QUICK_TABS.map((t) => (
               <button
-                key={f.id}
-                className={`filter-chip${filter === f.id ? " active" : ""}`}
-                onClick={() => setFilter(f.id)}
+                key={t.id}
+                type="button"
+                className={`adm-tab${activeQuickTab === t.id ? " is-active" : ""}`}
+                aria-pressed={activeQuickTab === t.id}
+                onClick={() => { setFilter(t.doc); setLoanStatusFilter(t.loan); }}
               >
-                {f.label}
+                {t.label} <span className="adm-tab-count">({t.count})</span>
               </button>
             ))}
           </div>
 
-          <div className="toolbar-dropdowns">
-            {/* Consultancy filter — visible to both advisor and superadmin */}
-            <select
-              className={`advisor-filter-select consultancy-filter-select${consultancyFilter ? " has-value" : ""}`}
-              value={consultancyFilter}
-              onChange={(e) => setConsultancyFilter(e.target.value)}
-              aria-label="Filter students by consultancy"
-            >
-              <option value="">All Consultancies</option>
-              {consultancyList.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-              <option value="__none__">— No consultancy set —</option>
-            </select>
-
-            {adminRole !== "advisor" && advisorList.length > 0 && (
-              <select
-                className="advisor-filter-select"
-                value={advisorFilter}
-                onChange={(e) => setAdvisorFilter(e.target.value)}
-              >
-                <option value="all">All Advisors</option>
-                {advisorList.map((a) => (
-                  <option key={a} value={a}>{a}</option>
-                ))}
-              </select>
-            )}
-
-            {bankers.length > 0 && (
-              <select
-                className="advisor-filter-select banker-filter-select"
-                value={bankerFilter}
-                onChange={(e) => setBankerFilter(e.target.value)}
-              >
-                <option value="all">All Bankers</option>
-                {bankers.map((b) => (
-                  <option key={b.name} value={b.name}>{b.name}</option>
-                ))}
-              </select>
-            )}
-
-            <select
-              className="advisor-filter-select loan-status-filter-select"
-              value={loanStatusFilter}
-              onChange={(e) => setLoanStatusFilter(e.target.value)}
-            >
-              <option value="all">All Loan Status</option>
-              <option value="pending">Pending</option>
-              <option value="inprocess">In Process</option>
-              <option value="sanctioned">Sanctioned</option>
-              <option value="disbursed">Disbursed</option>
-              <option value="rejected">Rejected</option>
-              <option value="dropped">Dropped</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Error banner */}
-        {error && (
-          <div className="admin-error animate-fade-in">
-            <AlertCircle size={15} />
-            {error}
-            <button className="close-err" onClick={() => setError("")}><X size={13} /></button>
-          </div>
-        )}
-
-        {/* Table */}
-        {selectedKeys.size > 0 && (
-          <div className="bulk-toolbar animate-fade-in">
-            <span className="bulk-toolbar-count">Selected: {selectedKeys.size}</span>
-            <div className="bulk-toolbar-actions">
-              <button className="btn btn-secondary btn-sm" onClick={handleBulkDownload} disabled={bulkBusy}>
-                <Download size={13} /> <span className="btn-label">Download</span>
-              </button>
-              <button className="btn btn-danger btn-sm" onClick={handleBulkDelete} disabled={bulkBusy}>
-                <Trash2 size={13} /> <span className="btn-label">{bulkBusy ? "Working…" : "Delete"}</span>
-              </button>
-            </div>
-            <button className="bulk-toolbar-clear" onClick={() => setSelectedKeys(new Set())}>
-              <X size={14} />
-            </button>
-          </div>
-        )}
-
-        <div className="table-section-head">
-          <p className="table-section-title">
-            Students <span className="table-section-count">{filtered.length}</span>
-          </p>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={handleExportCsv} disabled={filtered.length === 0}>
-            <Download size={14} /> <span className="btn-label">Export</span>
-          </button>
-        </div>
-
-        <div className="admin-table-wrap animate-fade-in">
-        <div className="admin-table-scroll">
-          <div className="table-head">
-            <div className="th th-check">
-              <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} aria-label="Select all students on this page" />
-            </div>
-            <div className="th th-name">Student</div>
-            <div className="th th-consultancy">Consultancy</div>
-            <div className="th th-advisor">Advisor</div>
-            <div className="th th-status">Loan Status</div>
-            <div className="th th-progress">Document Progress</div>
-            <div className="th th-files">Files</div>
-            <div className="th th-updated">Updated On</div>
-            <div className="th th-actions">Actions</div>
-          </div>
-
-          {loading ? (
-            <div className="admin-loading">
-              <div className="loading-dots"><span /><span /><span /></div>
-              Loading students…
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="admin-empty">
-              <div className="admin-empty-icon"><Users size={28} /></div>
-              <h3>
-                {search || filter !== "all" || consultancyFilter
-                  ? "No students match"
-                  : adminRole === "advisor"
-                    ? "No students assigned yet"
-                    : "No students yet"}
-              </h3>
-              <p>
-                {consultancyFilter === "__none__"
-                  ? "Every student has a consultancy set."
-                  : consultancyFilter
-                    ? `No students found for consultancy "${consultancyFilter}".`
-                    : search || filter !== "all"
-                      ? "Try adjusting your search or filter."
-                      : adminRole === "advisor"
-                        ? `No students have selected ${adminAdvisorName} as their advisor yet.`
-                        : "Add a student to get started."}
-              </p>
-              {(search || filter !== "all" || consultancyFilter) && (
-                <button
-                  className="btn btn-secondary btn-sm"
-                  style={{ marginTop: 8 }}
-                  onClick={() => { setSearch(""); setFilter("all"); setConsultancyFilter(""); }}
-                >
-                  Clear filters
+          <div className="adm-toolbar">
+            <label className="adm-search">
+              <span className="sr-only">Search students</span>
+              <Search size={18} aria-hidden="true" />
+              <input
+                type="search"
+                placeholder="Search name, email, phone, app ID…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search && (
+                <button type="button" className="adm-search-clear" onClick={() => setSearch("")} aria-label="Clear search">
+                  <X size={14} />
                 </button>
               )}
+            </label>
+            <div className="adm-toolbar-btns">
+              <button
+                type="button"
+                className={`adm-btn adm-btn--outline${filtersOpen ? " is-pressed" : ""}`}
+                aria-expanded={filtersOpen}
+                aria-controls="adm-filter-panel"
+                onClick={() => setFiltersOpen((o) => !o)}
+              >
+                <Filter size={17} />
+                <span>Filter</span>
+                {activeFilterCount > 0 && <span className="adm-btn-badge" aria-label={`${activeFilterCount} active`}>{activeFilterCount}</span>}
+                <ChevronDown size={15} className={`adm-btn-chevron${filtersOpen ? " is-open" : ""}`} />
+              </button>
+              <button
+                type="button"
+                className="adm-btn adm-btn--outline"
+                onClick={handleExportCsv}
+                disabled={filtered.length === 0}
+                title="Download the students currently shown as a CSV file"
+              >
+                <Upload size={17} />
+                <span>Export</span>
+              </button>
             </div>
-          ) : (
-            <div className="student-list">
-              {paginated.map((s) => {
-                const k = studentKey(s);
-                return (
-                  <StudentRow
-                    key={k}
-                    student={s}
-                    isOpen={expandedKey === k}
-                    onToggle={() => setExpandedKey((cur) => (cur === k ? null : k))}
-                    selected={selectedKeys.has(k)}
-                    onToggleSelect={() => toggleSelectOne(k)}
-                    onDelete={(e) => { if (e) e.stopPropagation(); setConfirmDelete(s); }}
-                    onOpenDrive={(e) => { if (e) e.stopPropagation(); openDriveFolder(s); }}
-                    onViewReport={(e) => { if (e) e.stopPropagation(); setReportStudent(s); }}
-                    onSendToBank={(e) => { if (e) e.stopPropagation(); setBankStudent(s); }}
-                    onLoanStatusUpdate={(e) => { if (e) e.stopPropagation(); setLoanStatusStudent(s); }}
-                    onRecoverMeta={(e) => { if (e) e.stopPropagation(); setRecoverStudent(s); }}
-                    canEditConsultancy={adminRole === "advisor" || adminRole === "superadmin"}
-                    onConsultancySave={(value) => handleConsultancySave(s, value)}
-                    consultancySuggestions={consultancyList}
-                    canEditAdvisor={adminRole === "superadmin"}
-                    onAdvisorSave={(value) => handleAdvisorSave(s, value)}
-                    advisorOptions={allAdvisors}
-                    isDuplicate={isDuplicateStudent(s)}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </div>
+          </div>
 
-          {!loading && filtered.length > 0 && (
-            <div className="table-pagination">
-              <span className="table-pagination-summary">
-                Showing {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)} of {filtered.length} students
-              </span>
-              <div className="table-pagination-controls">
-                <button className="pg-btn" aria-label="Previous page" disabled={safePage === 1} onClick={() => setPage(safePage - 1)}>
-                  <ChevronLeft size={16} />
-                </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1)
-                  .filter((n) => n === 1 || n === totalPages || Math.abs(n - safePage) <= 1)
-                  .map((n, i, arr) => (
-                    <span key={n} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      {i > 0 && arr[i - 1] !== n - 1 && <span className="pg-ellipsis">…</span>}
-                      <button className={`pg-btn pg-num${n === safePage ? " active" : ""}`} onClick={() => setPage(n)}>{n}</button>
-                    </span>
-                  ))}
-                <button className="pg-btn" aria-label="Next page" disabled={safePage === totalPages} onClick={() => setPage(safePage + 1)}>
-                  <ChevronRight size={16} />
-                </button>
-                <select
-                  className="pg-size-select"
-                  aria-label="Students per page"
-                  value={pageSize}
-                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                >
-                  <option value={10}>10 / page</option>
-                  <option value={20}>20 / page</option>
-                  <option value={50}>50 / page</option>
+          {filtersOpen && (
+            <div className="adm-filter-panel" id="adm-filter-panel">
+              <label className="adm-field">
+                <span>Document progress</span>
+                <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+                  <option value="all">All</option>
+                  <option value="complete">Completed</option>
+                  <option value="progress">In progress</option>
+                  <option value="notStarted">Not started</option>
+                  <option value="incomplete">Pending (not complete)</option>
                 </select>
-              </div>
+              </label>
+              <label className="adm-field">
+                <span>Loan status</span>
+                <select value={loanStatusFilter} onChange={(e) => setLoanStatusFilter(e.target.value)}>
+                  <option value="all">All loan status</option>
+                  <option value="pending">Pending</option>
+                  <option value="inprocess">In Process</option>
+                  <option value="sanctioned">Sanctioned</option>
+                  <option value="disbursed">Disbursed</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="dropped">Dropped</option>
+                </select>
+              </label>
+              {adminRole === "superadmin" && companies.length > 1 && (
+                <label className="adm-field">
+                  <span>Company</span>
+                  <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)}>
+                    <option value="all">All companies</option>
+                    {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </label>
+              )}
+              <label className="adm-field">
+                <span>Consultancy</span>
+                <select value={consultancyFilter} onChange={(e) => setConsultancyFilter(e.target.value)}>
+                  <option value="">All consultancies</option>
+                  {consultancyList.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                  <option value="__none__">No consultancy set</option>
+                </select>
+              </label>
+              {!isAdvisor && advisorList.length > 0 && (
+                <label className="adm-field">
+                  <span>Advisor</span>
+                  <select value={advisorFilter} onChange={(e) => setAdvisorFilter(e.target.value)}>
+                    <option value="all">All advisors</option>
+                    {advisorList.map((a) => (
+                      <option key={a} value={a}>{a}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {bankers.length > 0 && (
+                <label className="adm-field">
+                  <span>Shared with banker</span>
+                  <select value={bankerFilter} onChange={(e) => setBankerFilter(e.target.value)}>
+                    <option value="all">All bankers</option>
+                    {bankers.map((b) => (
+                      <option key={b.name} value={b.name}>{b.name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <button type="button" className="adm-btn adm-btn--ghost adm-filter-reset" onClick={clearAllFilters}>
+                Reset filters
+              </button>
             </div>
           )}
-        </div>
-        </>
+
+          {error && (
+            <div className="admin-error animate-fade-in" role="alert">
+              <AlertCircle size={15} />
+              {error}
+              <button className="close-err" onClick={() => setError("")} aria-label="Dismiss error"><X size={13} /></button>
+            </div>
+          )}
+
+          {selectedKeys.size > 0 && (
+            <div className="bulk-toolbar animate-fade-in">
+              <span className="bulk-toolbar-count">Selected: {selectedKeys.size}</span>
+              <div className="bulk-toolbar-actions">
+                <button className="btn btn-secondary btn-sm" onClick={handleBulkDownload} disabled={bulkBusy}>
+                  <Download size={13} /> <span className="btn-label">Download</span>
+                </button>
+                {isAdminLevel(adminRole) && (
+                  <button className="btn btn-danger btn-sm" onClick={handleBulkDelete} disabled={bulkBusy}>
+                    <Trash2 size={13} /> <span className="btn-label">{bulkBusy ? "Working…" : "Delete"}</span>
+                  </button>
+                )}
+              </div>
+              <button className="bulk-toolbar-clear" onClick={() => setSelectedKeys(new Set())} aria-label="Clear selection">
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
+          <div className="adm-table">
+            <div className="adm-table-scroll">
+              <div className={`adm-thead${showAdvisorCol ? " adm-row--advisor" : ""}`}>
+                <div className="adm-th adm-th--check">
+                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} aria-label="Select all students on this page" />
+                  <span className="adm-th-mobile">Select all on this page</span>
+                </div>
+                <div className="adm-th">Student Name</div>
+                <div className="adm-th">Application ID</div>
+                <div className="adm-th">Destination</div>
+                {showAdvisorCol && <div className="adm-th adm-th--advisor">Advisor</div>}
+                <div className="adm-th">Document Status</div>
+                <div className="adm-th">Loan Status</div>
+                <div className="adm-th">Updated On</div>
+                <div className="adm-th adm-th--actions">Actions</div>
+              </div>
+
+              {loading ? (
+                <div className="admin-loading">
+                  <div className="loading-dots"><span /><span /><span /></div>
+                  Loading students…
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="admin-empty">
+                  <div className="admin-empty-icon"><Users size={28} /></div>
+                  <h3>
+                    {search || filter !== "all" || consultancyFilter || loanStatusFilter !== "all"
+                      ? "No students match"
+                      : isAdvisor
+                        ? "No students assigned yet"
+                        : "No students yet"}
+                  </h3>
+                  <p>
+                    {consultancyFilter === "__none__"
+                      ? "Every student has a consultancy set."
+                      : consultancyFilter
+                        ? `No students found for consultancy "${consultancyFilter}".`
+                        : search || filter !== "all" || loanStatusFilter !== "all"
+                          ? "Try adjusting your search or filter."
+                          : isAdvisor
+                            ? `No students have selected ${adminAdvisorName} as their advisor yet.`
+                            : "Add a student to get started."}
+                  </p>
+                  {(search || filter !== "all" || consultancyFilter || loanStatusFilter !== "all") && (
+                    <button
+                      className="adm-btn adm-btn--outline"
+                      onClick={() => { setSearch(""); clearAllFilters(); }}
+                    >
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="adm-tbody">
+                  {paginated.map((s) => {
+                    const k = studentKey(s);
+                    return (
+                      <StudentRow
+                        key={k}
+                        student={s}
+                        isOpen={expandedKey === k}
+                        onToggle={() => { setProfileList(null); setExpandedKey((cur) => (cur === k ? null : k)); }}
+                        selected={selectedKeys.has(k)}
+                        onToggleSelect={() => toggleSelectOne(k)}
+                        onDelete={(e) => { if (e) e.stopPropagation(); setConfirmDelete(s); }}
+                        onOpenDrive={(e) => { if (e) e.stopPropagation(); openDriveFolder(s); }}
+                        onViewReport={(e) => { if (e) e.stopPropagation(); setReportStudent(s); }}
+                        onSendToBank={(e) => { if (e) e.stopPropagation(); setBankStudent(s); }}
+                        onLoanStatusUpdate={(e) => { if (e) e.stopPropagation(); setLoanStatusStudent(s); }}
+                        onRecoverMeta={(e) => { if (e) e.stopPropagation(); setRecoverStudent(s); }}
+                        isDuplicate={isDuplicateStudent(s)}
+                        showAdvisor={showAdvisorCol}
+                        canManage={isAdminLevel(adminRole)}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {!loading && filtered.length > 0 && (
+              <div className="table-pagination">
+                <span className="table-pagination-summary">
+                  Showing {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)} of {filtered.length} students
+                </span>
+                <div className="table-pagination-controls">
+                  <button className="pg-btn" aria-label="Previous page" disabled={safePage === 1} onClick={() => setPage(safePage - 1)}>
+                    <ChevronLeft size={16} />
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((n) => n === 1 || n === totalPages || Math.abs(n - safePage) <= 1)
+                    .map((n, i, arr) => (
+                      <span key={n} className="pg-num-wrap">
+                        {i > 0 && arr[i - 1] !== n - 1 && <span className="pg-ellipsis">…</span>}
+                        <button
+                          className={`pg-btn pg-num${n === safePage ? " active" : ""}`}
+                          aria-label={`Page ${n}`}
+                          aria-current={n === safePage ? "page" : undefined}
+                          onClick={() => setPage(n)}
+                        >
+                          {n}
+                        </button>
+                      </span>
+                    ))}
+                  <button className="pg-btn" aria-label="Next page" disabled={safePage === totalPages} onClick={() => setPage(safePage + 1)}>
+                    <ChevronRight size={16} />
+                  </button>
+                  <select
+                    className="pg-size-select"
+                    aria-label="Students per page"
+                    value={pageSize}
+                    onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                  >
+                    <option value={10}>10 / page</option>
+                    <option value={20}>20 / page</option>
+                    <option value={50}>50 / page</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
         )}
-      </div>
+
+      </main>
     </div>
+
+      {/* Student profile — the selected row, with previous / next through the current list */}
+      {(() => {
+        const list = profileList
+          ? profileList.map((k) => scopedStudents.find((x) => studentKey(x) === k)).filter(Boolean)
+          : filtered;
+        const index = list.findIndex((x) => studentKey(x) === expandedKey);
+        if (index < 0) return null;
+        const s = list[index];
+        const go = (i) => () => setExpandedKey(studentKey(list[i]));
+        return (
+          <StudentProfile
+            key={studentKey(s)}
+            student={s}
+            position={{ index, total: list.length }}
+            onPrev={index > 0 ? go(index - 1) : null}
+            onNext={index < list.length - 1 ? go(index + 1) : null}
+            onClose={() => { setExpandedKey(null); setProfileList(null); }}
+            adminRole={adminRole}
+            bankers={bankers}
+            isDuplicate={isDuplicateStudent(s)}
+            canManage={isAdminLevel(adminRole)}
+            onLoanStatus={() => setLoanStatusStudent(s)}
+            onEligibility={() => setReportStudent(s)}
+            onShare={() => setBankStudent(s)}
+            onOpenDrive={() => openDriveFolder(s)}
+            onRecover={() => setRecoverStudent(s)}
+            onDelete={() => setConfirmDelete(s)}
+            canEditAdvisor={isAdminLevel(adminRole)}
+            onAdvisorSave={(value) => handleAdvisorSave(s, value)}
+            advisorOptions={allAdvisors}
+            canEditConsultancy={adminRole === "advisor" || isAdminLevel(adminRole)}
+            onConsultancySave={(value) => handleConsultancySave(s, value)}
+            consultancySuggestions={consultancyList}
+          />
+        );
+      })()}
 
       {/* Loan Status Modal */}
       {loanStatusStudent && (

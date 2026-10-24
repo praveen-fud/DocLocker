@@ -1,0 +1,504 @@
+/* ============================================================
+   Guided application — progress band, one step, action bar
+   (Orbit theme: the band at the top is the one bold element;
+   everything below it stays quiet)
+   ============================================================ */
+.aw {
+  --aw-max: 1080px;
+  /* Local fallbacks so the wizard still reads outside .theme-orbit */
+  --aw-gold: var(--orbit-gold, #f2a623);
+  --aw-gold-deep: var(--orbit-gold-deep, #8a5a00);
+  --aw-gold-tint: var(--orbit-gold-tint, #fff4de);
+  --aw-sapphire: var(--orbit-sapphire, var(--brand-primary));
+  --aw-sapphire-dark: var(--orbit-sapphire-dark, var(--blue-dark));
+  --aw-sapphire-light: var(--orbit-sapphire-light, var(--blue-light));
+  --aw-midnight: var(--orbit-midnight, var(--brand-navy));
+  --aw-iris: var(--orbit-iris, #6a47c2);
+  --aw-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  width: 100%;
+  max-width: var(--aw-max);
+  margin: 0 auto;
+  padding: 20px 16px calc(104px + env(safe-area-inset-bottom));
+}
+
+/* ── Top: the midnight progress band ────────────────────── */
+.aw__top {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "overall meters"
+    "steps steps";
+  align-items: center;
+  gap: 18px 32px;
+  margin-bottom: 28px;
+  padding: 22px 26px 16px;
+  border-radius: 24px;
+  background: var(--orbit-band, var(--brand-navy));
+  box-shadow: var(--shadow-lg);
+  color: #fff;
+}
+.aw__summary { display: contents; }
+
+.aw__overall {
+  grid-area: overall;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+.aw__orbit {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+}
+.aw-orbit {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.aw-orbit__track { fill: none; stroke: rgba(255, 255, 255, 0.14); stroke-width: 6; }
+.aw-orbit__value {
+  fill: none;
+  stroke: var(--aw-gold);
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dasharray 700ms var(--aw-ease), opacity 200ms ease;
+}
+.aw-orbit__sat {
+  transform-box: view-box;
+  transform-origin: 40px 40px;
+  filter: drop-shadow(0 0 4px rgba(242, 166, 35, 0.75));
+  transition: transform 700ms var(--aw-ease);
+}
+.aw-orbit__sat circle { fill: var(--aw-gold); stroke: var(--aw-midnight); stroke-width: 2.5; }
+.aw__overall-pct {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+.aw__overall-label {
+  max-width: 17ch;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.aw__meters {
+  grid-area: meters;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px 28px;
+  min-width: 0;
+}
+.aw-meter {
+  display: grid;
+  grid-template-columns: auto minmax(96px, 150px) auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+}
+.aw-meter__label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: rgba(255, 255, 255, 0.92); }
+.aw-meter__label svg { color: var(--aw-gold); }
+.aw-meter__bar { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.aw-meter__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--orbit-progress, var(--aw-gold));
+  transition: width 500ms var(--aw-ease);
+}
+.aw-meter__count { min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; color: rgba(255, 255, 255, 0.78); }
+
+/* Steps: stations along one path */
+.aw-steps {
+  grid-area: steps;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.aw-steps ol {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.aw-step {
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.aw-step:last-child { flex: 0 1 auto; }
+/* The stretch of path to the next station */
+.aw-step::after {
+  content: "";
+  flex: 1 1 auto;
+  min-width: 12px;
+  height: 2px;
+  margin: 0 6px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.16);
+}
+.aw-step:last-child::after { display: none; }
+.aw-step.is-complete::after { background: linear-gradient(90deg, var(--aw-gold), rgba(242, 166, 35, 0.45)); }
+
+.aw-step button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 48px;
+  padding: 6px 12px 6px 6px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+.aw-step button:hover { background: rgba(255, 255, 255, 0.07); }
+.aw-step button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.aw-step__dot {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1.5px solid rgba(255, 255, 255, 0.42);
+  border-radius: 50%;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.86);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-normal);
+}
+.aw-step.is-done .aw-step__dot { border-color: var(--aw-gold); background: var(--aw-gold); color: var(--aw-midnight); }
+.aw-step.is-current .aw-step__dot {
+  border: 2px solid var(--aw-sapphire-light);
+  background: var(--aw-sapphire);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(91, 124, 240, 0.24), 0 0 18px 2px rgba(91, 124, 240, 0.55);
+}
+.aw-step__text { display: flex; flex-direction: column; min-width: 0; }
+.aw-step__label {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.aw-step.is-current .aw-step__label,
+.aw-step.is-done .aw-step__label { color: #fff; }
+.aw-step__count { font-size: 12px; font-variant-numeric: tabular-nums; color: rgba(255, 255, 255, 0.68); }
+
+.aw__mobile-step {
+  grid-area: step;
+  display: none;
+  justify-self: end;
+  align-self: start;
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+/* ── Step body ──────────────────────────────────────────── */
+.aw__body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.aw__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px 20px;
+}
+.aw__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(22px, 3vw, 28px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--aw-midnight);
+}
+.aw__lede { margin: 6px 0 0; max-width: 640px; font-size: 15px; line-height: 1.55; color: var(--text-secondary); }
+.aw__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--info-bg);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--aw-sapphire-dark);
+  white-space: nowrap;
+}
+.aw__chip.is-done { background: var(--success-bg); color: var(--success-text); }
+
+.aw-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: -6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.aw-notes li { display: inline-flex; align-items: center; gap: 6px; }
+.aw-notes li span { display: inline; }
+.aw-notes li.is-ai { color: var(--aw-iris); font-weight: 500; }
+.aw-notes strong { color: var(--text-primary); font-weight: 600; }
+
+/* A labelled group of cards inside a step */
+.aw-group { display: flex; flex-direction: column; gap: 12px; }
+.aw-group__title { margin: 0; font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.aw-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+.aw-more:hover { background: var(--surface-blue); border-color: var(--aw-sapphire-light); border-style: solid; }
+.aw-more:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.aw-more__title { display: block; font-size: 14.5px; font-weight: 600; color: var(--text-primary); }
+.aw-more__sub { display: block; margin-top: 2px; font-size: 13px; color: var(--text-secondary); }
+.aw-more svg {
+  flex: none;
+  box-sizing: content-box;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--surface-blue);
+  color: var(--aw-sapphire);
+  transition: transform var(--transition-fast);
+}
+.aw-more[aria-expanded="true"] svg { transform: rotate(180deg); }
+
+/* ── Action bar ─────────────────────────────────────────── */
+.aw-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-sticky, 20);
+  border-top: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 -12px 32px -20px rgba(11, 30, 74, 0.28);
+  -webkit-backdrop-filter: saturate(1.6) blur(16px);
+  backdrop-filter: saturate(1.6) blur(16px);
+}
+.aw-bar__inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: var(--aw-max, 1080px);
+  margin: 0 auto;
+  padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+}
+.aw-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 20px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font: 600 15px/1 var(--font-body);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast), transform 80ms ease;
+}
+.aw-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.aw-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.aw-btn--primary {
+  margin-left: auto;
+  background: var(--orbit-btn, var(--brand-primary));
+  color: #fff;
+  box-shadow: var(--orbit-btn-shadow, var(--shadow-sm));
+}
+.aw-btn--primary:hover:not(:disabled) { background: var(--orbit-btn-hover, var(--brand-primary-dark)); }
+.aw-btn--primary:active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
+.aw-btn--primary:focus-visible { box-shadow: var(--focus-ring), var(--orbit-btn-shadow, var(--shadow-sm)); }
+.aw-btn--primary:disabled { box-shadow: none; }
+.aw-btn--ghost { background: var(--surface); border-color: var(--border-strong); color: var(--text-primary); }
+.aw-btn--ghost:hover:not(:disabled) { background: var(--surface-blue); border-color: var(--aw-sapphire-light); color: var(--aw-sapphire); }
+.aw-btn--ghost:active:not(:disabled) { transform: translateY(1px); }
+.aw-btn--text { background: transparent; color: var(--aw-sapphire); padding: 0 12px; }
+.aw-btn--text:hover:not(:disabled) { background: var(--surface-blue); }
+.aw-spin { animation: aw-spin 0.9s linear infinite; }
+@keyframes aw-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .aw-spin { animation: none; }
+  .aw-meter__bar span,
+  .aw-orbit__value,
+  .aw-orbit__sat,
+  .aw-step__dot,
+  .aw-btn { transition: none; }
+}
+
+/* ── Review step ────────────────────────────────────────── */
+.aw-review { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.aw-check {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.aw-check__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.aw-check__title { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.aw-check__title svg { color: var(--aw-sapphire); }
+.aw-check__ok { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; color: var(--success-text); }
+.aw-check__list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.aw-check__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--surface-subtle);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+.aw-check__item:hover { background: var(--surface-blue); border-color: var(--border); }
+.aw-check__item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.aw-check__item > span:not(.aw-check__group) { flex: 1 1 auto; min-width: 0; }
+.aw-check__item .aw-check__group { flex: none; margin-left: auto; font-size: 12.5px; white-space: nowrap; color: var(--text-secondary); }
+.aw-check__item svg { flex: none; color: var(--warning-text); }
+.aw-check__item > svg:last-child { color: var(--text-muted); transition: transform var(--transition-fast), color var(--transition-fast); }
+.aw-check__item:hover > svg:last-child { color: var(--aw-sapphire); transform: translateX(2px); }
+
+/* Calm closing card: white, a gold edge — never a second dark band */
+.aw-submit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px 22px 20px 26px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: inset 4px 0 0 var(--aw-gold), var(--shadow-md);
+  color: var(--text-primary);
+}
+.aw-submit h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-family: var(--font-display); font-size: 19px; font-weight: 800; letter-spacing: -0.01em; color: var(--aw-midnight); }
+.aw-submit h2 svg {
+  flex: none;
+  box-sizing: content-box;
+  padding: 7px;
+  border-radius: 10px;
+  background: var(--aw-gold-tint);
+  color: var(--aw-gold-deep);
+}
+.aw-submit p { margin: 0; max-width: 70ch; font-size: 14.5px; line-height: 1.6; color: var(--text-secondary); }
+.aw-submit .aw-btn--primary { margin-left: 0; align-self: flex-start; }
+.aw-submit .aw-btn--text { align-self: flex-start; padding: 0; min-height: 36px; }
+.aw-submit .aw-btn--text:hover:not(:disabled) { background: transparent; text-decoration: underline; text-underline-offset: 3px; }
+
+/* ── Breakpoints ────────────────────────────────────────── */
+@media (min-width: 768px) {
+  .aw { padding: 28px var(--ps-gutter, 24px) calc(108px + env(safe-area-inset-bottom)); }
+  /* Line the bar's buttons up with the step content */
+  .aw-bar__inner { padding-left: var(--ps-gutter, 24px); padding-right: var(--ps-gutter, 24px); }
+  .aw-review { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .aw-review .aw-submit, .aw-review .aw-full { grid-column: 1 / -1; }
+}
+/* Tablets: meters stack beside the ring; step labels may wrap, counts go */
+@media (max-width: 999px) {
+  .aw__top { gap: 16px 24px; }
+  .aw__meters { flex-direction: column; flex-wrap: nowrap; gap: 10px; }
+  .aw-meter { grid-template-columns: 104px minmax(72px, 1fr) auto; }
+  .aw-step__count { display: none; }
+  .aw-step__label { white-space: normal; font-size: 13.5px; }
+  .aw-step button { gap: 8px; padding-right: 8px; }
+  .aw-step::after { min-width: 8px; margin: 0 4px; }
+}
+/* Tablets: like phones, only the current station keeps its label */
+@media (min-width: 600px) and (max-width: 999px) {
+  .aw-step__label { white-space: nowrap; font-size: 13px; }
+  .aw-step:not(.is-current):not(:last-child) .aw-step__label { display: none; }
+}
+/* Phones: compact band; only the current station is labelled */
+@media (max-width: 599px) {
+  .aw { padding-top: 14px; }
+  .aw__top {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "overall step"
+      "meters meters"
+      "steps steps";
+    gap: 12px;
+    margin-bottom: 22px;
+    padding: 14px 12px 8px 14px;
+    border-radius: 20px;
+  }
+  .aw__overall { gap: 12px; }
+  .aw__orbit { width: 56px; height: 56px; }
+  .aw__overall-pct { font-size: 15px; }
+  .aw__overall-label { font-size: 13.5px; }
+  .aw__mobile-step { display: block; }
+  .aw__meters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 16px; }
+  .aw-meter {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "label count" "bar bar";
+    gap: 6px 8px;
+    font-size: 12.5px;
+  }
+  .aw-meter__label { grid-area: label; min-width: 0; }
+  .aw-meter__count { grid-area: count; min-width: 0; }
+  .aw-meter__bar { grid-area: bar; }
+  .aw-steps { padding-top: 6px; }
+  /* The current station keeps its full label; the others give way */
+  .aw-step { flex: 1 1 auto; }
+  .aw-step:last-child { flex: 0 0 auto; }
+  .aw-step.is-current { flex: 0 0 auto; }
+  .aw-step.is-current:not(:last-child) { flex: 1 0 auto; }
+  .aw-step button { flex: none; padding: 8px 4px; gap: 8px; }
+  .aw-step.is-current button { padding-right: 8px; }
+  .aw-step__dot { width: 28px; height: 28px; }
+  .aw-step:not(.is-current) .aw-step__label { display: none; }
+  .aw-step__label { white-space: nowrap; font-size: 13.5px; overflow: visible; }
+  .aw-step::after { min-width: 4px; margin: 0 1px; }
+  .aw-btn { padding: 0 16px; }
+  .aw-btn__long { display: none; }
+}

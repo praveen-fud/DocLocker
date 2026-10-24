@@ -1,31 +1,37 @@
-/* In-app document viewer — shared by the admin dashboard and banker portal.
+/* In-app document viewer — shared by students, staff and lenders.
+   Portalled to <body> (outside .theme-orbit), so it carries its own
+   Orbit palette: midnight chrome, sapphire actions, sapphire-light focus.
    Dark chrome so the document itself is the brightest thing on screen. */
 
 .dv-backdrop {
-  --dv-chrome: #111827;
-  --dv-rail: #0f172a;
-  --dv-panel: #1a2233;
-  --dv-stage: #232c3d;
+  --dv-chrome: #0b1e4a;
+  --dv-rail: #071434;
+  --dv-panel: #13306e;
+  --dv-stage: #17295a;
   --dv-line: rgba(255, 255, 255, 0.08);
-  --dv-text: #f1f5f9;
-  --dv-text-muted: #a3b0c2;
-  --dv-tool-bg: rgba(255, 255, 255, 0.06);
-  /* Self-contained: the viewer doesn't depend on page-level design tokens */
-  --dv-primary: #2563eb;
-  --dv-primary-dark: #1d4ed8;
-  --dv-focus: #60a5fa;
+  --dv-text: #f3f5fb;
+  --dv-text-muted: #b4bfdc;
+  --dv-tool-bg: rgba(255, 255, 255, 0.07);
+  /* Self-contained Orbit palette: the viewer doesn't depend on page tokens */
+  --dv-primary: #2448c9;
+  --dv-primary-dark: #1b379e;
+  --dv-focus: #5b7cf0;
+  --dv-focus-ring: #a9bbff;
+  --dv-btn: linear-gradient(180deg, #2d55da 0%, #2244be 100%);
+  --dv-btn-hover: linear-gradient(180deg, #2449c9 0%, #1b379e 100%);
+  --dv-btn-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 8px 18px -8px rgba(36, 72, 201, 0.65);
   --dv-fast: 140ms ease;
   --dv-normal: 220ms ease;
   --dv-r-xs: 6px;
   --dv-r-sm: 8px;
   --dv-r-md: 12px;
   --dv-r-lg: 16px;
-  --dv-font: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --dv-font: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
 
   position: fixed;
   inset: 0;
   z-index: calc(1300);
-  background: rgba(7, 14, 30, 0.66);
+  background: rgba(7, 20, 52, 0.66);
   backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
@@ -44,7 +50,7 @@
   color: var(--dv-text);
   border: 1px solid var(--dv-line);
   border-radius: var(--dv-r-lg);
-  box-shadow: 0 30px 80px rgba(2, 6, 23, 0.55);
+  box-shadow: 0 30px 80px rgba(4, 12, 34, 0.55);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -147,17 +153,17 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--dv-r-xs);
-  background: #e9eef5;
-  color: #64748b;
+  background: #e9edf7;
+  color: #4a5673;
   border: 2px solid transparent;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
   transition: transform var(--dv-fast), border-color var(--dv-fast);
 }
 .dv-thumb:hover .dv-thumb-page { transform: translateY(-1px); }
 .dv-thumb.is-active .dv-thumb-page {
-  border-color: var(--dv-focus, #3b82f6);
-  color: var(--dv-primary, #2563eb);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25), 0 2px 8px rgba(0, 0, 0, 0.35);
+  border-color: var(--dv-focus);
+  color: var(--dv-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dv-primary) 25%, transparent), 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 .dv-thumb-index {
   position: absolute;
@@ -167,7 +173,7 @@
   height: 18px;
   padding: 0 4px;
   border-radius: 9px;
-  background: rgba(15, 23, 42, 0.78);
+  background: rgba(11, 30, 74, 0.82);
   color: #fff;
   font-size: 10.5px;
   font-weight: 700;
@@ -240,7 +246,7 @@
   border-radius: var(--dv-r-sm);
   border: 0;
   background: transparent;
-  color: #d5dde8;
+  color: #d6ddf0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -249,7 +255,7 @@
 }
 .dv-tool:hover:not(:disabled) { background: var(--dv-tool-bg); color: #fff; }
 .dv-tool:disabled { opacity: 0.35; cursor: default; }
-.dv-tool[aria-pressed="true"] { background: rgba(59, 130, 246, 0.2); color: #fff; }
+.dv-tool[aria-pressed="true"] { background: color-mix(in srgb, var(--dv-primary) 20%, transparent); color: #fff; }
 .dv-zoom {
   min-width: 58px;
   padding: 6px 8px;
@@ -326,7 +332,7 @@
   line-height: 1.5;
   color: var(--dv-text-muted);
 }
-.dv-state svg { color: var(--dv-focus, #3b82f6); }
+.dv-state svg { color: var(--dv-focus); }
 .dv-state-error svg { color: #f87171; }
 .dv-state .dv-btn svg { color: inherit; }
 
@@ -346,26 +352,28 @@
   font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: background var(--dv-fast, 140ms ease), border-color var(--dv-fast, 140ms ease);
+  transition: background var(--dv-fast, 140ms ease), border-color var(--dv-fast, 140ms ease), transform 80ms ease;
 }
 .dv-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); }
 .dv-btn:disabled { opacity: 0.7; cursor: progress; }
 .dv-btn-primary {
-  background: var(--dv-primary, #2563eb);
-  border-color: var(--dv-primary, #2563eb);
+  background: var(--dv-btn);
+  border-color: transparent;
   color: #fff;
-  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.35);
+  box-shadow: var(--dv-btn-shadow);
 }
 .dv-btn-primary:hover:not(:disabled) {
-  background: var(--dv-primary-dark, #1d4ed8);
-  border-color: var(--dv-primary-dark, #1d4ed8);
+  background: var(--dv-btn-hover);
+  border-color: transparent;
 }
+.dv-btn:active:not(:disabled) { transform: translateY(1px); }
+.dv-btn-primary:active:not(:disabled) { box-shadow: none; }
 
 .dv-btn:focus-visible,
 .dv-icon-btn:focus-visible,
 .dv-tool:focus-visible,
 .dv-thumb:focus-visible .dv-thumb-page {
-  outline: 2px solid #93c5fd;
+  outline: 2px solid var(--dv-focus-ring);
   outline-offset: 2px;
 }
 .dv-thumb:focus-visible { outline: none; }
@@ -414,7 +422,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dv-backdrop, .dv-box { animation: none; }
-  .dv-image, .dv-thumb-page { transition: none; }
+  .dv-image, .dv-thumb-page, .dv-btn { transition: none; }
   .dv-spin { animation-duration: 2.5s; }
 }
 

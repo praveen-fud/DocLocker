@@ -1,477 +1,542 @@
-/* ═════════════════════════════════════════════════════════════════════════════
-   AbroadDocs — File Uploader Responsive Interface Stylesheet
-   ═════════════════════════════════════════════════════════════════════════════ */
+/* ============================================================
+   Document upload card — one card per document slot.
+   States: is-empty · is-busy · is-done · is-attention · is-error
+   ============================================================ */
 
-.upload-box {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(26, 110, 181, 0.14);
-  border-radius: 12px;
-  padding: 14px;
-  transition: all 0.2s ease;
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-}
-
-.upload-box.uploaded {
-  border-color: rgba(34, 197, 94, 0.3);
-  background: rgba(34, 197, 94, 0.04);
-}
-
-.upload-box.dragging {
-  border-color: var(--blue);
-  background: rgba(26, 110, 181, 0.06);
-}
-
-/* Header structural assembly */
-.upload-box-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-}
-
-.upload-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  color: rgb(85, 175, 220);
-  min-width: 0;
-}
-
-.required-dot {
-  color: #ef4444;
-  font-size: 15px;
-  line-height: 1;
-}
-
-.optional-tag {
-  font-size: 10px;
-  color: var(--gray-500);
-  background: rgba(26, 110, 181, 0.08);
-  padding: 2px 7px;
-  border-radius: 10px;
-  white-space: nowrap;
-}
-
-.upload-status-badge {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: #22c55e;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-/* Enhanced drop zone */
-.drop-zone {
-  border: 1.5px dashed rgba(26, 110, 181, 0.2);
-  border-radius: 8px;
-  padding: 18px 12px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  width: 100%;
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.drop-zone:hover {
-  border-color: var(--blue);
-  background: rgba(26, 110, 181, 0.04);
-}
-
-.drop-content {
+.doc-card {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  color: #64748b;
-  font-size: 13px;
-  word-break: break-word;
+  gap: 12px;
   min-width: 0;
-  max-width: 100%;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  /* Jumped to from the dashboard: clear the sticky header and bottom bars */
+  scroll-margin: calc(var(--ps-header-h, 64px) + 16px) 0 calc(var(--ps-bottom-offset, 0px) + 96px);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.doc-card:focus {
+  outline: none;
+}
+.doc-card.is-spotlight {
+  animation: doc-spotlight 2s ease-out;
+}
+@keyframes doc-spotlight {
+  0%, 40% {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand-primary) 22%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .doc-card.is-spotlight {
+    animation: none;
+    border-color: var(--brand-primary);
+  }
+}
+.doc-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+.doc-card.is-done {
+  border-color: rgba(22, 163, 74, 0.34);
+}
+.doc-card.is-attention {
+  border-color: rgba(217, 119, 6, 0.45);
+}
+.doc-card.is-error {
+  border-color: rgba(220, 38, 38, 0.4);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.06);
 }
 
-.drop-content svg {
-  color: var(--gray-500);
+/* ── Header ─────────────────────────────────────────────── */
+.doc-card__head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "icon titles"
+    "status status";
+  column-gap: 12px;
+  row-gap: 8px;
+  align-items: start;
+}
+.doc-card__icon {
+  grid-area: icon;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--surface-blue);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-primary) 12%, transparent);
+  color: var(--brand-primary);
   flex-shrink: 0;
 }
-
-.drop-content strong {
-  color: var(--blue-light);
+.doc-card.is-done .doc-card__icon {
+  background: var(--success-bg);
+  box-shadow: none;
+  color: var(--success-text);
+}
+.doc-card.is-attention .doc-card__icon {
+  background: var(--warning-bg);
+  box-shadow: none;
+  color: var(--warning-text);
+}
+.doc-card.is-error .doc-card__icon {
+  background: var(--error-bg);
+  box-shadow: none;
+  color: var(--error-text);
+}
+.doc-card__titles {
+  grid-area: titles;
+  min-width: 0;
+}
+.doc-card__title {
+  font-family: var(--font-body);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.doc-card__sub {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+.doc-card__sub.is-ai { display: inline-flex; align-items: center; gap: 5px; color: var(--orbit-iris, #6a47c2); }
+.doc-card__status {
+  grid-area: status;
+  min-height: 0;
+}
+.doc-card__status:empty {
+  display: none;
 }
 
-.accepted-types {
-  font-size: 11px;
-  color: var(--gray-500);
-  letter-spacing: 0.5px;
-  margin-top: 2px;
-  word-break: break-word;
-  overflow-wrap: break-word;
-  max-width: 100%;
+/* Once the card itself is wide enough, the badge moves up to the title row.
+   Sized by the card, not the viewport — the sidebar and rail eat width. */
+.doc-card {
+  container-type: inline-size;
+}
+@container (min-width: 300px) {
+  .doc-card__head {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "icon titles status";
+  }
 }
 
-.size-limit-note {
-  font-size: 11px;
-  color: #e07b3a;
-  font-weight: 500;
-  margin-top: 3px;
+/* ── Status badge ───────────────────────────────────────── */
+.doc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.doc-badge--success { color: var(--success-text); background: var(--success-bg); }
+.doc-badge--warning { color: var(--warning-text); background: var(--warning-bg); }
+.doc-badge--error   { color: var(--error-text);   background: var(--error-bg); }
+.doc-badge--info    { color: var(--blue-dark);    background: var(--info-bg); }
+
+/* ── Drop area: Upload + Camera ─────────────────────────── */
+.doc-drop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  padding: 10px;
+  background: var(--surface-subtle);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 12px;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+.doc-drop.is-dragging {
+  background: var(--surface-blue);
+  border-style: solid;
+  border-color: var(--blue-light);
+}
+.doc-drop.is-disabled { opacity: 0.6; }
+.doc-drop__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brand-primary);
+}
+.doc-drop__actions { display: flex; gap: 8px; width: 100%; }
+.doc-drop__btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 22%, transparent);
+  border-radius: 12px;
+  /* Tonal, not filled: the wizard's Next / Submit is the page's one primary action */
+  background: var(--surface-blue);
+  box-shadow: none;
+  font: 600 14px/1 var(--font-body);
+  color: var(--orbit-sapphire-dark, var(--brand-primary-dark));
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast), transform 80ms ease;
+}
+.doc-drop__btn:hover:not(:disabled) { background: color-mix(in srgb, var(--brand-primary) 14%, white); }
+.doc-drop__btn:active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
+.doc-drop__btn.is-camera { background: var(--surface); border-color: var(--border-strong); box-shadow: none; color: var(--text-primary); }
+.doc-drop__btn.is-camera svg { color: var(--brand-primary); }
+.doc-drop__btn.is-camera:hover:not(:disabled) { background: var(--surface-blue); border-color: var(--blue-light); color: var(--brand-primary); }
+.doc-drop__btn:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+.doc-drop__btn:disabled { cursor: not-allowed; opacity: 0.55; box-shadow: none; }
+/* Narrow cards: stack Upload and Camera rather than let them overflow */
+@container (max-width: 279px) {
+  .doc-drop__actions { flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .doc-drop__btn { transition: none; }
 }
 
-.upload-progress {
+.doc-card__hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* ── Progress ───────────────────────────────────────────── */
+.doc-progress {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  min-height: 96px;
+  padding: 14px;
+  background: var(--surface-blue);
+  border-radius: var(--radius-sm);
+}
+.doc-progress__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--blue-dark);
+}
+.doc-progress__pct {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.doc-progress__sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.doc-bar {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand-primary) 14%, transparent);
+  overflow: hidden;
+}
+.doc-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--orbit-progress, var(--brand-primary));
+  transition: width var(--transition-normal);
+}
+.doc-bar.is-indeterminate > span {
+  width: 40%;
+  animation: doc-indeterminate 1.3s ease-in-out infinite;
+}
+.doc-bar--thin {
+  height: 4px;
+  margin-top: 6px;
+}
+@keyframes doc-indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(260%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .doc-bar.is-indeterminate > span {
+    width: 100%;
+    opacity: 0.5;
+    animation: none;
+  }
+}
+
+/* ── Uploaded file row ──────────────────────────────────── */
+.doc-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.doc-files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+}
+.doc-file--row.is-error,
+.doc-file--row.is-rejected {
+  background: var(--error-bg);
+  border-color: rgba(220, 38, 38, 0.22);
+}
+.doc-file__thumb {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.doc-file__thumb--icon {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  color: var(--blue-light);
-  font-size: 13px;
-  width: 100%;
+  justify-content: center;
+  gap: 1px;
+  color: var(--brand-primary);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
-
-.progress-bar {
-  width: 100%;
-  height: 5px;
-  background: rgba(26, 110, 181, 0.1);
-  border-radius: 3px;
-  overflow: hidden;
+.doc-file__thumb--icon.is-pdf {
+  color: var(--error-text);
 }
-
-.progress-fill {
-  height: 100%;
-  background: var(--blue);
-  transition: width 0.3s ease;
-  border-radius: 3px;
-}
-
-/* Uploaded Info Box */
-.uploaded-info {
+.doc-file__body {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  background: rgba(34, 197, 94, 0.08);
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 13px;
-  color: #22c55e;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.renamed-name {
+  flex-direction: column;
+  min-width: 0;
   flex: 1;
+}
+.doc-file__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 500;
-  font-size: 12px;
 }
-
-.uploaded-actions {
+.doc-file__meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.doc-file__err {
+  color: var(--error-text);
+  font-weight: 600;
+}
+.doc-file__actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
   flex-shrink: 0;
 }
-
-.view-link {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--blue-light);
-  text-decoration: none;
-  font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: rgba(26, 110, 181, 0.1);
-  white-space: nowrap;
-  transition: background 0.2s;
+.doc-file__busy {
+  color: var(--brand-primary);
+  margin: 0 8px;
 }
-
-.view-link:hover {
-  background: rgba(26, 110, 181, 0.18);
-}
-
-.re-upload-btn {
-  background: none;
-  border: 1px solid rgba(26, 110, 181, 0.2);
-  color: #475569;
-  font-size: 11px;
-  padding: 4px 10px;
-  border-radius: 6px;
+.doc-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  background: transparent;
   cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.2s;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+.doc-icon-btn:hover {
+  color: var(--brand-primary);
+  background: var(--surface-blue);
+}
+.doc-icon-btn--danger:hover {
+  color: var(--error-text);
+  background: var(--error-bg);
+}
+@media (pointer: coarse) {
+  .doc-icon-btn {
+    width: 44px;
+    height: 44px;
+  }
 }
 
-.re-upload-btn:hover {
-  border-color: var(--blue);
-  color: var(--blue-light);
-}
-
-.upload-error {
+/* ── Two-page checklist (passport / Aadhaar) ────────────── */
+.doc-pages {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
-  color: #ef4444;
+  list-style: none;
+}
+.doc-page {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+.doc-page svg {
+  margin-top: 1px;
+}
+.doc-page.is-read svg,
+.doc-page.is-uploaded svg {
+  color: var(--success);
+}
+.doc-page.is-missing svg,
+.doc-page.is-unknown svg {
+  color: var(--border-strong);
+}
+.doc-page__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.doc-page__label {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.doc-page__state {
   font-size: 12px;
-  margin-top: 6px;
-  word-break: break-word;
+}
+.doc-page.is-read .doc-page__state,
+.doc-page.is-uploaded .doc-page__state {
+  color: var(--success-text);
+}
+.doc-page.is-missing .doc-page__state {
+  color: var(--warning-text);
+}
+.doc-page--note {
+  display: block;
+  padding: 8px 10px;
+  border-radius: var(--radius-xs);
+  color: var(--warning-text);
+  background: var(--warning-bg);
 }
 
-/* Wrong document for this slot: nothing was saved. Stands out more than a
-   plain upload error because the student has to act on it. */
-.upload-error.upload-rejected {
+/* ── Inline notes (AI read status, limits) ──────────────── */
+.doc-note {
+  display: flex;
   align-items: flex-start;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(220, 38, 38, 0.25);
-  background: #fef2f2;
-  color: #991b1b;
+  gap: 8px;
+  padding: 8px 10px;
   font-size: 12.5px;
   line-height: 1.45;
+  border-radius: var(--radius-xs);
 }
-.upload-error.upload-rejected svg { flex-shrink: 0; margin-top: 1px; }
-.upload-error.upload-rejected .error-dismiss { margin-left: auto; }
-
-.queue-item.queue-rejected {
-  border-color: rgba(220, 38, 38, 0.35);
-  background: rgba(220, 38, 38, 0.06);
-}
-.queue-waiting {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  color: var(--gray-600, #64748b);
+.doc-note svg {
   flex-shrink: 0;
+  margin-top: 1px;
 }
+.doc-note--success { color: var(--success-text); background: var(--success-bg); }
+.doc-note--warning { color: var(--warning-text); background: var(--warning-bg); }
+.doc-note--error   { color: var(--error-text);   background: var(--error-bg); }
+.doc-note--info    { color: var(--blue-dark);    background: var(--info-bg); }
 
-.rename-hint {
-  margin-top: 8px;
-  font-size: 11px;
-  color: var(--gray-600);
-  line-height: 1.4;
-  word-break: break-word;
-  overflow-wrap: break-word;
-  max-width: 100%;
-}
-
-.rename-hint strong {
-  color: var(--gray-400);
-}
-
-.spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* ── Multi-file queue styles ── */
-.multi-queue {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-bottom: 2px;
-}
-
-.queue-item {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(26, 110, 181, 0.12);
-  border-radius: 7px;
-  padding: 6px 10px;
-  font-size: 12px;
-  color: var(--gray-300);
-  min-width: 0;
-}
-
-.queue-item.queue-done {
-  border-color: rgba(34, 197, 94, 0.25);
-  background: rgba(34, 197, 94, 0.05);
-}
-.queue-item.queue-error {
-  border-color: rgba(239, 68, 68, 0.3);
-  background: rgba(239, 68, 68, 0.05);
-}
-.queue-item.queue-uploading {
-  border-color: rgba(26, 110, 181, 0.3);
-}
-
-.queue-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11.5px;
-}
-
-.queue-progress-wrap {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex-shrink: 0;
-  min-width: 80px;
-}
-
-.queue-bar {
-  flex: 1;
-  height: 4px;
-  background: rgba(26, 110, 181, 0.12);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.queue-fill {
-  height: 100%;
-  background: var(--blue);
-  transition: width 0.25s ease;
-}
-
-.queue-done-icon {
-  color: #22c55e;
-  flex-shrink: 0;
-}
-.queue-err-icon {
-  color: #ef4444;
-  flex-shrink: 0;
-}
-
-.queue-remove {
-  background: none;
-  border: none;
-  color: var(--gray-500);
-  cursor: pointer;
-  padding: 2px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  transition: color 0.15s;
-}
-.queue-remove:hover {
-  color: #ef4444;
-}
-
-.error-dismiss {
-  background: none;
-  border: none;
-  color: #ef4444;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 0 2px;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.show-pass:hover {
-  color: #0f2544;
-}
-
-.admin-hint code {
-  background: rgba(26, 110, 181, 0.08);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-}
-
-@media screen and (max-width: 480px) {
-  .upload-box {
-    padding: 12px;
-  }
-
-  .upload-box-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-  }
-
-  .upload-status-badge {
-    align-self: flex-start;
-    margin-top: 2px;
-  }
-
-  .drop-content span {
-    font-size: 12px;
-  }
-
-  .uploaded-info {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-    padding: 12px;
-  }
-
-  .renamed-name {
-    white-space: normal;
-    word-break: break-all;
-  }
-
-  .uploaded-actions {
-    width: 100%;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .view-link,
-  .re-upload-btn {
-    flex: 1;
-    text-align: center;
-    justify-content: center;
-    padding: 6px 8px;
-    font-size: 12px;
-  }
-}
-
-/* ── Document model reading: tag, page hint and status line ─────────────── */
-.reader-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 10px;
-  font-weight: 600;
-  color: #0b63ce;
-  background: #eaf4ff;
-  padding: 2px 7px;
-  border-radius: 10px;
-  white-space: nowrap;
-}
-
-.page-hint {
-  margin: -4px 0 8px;
-  font-size: 11.5px;
-  line-height: 1.4;
-  color: #64748b;
-}
-
-.reader-status {
+/* ── Error / rejection panel ────────────────────────────── */
+.doc-alert {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
-  margin-top: 8px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-  line-height: 1.4;
-  font-weight: 500;
+  gap: 10px;
+  padding: 12px;
+  color: var(--error-text);
+  background: var(--error-bg);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  border-radius: var(--radius-sm);
 }
-.reader-status svg { flex-shrink: 0; margin-top: 1px; }
+.doc-alert > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.doc-alert__body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.doc-alert__body strong {
+  font-size: 13px;
+}
+.doc-alert__body > span {
+  color: #7f1d1d;
+}
+.doc-alert__help {
+  color: var(--text-secondary) !important;
+}
+.doc-alert__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 4px;
+}
+.doc-alert__actions:empty {
+  display: none;
+}
+.doc-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 0;
+  font: 600 12.5px/1 var(--font-body);
+  color: var(--blue-dark);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.doc-alert__close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  margin: -4px -4px 0 0;
+  border: none;
+  border-radius: var(--radius-xs);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.doc-alert__close:hover {
+  background: rgba(220, 38, 38, 0.1);
+}
 
-.reader-reading     { background: #eaf4ff; color: #0b63ce; }
-.reader-read        { background: #ecfdf3; color: #15803d; }
-.reader-review,
-.reader-unsupported { background: #fff7e8; color: #b45f00; }
-.reader-manual,
-.reader-unverified,
-.reader-failed      { background: #fef2f2; color: #b91c1c; }
+/* ── Footer ─────────────────────────────────────────────── */
+
+
+.doc-spin {
+  animation: doc-spin 0.9s linear infinite;
+}
+@keyframes doc-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Card grid — column count follows the space the step actually has. */
+.doc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.doc-grid[hidden] { display: none; }
