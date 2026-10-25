@@ -329,3 +329,37 @@ export function searchOptions(menu, query) {
     .slice(0, 12)
     .map((x) => x.o);
 }
+
+// Every tool as a flat list (for the File Converter page's library):
+// id, kind, title, hint, group and its icon. Document tools are listed per
+// source type ("Word to PDF", "CSV to JSON"), since the result differs.
+const SAMPLE = {
+  image: [{ name: "a.png", type: "image/png" }, { name: "b.png", type: "image/png" }],
+  pdf: [{ name: "a.pdf" }, { name: "b.pdf" }],
+  video: [{ name: "a.mp4" }],
+  audio: [{ name: "a.mp3" }, { name: "b.mp3" }],
+};
+const DOC_SOURCES = [["docx", "Word"], ["md", "Markdown"], ["html", "HTML"], ["csv", "CSV"], ["json", "JSON"], ["txt", "Text"]];
+
+export function toolLibrary() {
+  const tools = [];
+  const seen = new Set();
+  for (const [kind, files] of Object.entries(SAMPLE)) {
+    for (const c of buildMenu(files).categories) {
+      for (const o of c.options) {
+        if (o.id === "zip-all" || seen.has(`${kind}:${o.id}`)) continue;
+        seen.add(`${kind}:${o.id}`);
+        tools.push({ id: o.id, kind, title: o.title, hint: o.hint || "", group: c.label, icon: c.icon, keywords: o.keywords, many: c.id === "combine" || c.id === "merge" });
+      }
+    }
+  }
+  for (const [ext, name] of DOC_SOURCES) {
+    for (const o of buildMenu([{ name: `a.${ext}` }]).categories[0].options) {
+      tools.push({
+        id: o.id, kind: "docs", source: ext, title: `${name} to ${o.label}`, hint: o.title, group: `From ${name}`,
+        icon: FileText, keywords: `${o.keywords} ${name.toLowerCase()} ${ext}`, many: false,
+      });
+    }
+  }
+  return tools;
+}

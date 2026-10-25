@@ -8,6 +8,7 @@ import RadialMenu from "./RadialMenu";
 import DropOverlay from "./DropOverlay";
 import ResultsTray from "./ResultsTray";
 import { CropEditor, PromptDialog, TrimEditor } from "./Editors";
+import { buildMenu } from "./catalog";
 import "./Converter.css";
 
 const isFileDrag = (e) => Array.from(e.dataTransfer?.types || []).includes("Files");
@@ -26,11 +27,11 @@ export default function ConverterProvider({ children }) {
   const jobsRef = useRef(jobs);
   useEffect(() => { jobsRef.current = jobs; }, [jobs]);
 
-  const open = useCallback((fileList, point) => {
+  const open = useCallback((fileList, point, note = "") => {
     const files = Array.from(fileList || []).filter(Boolean);
     if (!files.length) return;
     const p = point || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-    setMenu({ files, x: p.x, y: p.y, key: Date.now() });
+    setMenu({ files, x: p.x, y: p.y, note, key: Date.now() });
   }, []);
 
   // Shift + drop, anywhere in the workspace. Capture phase, so it wins over
@@ -129,7 +130,19 @@ export default function ConverterProvider({ children }) {
     return js.filter((j) => j.status === "running");
   }), []);
 
-  const value = useMemo(() => ({ open, jobs }), [open, jobs]);
+  // Run one named tool on some files (the page's Quick convert and tool
+  // cards); if it doesn't apply to what was chosen, offer the menu instead
+  const runTool = useCallback((fileList, optionId, point) => {
+    const files = Array.from(fileList || []).filter(Boolean);
+    if (!files.length) return;
+    for (const c of buildMenu(files).categories) {
+      const o = c.options.find((x) => x.id === optionId);
+      if (o) { runOption(o, c.files || files); return; }
+    }
+    open(files, point, `That tool doesn't fit ${files.length === 1 ? "this file" : "these files"}. Pick one that does.`);
+  }, [open, runOption]);
+
+  const value = useMemo(() => ({ open, runTool, jobs }), [open, runTool, jobs]);
 
   // Drops onto the menu or an editor's backdrop: take the new files instead
   // of letting the browser open them
@@ -144,7 +157,7 @@ export default function ConverterProvider({ children }) {
       {drag && !menu && !editor && <DropOverlay {...drag} />}
       {menu && (
         <div {...catchDrop}>
-          <RadialMenu key={menu.key} files={menu.files} x={menu.x} y={menu.y} onRun={runOption} onClose={() => setMenu(null)} />
+          <RadialMenu key={menu.key} files={menu.files} x={menu.x} y={menu.y} note={menu.note} onRun={runOption} onClose={() => setMenu(null)} />
         </div>
       )}
       {editor && (

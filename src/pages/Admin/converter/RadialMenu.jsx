@@ -1,7 +1,10 @@
 // The radial menu: what was dropped in the middle, the kinds of tool on
-// the inner ring, that kind's options on the outer ring. Pointer: hover a
-// group, click an option. Keys: type to search, ↑↓ group, ←→ option,
-// Enter to run, Esc to close.
+// the inner ring, that kind's options on the outer ring.
+//  Mouse: hover a group (a short pause switches it), click a tool.
+//  Touch: tap a group, tap a tool, or press and slide to a tool, then lift.
+//  Keys:  type to search, ↑↓ group, ←→ tool, Enter to run, Esc to close.
+// One pointer handler works out the wedge under the pointer from its
+// distance and angle from the centre, so every device behaves the same.
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { FileImage, FileText, FileVideo, FileAudio, FileType, Search, X } from "lucide-react";
@@ -9,12 +12,14 @@ import { buildMenu, searchOptions } from "./catalog";
 import { describeFiles, kindOf } from "./kinds";
 import useBlobUrl, { canShow } from "./useBlobUrl";
 
-const R_CENTER = 66;
-const R0 = 72;
-const R1 = 146;
-const R2 = 152;
-const R3 = 232;
-const SIZE = 480;
+// A compact ring: 380 px across at full size
+const SIZE = 380;
+const R_CENTER = 46;
+const R0 = 52;
+const R1 = 104;
+const R2 = 109;
+const R3 = 182;
+const HOVER_DWELL = 160;
 
 const rad = (a) => (a * Math.PI) / 180;
 const at = (r, a) => [r * Math.sin(rad(a)), -r * Math.cos(rad(a))];
@@ -38,21 +43,25 @@ function Preview({ files }) {
   const Icon = KIND_ICON[kindOf(first)];
   return (
     <span className="cv-center__thumb" aria-hidden="true">
-      {url ? <img src={url} alt="" /> : <Icon size={24} />}
+      {url ? <img src={url} alt="" /> : <Icon size={20} />}
       {files.length > 1 && <span className="cv-center__count">{files.length}</span>}
     </span>
   );
 }
 
-export default function RadialMenu({ files, x, y, onRun, onClose }) {
+export default function RadialMenu({ files, x, y, note, onRun, onClose }) {
   const reduce = useReducedMotion();
   const uid = useId().replace(/:/g, "");
   const menu = useMemo(() => buildMenu(files), [files]);
   const [catIndex, setCatIndex] = useState(0);
   const [optIndex, setOptIndex] = useState(0);
   const [query, setQuery] = useState("");
+  const [pressed, setPressed] = useState(null); // "cat:2" | "opt:5" while a finger or button is down
   const inputRef = useRef(null);
+  const hitRef = useRef(null);
   const hoverTimer = useRef(0);
+  const press = useRef(null);
+  const touch = useMemo(() => window.matchMedia?.("(pointer: coarse)").matches ?? false, []);
 
   const searching = query.trim().length > 0;
   const results = useMemo(() => (searching ? searchOptions(menu, query) : []), [menu, query, searching]);
@@ -64,31 +73,88 @@ export default function RadialMenu({ files, x, y, onRun, onClose }) {
   // Fit on screen: scale down on small screens, keep the whole ring visible
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const scale = Math.min(1, (vw - 16) / SIZE, (vh - 150) / SIZE);
+  const scale = Math.min(1, (vw - 16) / SIZE, (vh - 170) / SIZE);
   const half = (SIZE / 2) * scale;
   const cx = Math.min(Math.max(x, half + 8), vw - half - 8);
-  const cy = Math.min(Math.max(y, half + 8), vh - half - 90);
-  const barBelow = cy + half + 96 < vh;
+  const cy = Math.min(Math.max(y, half + 8), vh - half - 100);
+  const barBelow = cy + half + 110 < vh;
 
-  // Focus the search; give focus back to where it was when the menu closes
+  // Focus the search (not on touch screens: the keyboard would cover the
+  // ring); give focus back to where it was when the menu closes
   useEffect(() => {
     const prev = document.activeElement;
-    inputRef.current?.focus();
+    if (!touch) inputRef.current?.focus();
     return () => { if (prev && document.contains(prev)) prev.focus?.(); };
-  }, []);
+  }, [touch]);
   useEffect(() => () => clearTimeout(hoverTimer.current), []);
 
   const step = 360 / cats.length;
   const catAngle = (i) => i * step;
   const optStep = 360 / Math.max(1, options.length);
-  const optAngle = (j) => (searching ? 0 : catAngle(catIndex)) + j * optStep;
+  const base = searching ? 0 : catAngle(catIndex);
+  const optAngle = (j) => base + j * optStep;
 
-  const pickCat = (i) => { setCatIndex((i + cats.length) % cats.length); setOptIndex(0); };
+  const pickCat = (i) => {
+    const next = (i + cats.length) % cats.length;
+    if (next !== catIndex) { setCatIndex(next); setOptIndex(0); }
+    setQuery("");
+  };
   const run = (o) => {
     if (!o) return;
-    const forFiles = o.category?.files || cat.files || files;
-    onRun(o, forFiles);
+    onRun(o, o.category?.files || cat.files || files);
   };
+
+  // The wedge under a point on screen, from its distance and angle
+  const hitAt = (clientX, clientY) => {
+    const box = hitRef.current?.getBoundingClientRect();
+    if (!box) return null;
+    const k = box.width / SIZE;
+    const dx = (clientX - (box.left + box.width / 2)) / k;
+    const dy = (clientY - (box.top + box.height / 2)) / k;
+    const r = Math.hypot(dx, dy);
+    const a = ((Math.atan2(dx, -dy) * 180) / Math.PI + 360) % 360;
+    if (r >= R0 - 3 && r <= R1 + 2) return { ring: "cat", index: Math.round(a / step) % cats.length };
+    if (r > R1 + 2 && r <= R3 + 8 && options.length) {
+      return { ring: "opt", index: Math.floor((((a - base + optStep / 2) % 360) + 360) % 360 / optStep) % options.length };
+    }
+    return null;
+  };
+
+  const onPointerDown = (e) => {
+    const h = hitAt(e.clientX, e.clientY);
+    if (!h) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    clearTimeout(hoverTimer.current);
+    press.current = { id: e.pointerId };
+    if (h.ring === "cat") { pickCat(h.index); setPressed(`cat:${h.index}`); }
+    else { setOptIndex(h.index); setPressed(`opt:${h.index}`); }
+  };
+  const onPointerMove = (e) => {
+    const h = hitAt(e.clientX, e.clientY);
+    if (press.current) {
+      // Sliding with a finger (or button) down: follow it at once
+      if (!h) { setPressed(null); return; }
+      if (h.ring === "cat") { pickCat(h.index); setPressed(`cat:${h.index}`); }
+      else { setOptIndex(h.index); setPressed(`opt:${h.index}`); }
+      return;
+    }
+    if (e.pointerType !== "mouse") return;
+    clearTimeout(hoverTimer.current);
+    if (h?.ring === "opt") setOptIndex(h.index);
+    // A group switches only when the pointer pauses on it, so crossing the
+    // inner ring on the way to a tool doesn't change the group
+    else if (h?.ring === "cat" && h.index !== catIndex) hoverTimer.current = setTimeout(() => pickCat(h.index), HOVER_DWELL);
+  };
+  const onPointerUp = (e) => {
+    if (!press.current) return;
+    press.current = null;
+    setPressed(null);
+    const h = hitAt(e.clientX, e.clientY);
+    if (h?.ring === "opt") run(options[h.index]);
+    else if (h?.ring === "cat" && !touch) inputRef.current?.focus();
+  };
+  const onPointerCancel = () => { press.current = null; setPressed(null); };
 
   const onKey = (e) => {
     if (e.key === "Escape") { e.preventDefault(); if (query) setQuery(""); else onClose(); return; }
@@ -126,18 +192,18 @@ export default function RadialMenu({ files, x, y, onRun, onClose }) {
         style={{ left: cx, top: cy, width: SIZE, height: SIZE, marginLeft: -SIZE / 2, marginTop: -SIZE / 2 }}
         initial={reduce ? false : { opacity: 0, scale: scale * 0.72, rotate: -18 }}
         animate={{ opacity: 1, scale, rotate: 0 }}
-        transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 260, damping: 24 }}
+        transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 300, damping: 26 }}
         onKeyDown={onKey}
       >
         <span className="cv-radial__orbit" aria-hidden="true" />
 
-        {/* Outer ring: the options */}
+        {/* Outer ring: the tools */}
         <motion.div
           key={searching ? `q:${query}` : `c:${cat.id}`}
           className="cv-ring"
           initial={reduce ? false : { opacity: 0, rotate: -10, scale: 0.96 }}
           animate={{ opacity: 1, rotate: 0, scale: 1 }}
-          transition={{ duration: reduce ? 0 : 0.28, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: reduce ? 0 : 0.26, ease: [0.16, 1, 0.3, 1] }}
         >
           <svg className="cv-ring__svg" viewBox={`${-SIZE / 2} ${-SIZE / 2} ${SIZE} ${SIZE}`} role="listbox" id={`${uid}-options`} aria-label={searching ? "Matching tools" : `${cat.label} tools`}>
             {options.length === 0 ? (
@@ -153,9 +219,7 @@ export default function RadialMenu({ files, x, y, onRun, onClose }) {
                   aria-selected={o === active}
                   aria-label={o.title}
                   d={wedge(R2, R3, a - optStep / 2 + pad, a + optStep / 2 - pad)}
-                  className={`cv-w cv-w--opt${o === active ? " is-active" : ""}`}
-                  onMouseEnter={() => setOptIndex(j)}
-                  onClick={() => run(o)}
+                  className={`cv-w cv-w--opt${o === active ? " is-active" : ""}${pressed === `opt:${j}` ? " is-pressed" : ""}`}
                 />
               );
             })}
@@ -191,12 +255,9 @@ export default function RadialMenu({ files, x, y, onRun, onClose }) {
                   role="tab"
                   aria-selected={on}
                   aria-label={c.label}
-                  d={wedge(R0, R1, a - step / 2 + (cats.length > 1 ? 1.2 : 0), a + step / 2 - (cats.length > 1 ? 1.2 : 0))}
-                  className={`cv-w cv-w--cat${on ? " is-active" : ""}`}
+                  d={wedge(R0, R1, a - step / 2 + (cats.length > 1 ? 1.4 : 0), a + step / 2 - (cats.length > 1 ? 1.4 : 0))}
+                  className={`cv-w cv-w--cat${on ? " is-active" : ""}${pressed === `cat:${i}` ? " is-pressed" : ""}`}
                   style={on ? { fill: `url(#${uid}-sapphire)` } : undefined}
-                  onMouseEnter={() => { clearTimeout(hoverTimer.current); hoverTimer.current = setTimeout(() => { setQuery(""); pickCat(i); }, 90); }}
-                  onMouseLeave={() => clearTimeout(hoverTimer.current)}
-                  onClick={() => { setQuery(""); pickCat(i); inputRef.current?.focus(); }}
                 />
               );
             })}
@@ -212,15 +273,27 @@ export default function RadialMenu({ files, x, y, onRun, onClose }) {
                 style={{ left: `calc(50% + ${lx}px)`, top: `calc(50% + ${ly}px)` }}
                 initial={reduce ? false : { opacity: 0, scale: 0.6 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: reduce ? 0 : 0.06 + i * 0.035, duration: 0.25 }}
+                transition={{ delay: reduce ? 0 : 0.05 + i * 0.03, duration: 0.22 }}
                 aria-hidden="true"
               >
-                <Icon size={17} />
+                <Icon size={15} />
                 <span className="cv-label__text">{c.label}</span>
               </motion.span>
             );
           })}
         </div>
+
+        {/* Where the pointer lands: one handler for mouse, touch and pen */}
+        <div
+          ref={hitRef}
+          className="cv-radial__hit"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerCancel}
+          onPointerLeave={() => clearTimeout(hoverTimer.current)}
+          aria-hidden="true"
+        />
 
         {/* The middle: what was dropped */}
         <div className="cv-center" style={{ width: R_CENTER * 2, height: R_CENTER * 2 }}>
@@ -229,14 +302,14 @@ export default function RadialMenu({ files, x, y, onRun, onClose }) {
           <span className="cv-center__meta">{describeFiles(files)}</span>
         </div>
         <button type="button" className="cv-radial__close" onClick={onClose} aria-label="Close">
-          <X size={16} />
+          <X size={15} />
         </button>
       </motion.div>
 
-      {/* Below (or above): search, what the highlighted option does, the keys */}
+      {/* Below (or above): search, what the highlighted tool does, the keys */}
       <motion.div
         className="cv-bar"
-        style={barBelow ? { left: cx, top: cy + half + 14 } : { left: cx, bottom: vh - (cy - half - 14) }}
+        style={barBelow ? { left: cx, top: cy + half + 12 } : { left: cx, bottom: vh - (cy - half - 12) }}
         initial={reduce ? false : { opacity: 0, y: barBelow ? -8 : 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: reduce ? 0 : 0.1, duration: 0.25 }}
@@ -254,18 +327,23 @@ export default function RadialMenu({ files, x, y, onRun, onClose }) {
             value={query}
             onChange={(e) => { setQuery(e.target.value); setOptIndex(0); }}
             onKeyDown={onKey}
-            placeholder={`Type to search ${cats.reduce((n, c) => n + c.options.length, 0)} tools…`}
+            placeholder={`Search ${cats.reduce((n, c) => n + c.options.length, 0)} tools…`}
             spellCheck={false}
             autoComplete="off"
+            enterKeyHint="go"
           />
         </label>
         <p className="cv-bar__what" aria-live="polite">
           {active ? (<><strong>{active.title}</strong>{active.hint ? <span> · {active.hint}</span> : null}</>) : "Nothing to run"}
         </p>
-        <p className="cv-bar__keys" aria-hidden="true">
-          <kbd>↑</kbd><kbd>↓</kbd> group <kbd>←</kbd><kbd>→</kbd> tool <kbd>↵</kbd> run <kbd>esc</kbd> close
-        </p>
-        {menu.unsupported && <p className="cv-bar__note">These files can only be zipped here.</p>}
+        {touch ? (
+          <p className="cv-bar__keys is-touch">Tap a group, then a tool, or slide your finger to a tool and lift</p>
+        ) : (
+          <p className="cv-bar__keys" aria-hidden="true">
+            <kbd>↑</kbd><kbd>↓</kbd> group <kbd>←</kbd><kbd>→</kbd> tool <kbd>↵</kbd> run <kbd>esc</kbd> close
+          </p>
+        )}
+        {(note || menu.unsupported) && <p className="cv-bar__note">{note || "These files can only be zipped here."}</p>}
       </motion.div>
     </div>
   );
