@@ -182,11 +182,11 @@ export function JourneyPath({ steps }) {
   const reduce = useReducedMotion();
   return (
     <div className="lx-journey">
-      <svg className="lx-journey__path" viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true">
-        <path className="lx-journey__base" d="M 60 60 C 220 0, 300 120, 380 60 S 540 0, 620 60 S 780 120, 940 60" />
+      <svg className="lx-journey__path" viewBox="0 0 1000 60" preserveAspectRatio="none" aria-hidden="true">
+        <path className="lx-journey__base" d="M 120 60 C 170 4, 323 4, 373 60 C 423 4, 577 4, 627 60 C 677 4, 830 4, 880 60" />
         <motion.path
           className="lx-journey__gold"
-          d="M 60 60 C 220 0, 300 120, 380 60 S 540 0, 620 60 S 780 120, 940 60"
+          d="M 120 60 C 170 4, 323 4, 373 60 C 423 4, 577 4, 627 60 C 677 4, 830 4, 880 60"
           initial={reduce ? false : { pathLength: 0 }}
           whileInView={{ pathLength: 1 }}
           viewport={{ once: true, amount: 0.6 }}
@@ -246,6 +246,8 @@ export function CameraVisual() {
   return (
     <div className="lx-phone" aria-hidden="true">
       <div className="lx-phone__screen">
+        <span className="lx-phone__island" />
+        <div className="lx-phone__bar"><span>Scan document</span><span className="lx-phone__chip">Front</span></div>
         <div className="lx-phone__frame">
           <span className="is-tl" /><span className="is-tr" /><span className="is-bl" /><span className="is-br" />
           <div className="lx-phone__doc"><span /><i /><i /><i /></div>

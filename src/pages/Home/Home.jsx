@@ -160,12 +160,21 @@ function PinField({ id, label, hint, error, value, onChange, autoComplete }) {
   );
 }
 
+// Rises into view once, as the landing page scrolls to it
+const reveal = (reduce, delay = 0) => (reduce ? {} : {
+  initial: { opacity: 0, y: 26 },
+  whileInView: { opacity: 1, y: 0 },
+  viewport: { once: true, amount: 0.2 },
+  transition: { duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] },
+});
+
 function SectionHead({ id, title, text, center }) {
+  const reduce = useReducedMotion();
   return (
-    <div className={`lx-head${center ? " lx-head--center" : ""}`}>
+    <motion.div {...reveal(reduce)} className={`lx-head${center ? " lx-head--center" : ""}`}>
       <h2 className="lx-head__title" id={id}>{title}</h2>
       {text && <p className="lx-head__text">{text}</p>}
-    </div>
+    </motion.div>
   );
 }
 
@@ -769,13 +778,13 @@ export default function Home() {
               </div>
             </div>
             <ul className="lx-bento">
-              {STUDENT_TILES.map(({ key, icon: Icon, tone, title, text, Visual }) => (
-                <li key={key} className={`lx-tile lx-tile--${key}`}>
+              {STUDENT_TILES.map(({ key, icon: Icon, tone, title, text, Visual }, i) => (
+                <motion.li key={key} className={`lx-tile lx-tile--${key}`} {...reveal(reduceMotion, i * 0.08)}>
                   <span className={`lx-tile__icon is-${tone}`}><Icon size={20} aria-hidden="true" /></span>
                   <h3 className="lx-tile__title">{title}</h3>
                   <p className="lx-tile__text">{text}</p>
                   <div className="lx-tile__visual"><Visual /></div>
-                </li>
+                </motion.li>
               ))}
             </ul>
           </div>
@@ -784,7 +793,7 @@ export default function Home() {
         {/* ── For banks ─────────────────────────────────────────────────── */}
         <section className="lx-section" id="for-banks" tabIndex={-1} aria-labelledby="lp-banks-title">
           <div className="lp-container">
-            <div className="lx-desk">
+            <motion.div className="lx-desk" {...reveal(reduceMotion)}>
               <div>
                 <SectionHead
                   id="lp-banks-title"
@@ -807,14 +816,14 @@ export default function Home() {
                 </Link>
               </div>
               <ViewerMock />
-            </div>
+            </motion.div>
           </div>
         </section>
 
         {/* ── About + start ─────────────────────────────────────────────── */}
         <section className="lx-section" id="about" tabIndex={-1} aria-labelledby="lp-about-title">
           <div className="lp-container">
-            <div className="lx-final">
+            <motion.div className="lx-final" {...reveal(reduceMotion)}>
               <div className="lx-final__about">
                 <SectionHead id="lp-about-title" title={`About ${brandName}`} />
                 <p>
@@ -835,7 +844,7 @@ export default function Home() {
                   </button>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </div>
         </section>
       </main>

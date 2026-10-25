@@ -30,7 +30,7 @@
   height: 180px;
   background: linear-gradient(to bottom, rgba(243, 245, 251, 0), var(--page-bg));
 }
-.lp-hero { padding-bottom: clamp(56px, 6vw, 88px); }
+.lp-hero { padding-bottom: clamp(28px, 3vw, 44px); }
 .lp-title { letter-spacing: -0.04em; }
 .lp-title__line { display: block; }
 
@@ -291,7 +291,7 @@
 @keyframes lx-pulse { 50% { box-shadow: 0 0 0 8px rgba(242, 166, 35, 0.06); } }
 
 /* ── Lender marquee ─────────────────────────────────────────────────── */
-.lx-marquee-wrap { padding: 4px 0 clamp(40px, 5vw, 64px); }
+.lx-marquee-wrap { padding: 0 0 clamp(8px, 1.5vw, 20px); }
 .lx-marquee__label { margin: 0 0 16px; text-align: center; font-size: 14px; font-weight: 600; color: var(--text-secondary); }
 .lx-marquee__viewport {
   overflow: hidden;
@@ -330,56 +330,71 @@
 .lx-head__title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(28px, 2.2rem + 1vw, 44px);
+  font-size: clamp(26px, 1.25rem + 1.5vw, 40px);
   font-weight: 800;
   line-height: 1.12;
   letter-spacing: -0.035em;
   color: var(--lx-midnight);
   text-wrap: balance;
 }
-.lx-head__text { margin: 14px 0 0; font-size: clamp(16px, 0.95rem + 0.2vw, 18px); line-height: 1.65; color: var(--text-secondary); text-wrap: pretty; }
-.lx-section { padding: clamp(52px, 6vw, 88px) 0; }
+.lx-head__text { margin: 10px 0 0; font-size: clamp(15px, 0.9rem + 0.2vw, 17px); line-height: 1.65; color: var(--text-secondary); text-wrap: pretty; }
+/* Sections sit close: the cards carry the separation, not empty space */
+.lx-section { padding: clamp(24px, 3vw, 44px) 0; }
 .lx-section:focus { outline: none; }
 
 /* ── Journey: four stations on a gold path ──────────────────────────── */
-.lx-journey { position: relative; margin-top: clamp(40px, 5vw, 64px); }
-.lx-journey__path { position: absolute; left: 0; right: 0; top: 0; width: 100%; height: 120px; overflow: visible; }
+.lx-journey { position: relative; margin-top: clamp(20px, 2.6vw, 32px); }
+.lx-journey__path { position: absolute; left: 0; right: 0; top: 0; width: 100%; height: 60px; overflow: visible; }
 .lx-journey__base { fill: none; stroke: rgba(36, 72, 201, 0.18); stroke-width: 2; stroke-dasharray: 2 7; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 .lx-journey__gold { fill: none; stroke: var(--lx-gold); stroke-width: 3; stroke-linecap: round; vector-effect: non-scaling-stroke; filter: drop-shadow(0 2px 6px rgba(242, 166, 35, 0.45)); }
 .lx-journey__list {
   position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 24px;
+  gap: 18px;
   margin: 0;
-  padding: 32px 0 0;
+  padding: 60px 0 0;
   list-style: none;
 }
-.lx-station { text-align: center; }
+/* The node sits on the card's top edge, on the path */
+.lx-station {
+  position: relative;
+  padding: 0 18px 22px;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 20px 40px -28px rgba(11, 30, 74, 0.4), inset 0 1px 0 #fff;
+  text-align: center;
+  transition: transform 220ms var(--lx-ease), box-shadow 220ms var(--lx-ease);
+}
+.lx-station:hover { transform: translateY(-3px); box-shadow: 0 24px 46px -26px rgba(11, 30, 74, 0.45), inset 0 1px 0 #fff; }
 .lx-station__node {
   display: grid;
   place-items: center;
   width: 58px;
   height: 58px;
-  margin: 0 auto 16px;
+  margin: -29px auto 12px;
   border: 2px solid rgba(242, 166, 35, 0.7);
   border-radius: 50%;
   background: #fff;
   color: var(--lx-sapphire);
   box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.85), 0 14px 30px -14px rgba(11, 30, 74, 0.45);
 }
-.lx-station__step { display: block; font-size: 13px; font-weight: 700; color: var(--lx-gold-deep); }
-.lx-station__title { margin: 4px 0 6px; font-size: 18px; font-weight: 800; color: var(--lx-midnight); }
-.lx-station__detail { max-width: 230px; margin: 0 auto; font-size: 15px; line-height: 1.55; color: var(--text-secondary); }
+.lx-station__step { display: inline-block; padding: 2px 10px; border-radius: 999px; background: var(--orbit-gold-tint, #fff4de); font-size: 12px; font-weight: 800; color: var(--lx-gold-deep); }
+.lx-station__title { margin: 8px 0 4px; font-size: 17px; font-weight: 800; color: var(--lx-midnight); }
+.lx-station__detail { max-width: 230px; margin: 0 auto; font-size: 14.5px; line-height: 1.55; color: var(--text-secondary); }
 
 /* ── Bento: what students get ───────────────────────────────────────── */
-.lx-students { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: clamp(28px, 4vw, 56px); align-items: start; }
-.lx-students__copy { position: sticky; top: calc(var(--lp-header-h) + 32px); }
-.lx-students__ctas { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.lx-students { display: flex; flex-direction: column; gap: clamp(20px, 2.4vw, 28px); }
+.lx-students__copy { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 32px; }
+.lx-students__copy .lx-head { max-width: 640px; }
+.lx-students__ctas { display: flex; flex-wrap: wrap; gap: 12px; }
 .lx-bento {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-areas: "fill fill" "cam check" "cam track";
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 0.95fr);
+  grid-template-areas: "fill fill cam" "check track cam";
   gap: 16px;
 }
 .lx-tile {
@@ -390,10 +405,10 @@
   min-width: 0;
   padding: 22px;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.95);
   border-radius: 24px;
   background: #fff;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 20px 40px -30px rgba(11, 30, 74, 0.4), inset 0 1px 0 #fff;
   transition: transform 220ms var(--lx-ease), box-shadow 220ms var(--lx-ease), border-color 220ms;
 }
 .lx-tile:hover { transform: translateY(-3px); border-color: rgba(36, 72, 201, 0.22); box-shadow: 0 22px 44px -24px rgba(11, 30, 74, 0.35); }
@@ -409,6 +424,8 @@
 .lx-tile__title { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; color: var(--lx-midnight); }
 .lx-tile__text { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--text-secondary); }
 .lx-tile__visual { margin-top: 16px; }
+.lx-tile--cam .lx-tile__visual { flex: 1; display: flex; align-items: center; justify-content: center; }
+.lx-tile--cam .lx-phone { width: clamp(220px, 20vw, 270px); max-width: 100%; }
 
 /* Auto-fill */
 .lx-fill { display: flex; gap: 16px; align-items: stretch; }
@@ -474,8 +491,12 @@
 @keyframes lx-row-in { 0%, 6% { opacity: 0.4; transform: translateX(6px); } 14%, 90% { opacity: 1; transform: none; } 100% { opacity: 0.4; } }
 
 /* Camera */
+/* A real phone's shape: the scan frame keeps its own ratio and the
+   camera app's bars take the rest of the screen */
 .lx-phone {
+  display: flex;
   width: min(100%, 210px);
+  aspect-ratio: 0.49;
   margin: 0 auto;
   padding: 8px;
   border-radius: 32px;
@@ -487,11 +508,16 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 26px 16px 16px;
+  justify-content: space-between;
+  flex: 1;
+  gap: 10px;
+  padding: 30px 16px 16px;
   border-radius: 26px;
-  background: radial-gradient(circle at 50% 30%, #1b3478, #050d26 75%);
+  background: radial-gradient(circle at 50% 40%, #1b3478, #050d26 75%);
 }
+.lx-phone__island { position: absolute; top: 9px; left: 50%; width: 54px; height: 15px; border-radius: 999px; background: #02061a; translate: -50% 0; }
+.lx-phone__bar { display: flex; align-items: center; justify-content: space-between; width: 100%; font-size: 11px; font-weight: 700; color: #fff; }
+.lx-phone__chip { padding: 2px 8px; border-radius: 999px; background: rgba(242, 166, 35, 0.2); font-size: 10px; color: #f7c86a; }
 .lx-phone__frame { position: relative; width: 100%; aspect-ratio: 0.74; display: grid; place-items: center; }
 .lx-phone__frame > span { position: absolute; width: 22px; height: 22px; border: 0 solid #fff; }
 .lx-phone__frame .is-tl { top: 0; left: 0; border-top-width: 3px; border-left-width: 3px; border-top-left-radius: 12px; }
@@ -575,7 +601,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: clamp(28px, 4vw, 56px);
   align-items: center;
-  padding: clamp(28px, 4.5vw, 64px);
+  padding: clamp(24px, 3.6vw, 52px);
   overflow: hidden;
   border-radius: 32px;
   background: var(--orbit-band, linear-gradient(135deg, #0b1e4a, #13306e));
@@ -662,17 +688,17 @@
 .lx-final {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 460px);
   gap: clamp(24px, 4vw, 56px);
   align-items: center;
-  padding: clamp(28px, 4.5vw, 64px);
+  padding: clamp(22px, 3.4vw, 44px);
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 32px;
   background: url("../../assets/bg.png") 70% 50% / cover no-repeat;
 }
 .lx-final__about { max-width: 560px; }
-.lx-final__about p { margin: 14px 0 0; font-size: 16.5px; line-height: 1.7; color: var(--text-secondary); }
+.lx-final__about p { margin: 10px 0 0; font-size: 16px; line-height: 1.7; color: var(--text-secondary); }
 .lx-final__card {
   padding: clamp(22px, 3vw, 32px);
   border: 1px solid rgba(255, 255, 255, 0.9);
@@ -694,8 +720,9 @@
   .lx-trust { justify-content: flex-start; }
 }
 @media (max-width: 1023px) {
-  .lx-students { grid-template-columns: minmax(0, 1fr); }
-  .lx-students__copy { position: static; }
+  .lx-journey__path { display: none; }
+  .lx-journey__list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 46px 18px; padding-top: 30px; }
+  .lx-bento { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "fill fill" "cam check" "cam track"; }
   .lx-desk, .lx-final { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 899px) {
@@ -704,21 +731,22 @@
 }
 @media (max-width: 759px) {
   .lx-journey__path { display: none; }
-  .lx-journey__list { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0; }
+  .lx-journey__list { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 0; }
   /* Phones: the stations stack on a vertical gold line */
-  .lx-station { position: relative; display: grid; grid-template-columns: 58px minmax(0, 1fr); column-gap: 16px; padding-bottom: 26px; text-align: left; }
+  .lx-station { position: relative; display: grid; grid-template-columns: 52px minmax(0, 1fr); column-gap: 14px; align-items: start; padding: 14px 16px; text-align: left; }
   .lx-station::before {
     content: "";
     position: absolute;
-    left: 28px;
-    top: 58px;
-    bottom: 0;
+    left: 41px;
+    top: 66px;
+    bottom: -13px;
     width: 3px;
     border-radius: 3px;
     background: linear-gradient(var(--lx-gold), rgba(242, 166, 35, 0.25));
   }
   .lx-station:last-child::before { display: none; }
-  .lx-station__node { grid-row: span 3; margin: 0; }
+  .lx-station__node { grid-row: span 3; width: 52px; height: 52px; margin: 0; }
+  .lx-station__step { justify-self: start; }
   .lx-station__detail { max-width: none; margin: 0; }
   .lx-bento { grid-template-columns: minmax(0, 1fr); grid-template-areas: "fill" "cam" "check" "track"; }
   .lx-final__card .lp-btn { flex: 1; }
