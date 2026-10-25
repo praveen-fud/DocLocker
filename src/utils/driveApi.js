@@ -4,8 +4,7 @@
 // which rewrites to Railway server-side, so the mobile never needs to reach Railway directly.
 
 import { companyHeaders } from './company';
-import { applicantHeaders, clearApplicantToken } from './applicantApi';
-import { indianMobileProblem, emailProblem } from './validation';
+import { applicantHeaders } from './applicantApi';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
@@ -93,29 +92,6 @@ export function buildFolderKey(name, identifier = '') {
   const safeName = (name || 'Unknown').trim();
   const safeId = (identifier || '').trim().replace(/[^a-zA-Z0-9@._+-]/g, '');
   return safeId ? `${safeName}__${safeId}` : safeName;
-}
-
-// ── Input validators ──────────────────────────────────────────────────────────
-// Indian mobile numbers only (see utils/validation.js). Empty counts as valid
-// here; callers that need a number check for it themselves.
-export function isValidPhone(phone) {
-  if (!phone || phone.trim() === '') return true;
-  return indianMobileProblem(phone) === null;
-}
-
-export function isValidEmail(email) {
-  if (!email || email.trim() === '') return true;
-  return emailProblem(email) === null;
-}
-
-// ── Clear student session from localStorage ───────────────────────────────────
-export function clearStudentFromLocalStorage() {
-  localStorage.removeItem('abroad_student');
-  clearApplicantToken();
-  // Remove any legacy student_meta_ cache keys from previous app versions
-  Object.keys(localStorage)
-    .filter((k) => k.startsWith('student_meta_'))
-    .forEach((k) => localStorage.removeItem(k));
 }
 
 // ── Upload a file (multipart — no base64 overhead) ───────────────────────────
@@ -245,11 +221,6 @@ export async function deleteStudent(studentName, studentIdentifier = '', driveUr
   }
   const folderKey = buildFolderKey(studentName, studentIdentifier);
   await apiDelete('/api/students', { studentName: folderKey });
-}
-
-// ── OCR scan a Drive file (admin JWT required) ────────────────────────────────
-export async function ocrFile(fileId) {
-  return apiPost('/api/ocr', { fileId });
 }
 
 // ── Structured document listing for a student, grouped by section ─────────────

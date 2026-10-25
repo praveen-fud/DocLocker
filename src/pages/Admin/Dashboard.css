@@ -10,62 +10,86 @@
   --dh-panel: #ebf0ff;
   --dh-panel-edge: rgba(36, 72, 201, 0.18);
   --dh-panel-rule: rgba(36, 72, 201, 0.12);
+  /* Frosted cards over the brand image, as on the landing page */
+  --dh-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --dh-glass: rgba(255, 255, 255, 0.84);
+  --dh-glass-edge: rgba(255, 255, 255, 0.95);
+  --dh-glass-shadow: 0 24px 48px -32px rgba(11, 30, 74, 0.42), 0 2px 6px rgba(11, 30, 74, 0.04), inset 0 1px 0 #ffffff;
 }
 .dh-tone-blue,
 .dh-tone-teal   { --dh-c: var(--primary); --dh-ink: var(--primary); --dh-soft: var(--primary-tint); }
 .dh-tone-violet { --dh-c: var(--navy-soft); --dh-ink: var(--navy-soft); --dh-soft: #e8ecf8; }
 .dh-tone-indigo { --dh-c: var(--gold); --dh-ink: var(--gold-text); --dh-soft: var(--gold-tint); }
 .dh-tone-green  { --dh-c: var(--success); --dh-ink: var(--success-text); --dh-soft: var(--success-bg); }
+.dh-tone-blue,
+.dh-tone-teal   { --dh-disc: linear-gradient(135deg, #3b63e6, #1b379e); --dh-on: #ffffff; }
+.dh-tone-violet { --dh-disc: linear-gradient(135deg, #2b4a9a, #0b1e4a); --dh-on: #ffffff; }
+.dh-tone-indigo { --dh-disc: linear-gradient(135deg, #f7c25c, #d98e0f); --dh-on: var(--orbit-midnight, #0b1e4a); }
+.dh-tone-green  { --dh-disc: linear-gradient(135deg, #34c17a, #15803d); --dh-on: #ffffff; }
 
 /* ── Headline figures ── */
 .dh-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+/* Each card spans three shared rows (label, figure, context), so those
+   line up across the row even when one label wraps onto two lines. */
 .dh-kpis--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .dh-kpi {
   position: relative;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 18px 18px 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-card);
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 0;
+  padding: 16px 18px 15px;
+  border: 1px solid var(--dh-glass-edge);
+  border-radius: 22px;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--dh-soft) 90%, transparent) 0%, rgba(255, 255, 255, 0.88) 58%);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  backdrop-filter: blur(16px) saturate(1.3);
+  box-shadow: var(--dh-glass-shadow);
   font: inherit;
   text-align: left;
   color: inherit;
   cursor: pointer;
   overflow: hidden;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+  isolation: isolate;
+  transition: transform 220ms var(--dh-ease), box-shadow 220ms var(--dh-ease), border-color 220ms;
 }
-/* Coloured top edge in the card's tone */
-.dh-kpi::before {
+.dh-kpi > * { position: relative; z-index: 1; }
+.dh-kpi:hover { border-color: #ffffff; box-shadow: 0 22px 44px -24px rgba(11, 30, 74, 0.38); transform: translateY(-3px); }
+.dh-kpi:active { transform: translateY(0); }
+.dh-kpi-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.dh-kpi-icon { position: relative; flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--dh-disc); color: var(--dh-on); box-shadow: 0 8px 16px -8px color-mix(in srgb, var(--dh-c) 75%, transparent); transition: transform 0.3s var(--dh-ease); }
+/* The landing page's orbit, in the card's tone, round the icon; it
+   swings level on hover */
+.dh-kpi-icon::after {
   content: "";
   position: absolute;
-  inset: 0 0 auto 0;
-  height: 4px;
-  background: var(--dh-c);
+  inset: -3px -13px;
+  border: 1.5px solid color-mix(in srgb, var(--dh-c) 45%, transparent);
+  border-radius: 50%;
+  transform: rotate(-20deg) scaleY(0.46);
+  transition: transform 700ms var(--dh-ease), border-color 300ms;
   pointer-events: none;
 }
-.dh-kpi:hover { border-color: color-mix(in srgb, var(--dh-c) 40%, white); box-shadow: var(--shadow-lift); transform: translateY(-1px); }
-.dh-kpi:active { transform: translateY(1px); }
-.dh-kpi-top { width: 100%; display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.dh-kpi-icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--dh-soft); color: var(--dh-ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dh-c) 18%, transparent); }
-.dh-kpi-go { color: var(--text-muted); opacity: 0; transition: opacity var(--transition-fast); }
-.dh-kpi:hover .dh-kpi-go, .dh-kpi:focus-visible .dh-kpi-go { opacity: 1; }
+.dh-kpi:hover .dh-kpi-icon::after { border-color: color-mix(in srgb, var(--dh-c) 70%, transparent); transform: rotate(8deg) scaleY(0.52); }
+.dh-kpi:hover .dh-kpi-icon { transform: scale(1.08) rotate(-6deg); }
+.dh-kpi-go { flex: none; color: var(--dh-ink); opacity: 0; transform: translate(-4px, 4px); transition: opacity var(--transition-fast), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+.dh-kpi:hover .dh-kpi-go, .dh-kpi:focus-visible .dh-kpi-go { opacity: 1; transform: none; }
+.dh-kpi-mid { align-self: end; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
 .dh-kpi-value {
   font-family: var(--font-display);
-  font-size: 30px;
+  font-size: 28px;
   font-weight: 800;
   line-height: 1.1;
-  letter-spacing: -0.02em;
-  color: var(--text-primary);
+  letter-spacing: -0.03em;
+  color: var(--orbit-midnight, var(--text-primary));
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.dh-kpi-label { font-size: 13.5px; font-weight: 600; color: var(--text-secondary); }
-.dh-kpi-sub { margin-top: 6px; font-size: 12.5px; color: var(--text-muted); }
+/* Top padding centres the first line on the 34px icon */
+.dh-kpi-label { min-width: 0; padding-top: 8px; font-size: 13px; font-weight: 600; line-height: 1.35; color: var(--text-secondary); }
+.dh-kpi-sub { margin-top: 6px; font-size: 12.5px; line-height: 1.4; color: var(--text-muted); }
 .dh-kpi-sub.is-up { color: var(--success-text); font-weight: 600; }
 
 /* ── Grid ── */
@@ -75,25 +99,32 @@
 .dh-card--companies { grid-column: 1 / -1; }
 .dh-cell--docs, .dh-cell--advisors, .dh-cell--activity { grid-column: span 4; min-width: 0; display: flex; flex-direction: column; }
 .dh-cell--docs > .ov-card, .dh-cell--activity > .ov-card { flex: 1; }
-.dh-grid--staff .dh-cell--docs, .dh-cell--recent { grid-column: span 6; }
+/* Staff: documents and recent students each take a full row, so neither
+   is stretched to the other's height. */
+.dh-grid--staff .dh-cell--docs, .dh-cell--recent { grid-column: 1 / -1; }
 .dh-cell--recent .loan-badge { height: 22px; padding: 0 8px; font-size: 11.5px; }
 
+.dh-card,
+.dh .ov-card {
+  border: 1px solid var(--dh-glass-edge);
+  border-radius: 24px;
+  background: var(--dh-glass);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  backdrop-filter: blur(18px) saturate(1.3);
+  box-shadow: var(--dh-glass-shadow);
+}
 .dh-card {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  padding: 20px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-card);
+  padding: 22px;
 }
-/* Loan journey + needs attention sit on a soft sapphire-tint panel */
+.dh-card-title,
+.dh .ov-card-title { letter-spacing: -0.02em; color: var(--orbit-midnight, var(--text-primary)); }
+/* Loan journey + needs attention: glass washed in sapphire */
 .dh-card--funnel,
 .dh-card--attention {
-  border-color: var(--dh-panel-edge);
-  background: var(--dh-panel);
-  box-shadow: 0 1px 2px rgba(11, 30, 74, 0.04), 0 10px 26px -18px rgba(36, 72, 201, 0.45);
+  background: linear-gradient(180deg, rgba(234, 240, 255, 0.92) 0%, rgba(255, 255, 255, 0.86) 64%);
 }
 .dh-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .dh-card-title { margin: 0; font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--text-primary); }
@@ -114,6 +145,9 @@
   cursor: pointer;
 }
 .dh-card-head .dh-link { margin-top: 0; padding: 0; }
+.dh-card--attention > .dh-link { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--dh-panel-rule); }
+.dh-card--attention > .dh-attn { margin-bottom: 10px; }
+.dh-attn-rest { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 0 10px; padding: 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.55); font-size: 13px; font-weight: 600; color: var(--success-text); }
 .dh-link:hover { text-decoration: underline; }
 .dh-muted { color: var(--text-muted); }
 .dh-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px 12px; text-align: center; color: var(--text-muted); }
@@ -121,7 +155,7 @@
 .dh-empty--ok { color: var(--success); }
 
 /* ── Loan journey: horizontal bars from one baseline ── */
-.dh-journey { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; flex: 1; justify-content: center; }
+.dh-journey { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; flex: 1; justify-content: space-evenly; }
 .dh-step-row {
   width: 100%;
   display: grid;
@@ -358,23 +392,45 @@
 .dh-adv-nums strong { font-family: var(--font-display); font-size: 16px; font-weight: 800; color: var(--text-primary); }
 .dh-adv-nums span { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
 
-/* The activity feed and lender strip already bring their own card styles */
-.dh .ov-partners { margin-top: 0; }
-
-/* Lending partners: the dashboard's one midnight band, logos on white chips */
-.dh .ov-partners {
-  border-color: transparent;
-  background: var(--orbit-band, linear-gradient(135deg, #0b1e4a 0%, #13306e 100%));
-  box-shadow: var(--shadow-lift);
-}
-.dh .ov-partners .ov-card-title { color: #ffffff; }
-.dh .ov-partners .ov-card-sub { color: rgba(255, 255, 255, 0.78); }
-.dh .ov-partners-icon { background: rgba(255, 255, 255, 0.10); color: var(--gold); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); }
-.dh .ov-partner { border-color: transparent; background: #ffffff; box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.5); }
 .dh-cell--activity .ov-activity-list { max-height: 360px; }
+
+/* Document completion: when the card is stretched beside a taller one,
+   the three rows share the extra height instead of leaving a gap. */
+.dh-cell--docs { container-type: inline-size; }
+.dh-cell--docs .ov-legend { flex: 1; }
+.dh-cell--docs .ov-legend li { flex: 1; display: flex; }
+.dh-cell--docs .ov-legend-row { flex: 1; }
+/* Wide enough: the rows on the left, the two summary figures stacked on
+   the right, so nothing is pinned to the bottom of an empty card. */
+@container (min-width: 520px) {
+  .dh-cell--docs .ov-breakdown {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 34%);
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas: "head head" "bar bar" "legend footer";
+    column-gap: 24px;
+  }
+  .dh-cell--docs .ov-card-head { grid-area: head; }
+  .dh-cell--docs .ov-bar { grid-area: bar; }
+  .dh-cell--docs .ov-legend { grid-area: legend; }
+  .dh-cell--docs .ov-footer { grid-area: footer; margin: 0; padding: 0; grid-template-columns: minmax(0, 1fr); grid-auto-rows: 1fr; gap: 10px; }
+  .dh-cell--docs .ov-footer-stat { display: flex; flex-direction: column; justify-content: center; }
+}
+
+/* Wide screens: documents and advisor workload stack on the left at their
+   own height; the activity feed spans both on the right and scrolls
+   inside, so it follows their height instead of stretching them. */
+@media (min-width: 1181px) {
+  .dh-grid { grid-auto-flow: row dense; }
+  .dh-grid:not(.dh-grid--staff) .dh-cell--docs,
+  .dh-grid:not(.dh-grid--staff) .dh-cell--advisors { grid-column: 1 / span 7; }
+  .dh-grid:not(.dh-grid--staff) .dh-cell--activity { grid-column: 8 / -1; grid-row: span 2; contain: size; min-height: 320px; }
+  .dh-grid:not(.dh-grid--staff) .dh-cell--activity .ov-activity-list { max-height: none; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .dh-kpi, .dh-kpi:hover, .dh-kpi:active { transform: none; }
+  .dh-kpi:hover .dh-kpi-icon, .dh-kpi-go { transform: none; }
   .dh-step-bar, .dh-step-value { transition: none; }
 }
 
@@ -389,7 +445,7 @@
   .dh-kpis--5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dh-kpis--5 > :last-child { grid-column: 1 / -1; }
   .dh-card--funnel, .dh-card--attention { grid-column: 1 / -1; }
-  .dh-cell--docs, .dh-cell--advisors { grid-column: span 6; }
+  .dh-cell--docs, .dh-cell--advisors { grid-column: 1 / -1; }
   .dh-cell--activity { grid-column: 1 / -1; }
   .dh-grid--staff .dh-cell--docs, .dh-cell--recent { grid-column: 1 / -1; }
 }
@@ -431,3 +487,30 @@
 @media (max-width: 380px) {
   .dh-kpis, .dh-kpis--5 { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ── Lending partners: the landing page's marquee ── */
+.dh-partners { min-width: 0; padding-top: 4px; }
+.dh-partners .lx-marquee__label { margin-bottom: 12px; }
+.dh-partners .lx-lender { border-color: var(--dh-glass-edge); background: rgba(255, 255, 255, 0.9); }
+
+/* ── Arrival: everything rises in, in reading order ── */
+@media (prefers-reduced-motion: no-preference) {
+  .dh-kpi, .dh-grid > *, .dh-partners { animation: dh-rise 0.65s var(--dh-ease) backwards; }
+  .dh-kpi:nth-child(1) { animation-delay: 0.16s; }
+  .dh-kpi:nth-child(2) { animation-delay: 0.22s; }
+  .dh-kpi:nth-child(3) { animation-delay: 0.28s; }
+  .dh-kpi:nth-child(4) { animation-delay: 0.34s; }
+  .dh-kpi:nth-child(5) { animation-delay: 0.4s; }
+  .dh-grid > :nth-child(1) { animation-delay: 0.42s; }
+  .dh-grid > :nth-child(2) { animation-delay: 0.5s; }
+  .dh-grid > :nth-child(3) { animation-delay: 0.58s; }
+  .dh-grid > :nth-child(4) { animation-delay: 0.64s; }
+  .dh-grid > :nth-child(5) { animation-delay: 0.7s; }
+  .dh-grid > :nth-child(n + 6) { animation-delay: 0.76s; }
+  .dh-partners { animation-delay: 0.8s; }
+}
+@keyframes dh-rise { from { opacity: 0; transform: translateY(18px); } }
+@media (prefers-reduced-motion: reduce) {
+  .dh-kpi-icon::after { transition: none; }
+}
+

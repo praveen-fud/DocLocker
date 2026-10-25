@@ -7,84 +7,14 @@ import {
   Eye,
   EyeOff,
   ArrowRight,
-  Save,
-  LoaderCircle,
-  Check,
   FileCheck2,
   Layers,
-  ShieldCheck,
   FileType2,
   HardDrive,
   ScanSearch,
 } from "lucide-react";
 import PdfUnlockBanner from "../PdfUnlockBanner/PdfUnlockBanner";
 import "./PortalRail.css";
-
-// ── Application progress ──────────────────────────────────────────────────────
-function Ring({ percent }) {
-  const r = 34;
-  const c = 2 * Math.PI * r;
-  return (
-    <svg className="rail-ring" viewBox="0 0 84 84" aria-hidden="true">
-      <circle cx="42" cy="42" r={r} className="rail-ring__track" />
-      <circle
-        cx="42"
-        cy="42"
-        r={r}
-        className="rail-ring__value"
-        strokeDasharray={c}
-        strokeDashoffset={c - (c * percent) / 100}
-      />
-    </svg>
-  );
-}
-
-export function ProgressSummary({ done, total, categories, onJump }) {
-  const percent = total > 0 ? Math.round((done / total) * 100) : 0;
-  const left = Math.max(total - done, 0);
-  return (
-    <section className="rail-card" aria-labelledby="rail-progress-title">
-      <h2 className="rail-card__title" id="rail-progress-title">Application Progress</h2>
-      <div className="rail-progress">
-        <div className="rail-progress__ring">
-          <Ring percent={percent} />
-          <span className="rail-progress__pct">{percent}%</span>
-        </div>
-        <div>
-          <p className="rail-progress__big">
-            {done} of {total}
-          </p>
-          <p className="rail-progress__sub">required documents</p>
-          <p className={`rail-progress__left${left === 0 ? " is-done" : ""}`}>
-            {left === 0 ? "All required documents are in" : `${left} still needed`}
-          </p>
-        </div>
-      </div>
-      <ul className="rail-cats">
-        {categories.map((cat) => {
-          const pct = cat.total > 0 ? Math.round((cat.done / cat.total) * 100) : 0;
-          const complete = cat.total > 0 && cat.done >= cat.total;
-          return (
-            <li key={cat.id}>
-              <button type="button" className="rail-cat" onClick={() => onJump(cat.id)}>
-                <span className="rail-cat__row">
-                  <span className="rail-cat__label">{cat.label}</span>
-                  <span className={`rail-cat__count${complete ? " is-done" : ""}`}>
-                    {complete && <Check size={12} strokeWidth={3} aria-hidden="true" />}
-                    {cat.done}/{cat.total}
-                  </span>
-                </span>
-                <span className="rail-cat__bar" aria-hidden="true">
-                  <span style={{ width: `${pct}%` }} className={complete ? "is-done" : undefined} />
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
 
 // ── AI verification results ───────────────────────────────────────────────────
 function formatDate(v) {
@@ -245,43 +175,5 @@ export function DocumentGuidelines({ maxSize }) {
       </ul>
       <PdfUnlockBanner />
     </section>
-  );
-}
-
-// ── Save actions ──────────────────────────────────────────────────────────────
-export function SaveActions({ primaryLabel, onPrimary, onSave, saving, note }) {
-  return (
-    <section className="rail-card rail-actions" aria-label="Save">
-      <button type="button" className="rail-btn rail-btn--primary" onClick={onPrimary} disabled={saving}>
-        {saving ? <LoaderCircle size={16} className="rail-spin" aria-hidden="true" /> : null}
-        {saving ? "Saving…" : primaryLabel}
-        {!saving && <ArrowRight size={16} aria-hidden="true" />}
-      </button>
-      <button type="button" className="rail-btn rail-btn--secondary" onClick={onSave} disabled={saving}>
-        <Save size={15} aria-hidden="true" /> Save progress
-      </button>
-      {note && <p className="rail-actions__note">{note}</p>}
-      <p className="rail-secure">
-        <ShieldCheck size={13} aria-hidden="true" /> Your documents are handled securely.
-      </p>
-    </section>
-  );
-}
-
-// ── Mobile / tablet sticky bar ────────────────────────────────────────────────
-export function MobileActionBar({ done, total, primaryLabel, onPrimary, saving }) {
-  const percent = total > 0 ? Math.round((done / total) * 100) : 0;
-  return (
-    <div className="rail-mobilebar" role="region" aria-label="Progress and save">
-      <div className="rail-mobilebar__progress">
-        <span className="rail-mobilebar__count">{done}/{total} required</span>
-        <span className="rail-mobilebar__bar" aria-hidden="true"><span style={{ width: `${percent}%` }} /></span>
-      </div>
-      <button type="button" className="rail-btn rail-btn--primary" onClick={onPrimary} disabled={saving}>
-        {saving ? <LoaderCircle size={16} className="rail-spin" aria-hidden="true" /> : null}
-        {saving ? "Saving…" : primaryLabel}
-        {!saving && <ArrowRight size={16} aria-hidden="true" />}
-      </button>
-    </div>
   );
 }

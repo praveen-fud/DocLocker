@@ -44,20 +44,30 @@ export default function HelpCenter({ student, maxSize, onOpenDocuments }) {
       </div>
 
       <div className="sd-view__grid">
-        <section className="sd-card" aria-labelledby="sd-faq-title">
-          <h2 className="sd-card__title" id="sd-faq-title">Frequently asked questions</h2>
-          <div className="sd-faq">
-            {FAQ.map((f) => (
-              <details key={f.q} className="sd-faq__item">
-                <summary>
-                  <span>{f.q}</span>
-                  <ChevronDown size={18} aria-hidden="true" />
-                </summary>
-                <p>{typeof f.a === "function" ? f.a(maxSize) : f.a}</p>
-              </details>
-            ))}
-          </div>
-        </section>
+        <div className="sd-view__main">
+          <section className="sd-card" aria-labelledby="sd-faq-title">
+            <h2 className="sd-card__title" id="sd-faq-title">Frequently asked questions</h2>
+            <div className="sd-faq">
+              {FAQ.map((f) => (
+                <details key={f.q} className="sd-faq__item">
+                  <summary>
+                    <span>{f.q}</span>
+                    <ChevronDown size={18} aria-hidden="true" />
+                  </summary>
+                  <p>{typeof f.a === "function" ? f.a(maxSize) : f.a}</p>
+                </details>
+              ))}
+            </div>
+          </section>
+
+          <button type="button" className="sd-card sd-linkcard" onClick={onOpenDocuments}>
+            <span className="sd-linkcard__icon" aria-hidden="true"><FileText size={20} /></span>
+            <span className="sd-linkcard__text">
+              <strong>Go to your documents</strong>
+              <span>Upload, replace or check each document.</span>
+            </span>
+          </button>
+        </div>
 
         <div className="sd-view__side">
           <section className="sd-card sd-advisor" aria-labelledby="sd-advisor-title">
@@ -80,14 +90,6 @@ export default function HelpCenter({ student, maxSize, onOpenDocuments }) {
           </section>
 
           <DocumentGuidelines maxSize={maxSize} />
-
-          <button type="button" className="sd-card sd-linkcard" onClick={onOpenDocuments}>
-            <span className="sd-linkcard__icon" aria-hidden="true"><FileText size={20} /></span>
-            <span className="sd-linkcard__text">
-              <strong>Go to your documents</strong>
-              <span>Upload, replace or check each document.</span>
-            </span>
-          </button>
         </div>
       </div>
     </div>

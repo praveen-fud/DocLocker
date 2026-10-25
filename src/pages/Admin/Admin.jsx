@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import {
@@ -67,6 +68,8 @@ import {
   Hourglass,
   MinusCircle,
   ScanSearch,
+  CalendarDays,
+  ArrowRightLeft,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter, recoverMetaFromPdf, restoreMeta, buildFolderKey, getAuditLog, downloadAllFiles } from "../../utils/driveApi";
@@ -75,12 +78,19 @@ import useFileObjectUrl from "../../hooks/useFileObjectUrl";
 import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields, coApplicantFields } from "../../context/schemas";
 import { BANK_OPTIONS, getBankLogo } from "../../utils/bankOptions";
 import BrandLogo from "../../components/BrandLogo/BrandLogo";
+import CountUp from "../../components/CountUp/CountUp";
+import { LenderMarquee } from "../Home/LandingVisuals";
+import "../Home/Landing.css";
 import "./Admin.css";
 import "./StudentProfile.css";
 import "./Dashboard.css";
 import DocumentReader from "./DocumentReader";
 import DocumentLibrary from "./DocumentLibrary";
 import { TeamSection, CompaniesSection } from "./TeamCompanies";
+import ConverterProvider from "./converter/ConverterProvider";
+import ConverterSection from "./converter/ConverterSection";
+// After the section stylesheets: every page's cards as frosted glass
+import "./Surfaces.css";
 import { callAPI, isAdminLevel, ROLE_LABELS, passwordProblem } from "../../utils/adminApi";
 import { companyLogoSrc } from "../../utils/company";
 import { buildIdentityReport } from "../../utils/identityCheck";
@@ -269,23 +279,8 @@ function PartnerBanksShowcase() {
   if (banks.length === 0) return null;
 
   return (
-    <section className="ov-card ov-partners" aria-label="Lending partners">
-      <div className="ov-partners-intro">
-        <span className="ov-partners-icon" aria-hidden="true"><Landmark size={20} /></span>
-        <div>
-          <p className="ov-card-title">Lending partners</p>
-          <p className="ov-card-sub">{banks.length} banks &amp; NBFCs connected</p>
-        </div>
-      </div>
-      <div className="ov-partners-strip">
-        <div className="ov-partners-track">
-          {banks.concat(banks).map((b, i) => (
-            <div className="ov-partner" key={`${b.value}-${i}`} title={b.label} aria-hidden={i >= banks.length || undefined}>
-              <img src={b.logo} alt={i < banks.length ? b.label : ""} loading="lazy" />
-            </div>
-          ))}
-        </div>
-      </div>
+    <section className="dh-partners" aria-label="Lending partners">
+      <LenderMarquee lenders={banks} label={`Lending partners · ${banks.length} banks and NBFCs connected`} />
     </section>
   );
 }
@@ -543,11 +538,13 @@ function DashboardHome({
           return (
             <button key={k.key} type="button" className={`dh-kpi dh-tone-${k.tone}`} onClick={k.open}>
               <span className="dh-kpi-top">
-                <span className="dh-kpi-icon" aria-hidden="true"><Icon size={20} /></span>
+                <span className="dh-kpi-label">{k.label}</span>
+                <span className="dh-kpi-icon" aria-hidden="true"><Icon size={18} /></span>
+              </span>
+              <span className="dh-kpi-mid">
+                <span className="dh-kpi-value"><CountUp text={dash(k.value)} /></span>
                 <ArrowUpRight size={16} className="dh-kpi-go" aria-hidden="true" />
               </span>
-              <span className="dh-kpi-value">{dash(k.value)}</span>
-              <span className="dh-kpi-label">{k.label}</span>
               <span className={`dh-kpi-sub${k.up ? " is-up" : ""}`}>{loading ? "Loading…" : k.sub}</span>
             </button>
           );
@@ -648,9 +645,16 @@ function DashboardHome({
               ))}
             </ul>
           )}
-          {attention.length > attentionShown.length && (
+          {/* A short list leaves room to say the rest are fine */}
+          {!loading && attentionShown.length > 0 && attentionShown.length < 4 && total > attention.length && (
+            <p className="dh-attn-rest">
+              <CheckCircle size={16} aria-hidden="true" />
+              {total - attention.length} other student{total - attention.length === 1 ? " is" : "s are"} on track
+            </p>
+          )}
+          {!loading && attention.length > 0 && (
             <button type="button" className="dh-link" onClick={() => onOpenProfile(attention[0].s, attention.map((x) => x.s))}>
-              Go through all {attention.length} <ArrowRight size={14} />
+              {attention.length > 1 ? `Go through all ${attention.length}` : "Open their file"} <ArrowRight size={14} />
             </button>
           )}
         </section>
@@ -4016,6 +4020,7 @@ function AdminSidebar({
     { id: "documents", label: "Document Management", icon: FolderOpen, roles: ["superadmin", "admin"] },
     { id: "banks", label: "Banks & Lenders", icon: Landmark, roles: ["superadmin", "admin", "advisor"] },
     { id: "docReader", label: "Document Reader", icon: ScanSearch, roles: ["superadmin", "admin", "advisor"] },
+    { id: "converter", label: "File Converter", icon: ArrowRightLeft, roles: ["superadmin", "admin", "advisor"] },
     { id: "team", label: "Team", icon: UsersRound, roles: ["superadmin", "admin"] },
     { id: "companies", label: adminRole === "superadmin" ? "Companies" : "Company", icon: Building2, roles: ["superadmin", "admin"] },
     {
@@ -4027,6 +4032,7 @@ function AdminSidebar({
     },
   ];
   const visibleNav = NAV_ITEMS.filter((n) => n.roles.includes(adminRole));
+  const reduceMotion = useReducedMotion();
 
   return (
     <>
@@ -4037,9 +4043,12 @@ function AdminSidebar({
         className={`adm-sidebar${mobileOpen ? " is-open" : ""}`}
         aria-label="Admin navigation"
       >
+        {/* Soft light drifting behind the menu (decoration only) */}
+        <span className="adm-sidebar-glow is-a" aria-hidden="true" />
+        <span className="adm-sidebar-glow is-b" aria-hidden="true" />
         <div className="adm-sidebar-top">
           <div className="adm-sidebar-brand">
-            <BrandLogo size="sm" tone="dark" />
+            <BrandLogo size="sm" />
             <button type="button" className="adm-sidebar-close" onClick={onCloseMobile} aria-label="Close menu">
               <X size={18} />
             </button>
@@ -4067,6 +4076,14 @@ function AdminSidebar({
                     else { setSection(id); onCloseMobile?.(); }
                   }}
                 >
+                  {isActive && (
+                    <motion.span
+                      layoutId="adm-nav-pill"
+                      className="adm-nav-pill"
+                      transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 420, damping: 36 }}
+                      aria-hidden="true"
+                    />
+                  )}
                   <Icon size={19} className="adm-nav-icon" />
                   <span className="adm-nav-label">{label}</span>
                   {id === "banks" && pendingBankerRequests > 0 && (
@@ -4980,6 +4997,14 @@ export default function Admin() {
   }, []);
   useEffect(() => { void refreshAccount(); }, [refreshAccount]);
   const adminId = adminAccount?.id || "";
+  // "Add student" opens the student registration form. A partner company's
+  // team registers on its own company link, so the student lands in that
+  // company, not in Flyurdream.
+  const openRegistration = () => {
+    const co = adminAccount?.company;
+    const base = co?.kind === "partner" && co.slug ? `/c/${encodeURIComponent(co.slug)}` : "/";
+    navigate(`${base}?apply=new`);
+  };
   const navigate = useNavigate();
 
   const [section, setSection] = useState("dashboard");
@@ -5405,10 +5430,16 @@ export default function Admin() {
   if (!isAdmin) return null;
 
   const isAdvisor = adminRole === "advisor";
+  const todayLabel = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
   const SECTION_META = {
     dashboard: {
       title: `${greeting()}, ${(adminName || "").split(/\s+/)[0] || "there"}`,
-      sub: `${new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })} · here’s where every application stands`,
+      // A line about the book itself; the date sits in the chip above
+      sub: loading && students.length === 0
+        ? "Loading your students…"
+        : stats.total
+          ? `${stats.total} student file${stats.total === 1 ? "" : "s"}, ${stats.newThisWeek} new this week. Here’s where every application stands.`
+          : "No students yet. Add your first student and their file starts here.",
     },
     students: {
       title: isAdvisor ? "My Students" : "Students",
@@ -5422,6 +5453,7 @@ export default function Admin() {
       : { title: "Company", sub: "Your company’s details, logo and signup link" },
     documents: { title: "Document Management", sub: "Every student document, sorted into folders by type" },
     docReader: { title: "Document Reader", sub: "Extract structured data from a 10th or 12th certificate, passport, Aadhaar or PAN card in seconds" },
+    converter: { title: "File Converter", sub: "Convert, compress, crop, trim and merge files right here. Nothing is uploaded." },
     audit:    { title: "Audit Log", sub: "Who did what, and when" },
     bankActivity: { title: "Bank Activity", sub: "Student, advisor, and banker actions, grouped by lender" },
   };
@@ -5482,8 +5514,36 @@ export default function Admin() {
     { label: "Settings", icon: Settings, onSelect: () => setShowSettings(true) },
   ];
 
+  // Refresh, more and add student, beside the dashboard and Students titles
+  const headerActions = (
+    <div className="adm-header-actions">
+      <button
+        type="button"
+        className="adm-icon-btn adm-icon-btn--outline"
+        onClick={loadStudents}
+        disabled={loading}
+        aria-label="Refresh students"
+        title="Refresh students"
+      >
+        <RefreshCw size={18} className={loading ? "spin" : ""} />
+      </button>
+      <ActionsMenu
+        label="More actions"
+        items={headerMenuItems}
+        icon={MoreHorizontal}
+        className="adm-icon-btn adm-icon-btn--outline"
+      />
+      <button type="button" className="adm-add-btn" onClick={openRegistration}>
+        <span className="adm-add-btn__icon" aria-hidden="true"><Plus size={15} strokeWidth={2.6} /></span>
+        <span>Add student</span>
+      </button>
+    </div>
+  );
+
   return (
-    <div className="admin-shell theme-orbit">
+    <div className="admin-shell theme-orbit orbit-backdrop">
+      {/* Shift + drop a file anywhere here opens the File Converter */}
+      <ConverterProvider>
       <AdminSidebar
         section={section}
         setSection={setSection}
@@ -5503,34 +5563,16 @@ export default function Admin() {
       <main className="admin-container">
         <div className="adm-header">
           <div className="adm-header-text">
+            {section === "dashboard" && (
+              <p className="adm-chip">
+                <span className="adm-chip__icon" aria-hidden="true"><CalendarDays size={14} /></span>
+                {todayLabel}
+              </p>
+            )}
             <h1 className="adm-title">{activeMeta.title}</h1>
             <p className="adm-sub">{activeMeta.sub}</p>
           </div>
-
-          {(showStudents || section === "dashboard") && (
-            <div className="adm-header-actions">
-              <button
-                type="button"
-                className="adm-icon-btn adm-icon-btn--outline"
-                onClick={loadStudents}
-                disabled={loading}
-                aria-label="Refresh students"
-                title="Refresh students"
-              >
-                <RefreshCw size={18} className={loading ? "spin" : ""} />
-              </button>
-              <ActionsMenu
-                label="More actions"
-                items={headerMenuItems}
-                icon={MoreHorizontal}
-                className="adm-icon-btn adm-icon-btn--outline"
-              />
-              <button type="button" className="adm-btn adm-btn--primary adm-add-btn" onClick={() => navigate("/")}>
-                <Plus size={18} />
-                <span>Add Student</span>
-              </button>
-            </div>
-          )}
+          {(showStudents || section === "dashboard") && headerActions}
         </div>
 
         {section === "dashboard" && (
@@ -5583,6 +5625,8 @@ export default function Admin() {
         )}
 
         {section === "docReader" && <DocumentReader />}
+
+        {section === "converter" && <ConverterSection />}
 
         {section === "documents" && isAdminLevel(adminRole) && <DocumentLibrary students={students} />}
 
@@ -5972,6 +6016,7 @@ export default function Admin() {
         />
       )}
 
+      </ConverterProvider>
     </div>
   );
 }

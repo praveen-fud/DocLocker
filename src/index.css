@@ -246,11 +246,6 @@ h6 {
   padding: 7px 14px;
   font-size: 13px;
 }
-.btn-lg {
-  min-height: 48px;
-  padding: 14px 28px;
-  font-size: 15px;
-}
 
 .card {
   background: var(--surface);
@@ -495,54 +490,6 @@ h6 {
   font-size: 12px;
   font-weight: 600;
 }
-.badge-success {
-  background: rgba(22, 163, 74, 0.12);
-  color: #16a34a;
-  border: 1px solid rgba(22, 163, 74, 0.25);
-}
-.badge-warning {
-  background: rgba(217, 119, 6, 0.12);
-  color: #d97706;
-  border: 1px solid rgba(217, 119, 6, 0.25);
-}
-.badge-error {
-  background: rgba(220, 38, 38, 0.1);
-  color: #dc2626;
-  border: 1px solid rgba(220, 38, 38, 0.22);
-}
-.badge-info {
-  background: rgba(26, 110, 181, 0.1);
-  color: var(--blue-dark);
-  border: 1px solid rgba(26, 110, 181, 0.22);
-}
-
-.divider {
-  height: 1px;
-  background: var(--glass-border);
-  margin: 24px 0;
-}
-
-.page-bg {
-  min-height: 100vh;
-}
-
-.grid-2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-.grid-3 {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 16px;
-}
-
-@media (max-width: 768px) {
-  .grid-2,
-  .grid-3 {
-    grid-template-columns: 1fr;
-  }
-}
 
 @media (max-width: 480px) {
   body {
@@ -553,11 +500,6 @@ h6 {
 
   .btn {
     font-size: 13px;
-  }
-
-  .btn-lg {
-    padding: 13px 22px;
-    font-size: 14px;
   }
 }
 
@@ -575,9 +517,6 @@ h6 {
   }
 }
 
-.pulse {
-  animation: pulse 2s infinite;
-}
 @keyframes pulse {
   0%,
   100% {

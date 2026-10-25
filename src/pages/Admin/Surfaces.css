@@ -1,0 +1,79 @@
+/* ============================================================
+   Staff workspace — the landing page's surfaces on every page.
+   Cards are frosted glass over the brand image (glass tokens in
+   theme/orbit.css), clickable cards lift as on the landing page, and
+   card grids arrive one after another. The dashboard styles its own
+   cards (Dashboard.css); dialogs stay solid white. Loaded after the
+   section stylesheets so it wins over their plain white cards.
+   ============================================================ */
+
+.admin-shell.theme-orbit :is(
+  .adm-table,
+  .advisor-card,
+  .audit-panel,
+  .bar-panel,
+  .bl-group,
+  .bl-request-list,
+  .tm-table,
+  .tm-company,
+  .dl-folder,
+  .dl-table,
+  .dl-missing,
+  .dl-empty,
+  .docr-upload-panel,
+  .docr-results-panel,
+  .sp-card:not(.sp-card--flat),
+  .sp-docs-head
+) {
+  border-color: var(--orbit-glass-edge);
+  border-radius: var(--orbit-glass-radius);
+  background: var(--orbit-glass);
+  -webkit-backdrop-filter: var(--orbit-glass-blur);
+  backdrop-filter: var(--orbit-glass-blur);
+  box-shadow: var(--orbit-glass-shadow);
+}
+
+/* Tiles in a grid: a little tighter */
+.admin-shell.theme-orbit :is(.advisor-card, .tm-company, .dl-folder) { border-radius: 20px; }
+/* A folder with nothing in it yet stays quieter than the rest */
+.admin-shell.theme-orbit .dl-folder.is-empty {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: none;
+}
+
+/* The team table lets its row menus overflow, so its rows carry the corners */
+.admin-shell.theme-orbit .tm-row--head { border-radius: var(--orbit-glass-radius) var(--orbit-glass-radius) 0 0; }
+.admin-shell.theme-orbit .tm-row:last-child { border-radius: 0 0 var(--orbit-glass-radius) var(--orbit-glass-radius); }
+
+/* Clickable tiles lift, as the landing page's do */
+.admin-shell.theme-orbit .dl-folder {
+  transition: transform 220ms var(--orbit-ease), box-shadow 220ms var(--orbit-ease), border-color 220ms;
+}
+.admin-shell.theme-orbit .dl-folder:hover {
+  border-color: #ffffff;
+  box-shadow: 0 22px 44px -24px rgba(11, 30, 74, 0.38);
+  transform: translateY(-3px);
+}
+.admin-shell.theme-orbit .dl-folder:active { transform: translateY(0); }
+
+/* Card grids arrive one tile after another */
+@media (prefers-reduced-motion: no-preference) {
+  .admin-shell :is(.advisor-card, .tm-company, .dl-folder) { animation: orbit-rise 0.55s var(--orbit-ease) backwards; }
+  .admin-shell :is(.advisor-card, .tm-company, .dl-folder):nth-child(1) { animation-delay: 0.14s; }
+  .admin-shell :is(.advisor-card, .tm-company, .dl-folder):nth-child(2) { animation-delay: 0.19s; }
+  .admin-shell :is(.advisor-card, .tm-company, .dl-folder):nth-child(3) { animation-delay: 0.24s; }
+  .admin-shell :is(.advisor-card, .tm-company, .dl-folder):nth-child(4) { animation-delay: 0.29s; }
+  .admin-shell :is(.advisor-card, .tm-company, .dl-folder):nth-child(5) { animation-delay: 0.34s; }
+  .admin-shell :is(.advisor-card, .tm-company, .dl-folder):nth-child(n + 6) { animation-delay: 0.38s; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-shell.theme-orbit .dl-folder:hover { transform: none; }
+}
+
+/* The menu scrolls when a group is open; fade its lower edge so the
+   last item reads as "more below" rather than cut off */
+.adm-nav {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+}

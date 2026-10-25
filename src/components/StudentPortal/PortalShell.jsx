@@ -13,6 +13,7 @@ import { useBrand } from "../../context/BrandContext";
 import { getApplicationId } from "../../utils/applicationId";
 import { initials } from "./studentRecord";
 import "./PortalShell.css";
+import "./PortalSurfaces.css";
 
 // "Saved just now" / "Saving changes…" — reflects real save results only.
 export function SaveIndicator({ status, savedAt, onRetry }) {
@@ -140,7 +141,7 @@ export default function PortalShell({
   const badgeLabel = `${reviewCount} detail${reviewCount === 1 ? "" : "s"} to check`;
 
   return (
-    <div className="ps-app theme-orbit">
+    <div className="ps-app theme-orbit orbit-backdrop">
       <a href="#ps-main" className="ps-skip">Skip to content</a>
 
       <header className="ps-top">

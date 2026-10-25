@@ -4,6 +4,11 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
 
+  // ffmpeg.wasm (File Converter) starts its own worker; pre-bundling breaks it
+  optimizeDeps: {
+    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+  },
+
   build: {
     chunkSizeWarningLimit: 600,
 

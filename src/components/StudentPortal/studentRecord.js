@@ -1,7 +1,5 @@
 // Loan status as staff set it on the student record (Admin / Banker portals).
 // A record without one is still "pending".
-export const LOAN_STEPS = ["pending", "inprocess", "sanctioned", "disbursed"];
-
 export const LOAN_STATUS = {
   pending:    { label: "Pending",    tone: "warning", title: "Application received", text: "Your advisor is reviewing your documents and details." },
   inprocess:  { label: "In Process", tone: "info",    title: "Being processed",      text: "Your application is being processed with a lender." },
@@ -25,15 +23,3 @@ export const initials = (name = "") =>
   name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() || "").join("") || "?";
 
 export const firstName = (name = "") => name.trim().split(/\s+/)[0] || "there";
-
-// The rows of the Loan Application card — only details the record has.
-export function applicationRows(student, applicationId) {
-  const info = student.personalInfo || {};
-  return [
-    { label: "Application ID", value: applicationId, strong: true },
-    { label: "Applied on", value: formatAppliedOn(student.createdAt) },
-    { label: "Destination", value: info.destinationCountry, placeholder: "Not added yet" },
-    { label: "Course", value: info.courseNameUniversity, placeholder: "Not added yet" },
-    { label: "Advisor", value: student.advisor },
-  ].filter((r) => r.value || r.placeholder);
-}

@@ -1,0 +1,99 @@
+/* ============================================================
+   Student portal — the landing page's surfaces on every view.
+   The brand image sits behind the shell (.orbit-backdrop), cards are
+   frosted glass on it (glass tokens in theme/orbit.css), page titles
+   use the landing page's type, and each view arrives as the landing
+   page does. The midnight bands (status, progress) stay: they are the
+   landing page's one dark band. Selectors carry the shell's classes so
+   they win over each view's plain white cards.
+   ============================================================ */
+
+/* ── Cards ── */
+.ps-app.theme-orbit :is(
+  .ad-card,
+  .ad-folder,
+  .sd-card,
+  .sp-card,
+  .co-card,
+  .rail-card,
+  .aw-check
+) {
+  border-color: var(--orbit-glass-edge);
+  border-radius: var(--orbit-glass-radius);
+  background: var(--orbit-glass);
+  -webkit-backdrop-filter: var(--orbit-glass-blur);
+  backdrop-filter: var(--orbit-glass-blur);
+  box-shadow: var(--orbit-glass-shadow);
+}
+/* Tiles in a grid: a little tighter; the folder's colour lives in its icon */
+.ps-app.theme-orbit .ad-folder { border-radius: 20px; }
+.ps-app.theme-orbit .ad-folder::before { display: none; }
+/* Clickable tiles lift, as the landing page's do */
+.ps-app.theme-orbit .ad-folder { transition: transform 220ms var(--orbit-ease), box-shadow 220ms var(--orbit-ease), border-color 220ms; }
+.ps-app.theme-orbit .ad-folder:hover { border-color: #ffffff; box-shadow: 0 22px 44px -24px rgba(11, 30, 74, 0.38); transform: translateY(-3px); }
+
+/* The two dashboard cards that carry a sapphire wash keep it, as glass */
+.ps-app.theme-orbit .ad-file-card { background: linear-gradient(180deg, rgba(240, 244, 255, 0.92) 0%, rgba(255, 255, 255, 0.84) 70%); }
+.ps-app.theme-orbit .ad-lenders-card { background: linear-gradient(180deg, rgba(234, 240, 255, 0.92) 0%, rgba(255, 255, 255, 0.84) 78%); }
+
+/* Review & submit keeps its gold edge */
+.ps-app.theme-orbit .aw-submit {
+  border-color: var(--orbit-glass-edge);
+  border-radius: var(--orbit-glass-radius);
+  background: var(--orbit-glass);
+  -webkit-backdrop-filter: var(--orbit-glass-blur);
+  backdrop-filter: var(--orbit-glass-blur);
+}
+/* Optional documents: a lighter, dashed glass */
+.ps-app.theme-orbit .aw-more {
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.6);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+/* Document upload cards: glass, but their done / attention / error
+   border and the error glow stay as they are */
+.ps-app.theme-orbit .doc-card {
+  border-radius: 20px;
+  background: var(--orbit-glass);
+  -webkit-backdrop-filter: var(--orbit-glass-blur);
+  backdrop-filter: var(--orbit-glass-blur);
+}
+.ps-app.theme-orbit .doc-card:not(.is-done, .is-attention, .is-error, :hover) { border-color: var(--orbit-glass-edge); }
+.ps-app.theme-orbit .doc-card:not(.is-error, :hover) { box-shadow: var(--orbit-glass-shadow); }
+
+/* The sticky bars read as glass over the backdrop */
+.ps-app.theme-orbit :is(.ps-top, .aw-bar) { border-color: rgba(255, 255, 255, 0.9); }
+
+/* ── Page titles: the landing page's type ── */
+.ps-app.theme-orbit :is(.ad-head__title, .aw__title, .sd-view__title) {
+  font-family: var(--font-display);
+  font-size: clamp(24px, 1rem + 0.85vw, 32px);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  color: var(--orbit-midnight);
+}
+.ps-app.theme-orbit :is(.ad-head__text, .aw__lede, .sd-view__lede) {
+  margin-top: 8px;
+  font-size: 15px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+.ps-app.theme-orbit .ad-hello__title { letter-spacing: -0.04em; }
+
+/* ── Arrival: each view rises in, one block after another ── */
+@media (prefers-reduced-motion: no-preference) {
+  .ps-app :is(.ad-page, .sd-page) > *,
+  .ps-app .aw__body > *,
+  .ps-app :is(.ad-folders, .ad-grid) > * { animation: orbit-rise 0.6s var(--orbit-ease) backwards; }
+  .ps-app :is(.ad-page, .sd-page, .aw__body, .ad-folders, .ad-grid) > :nth-child(2) { animation-delay: 0.06s; }
+  .ps-app :is(.ad-page, .sd-page, .aw__body, .ad-folders, .ad-grid) > :nth-child(3) { animation-delay: 0.12s; }
+  .ps-app :is(.ad-page, .sd-page, .aw__body, .ad-folders, .ad-grid) > :nth-child(4) { animation-delay: 0.18s; }
+  .ps-app :is(.ad-page, .sd-page, .aw__body, .ad-folders, .ad-grid) > :nth-child(n + 5) { animation-delay: 0.24s; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ps-app.theme-orbit .ad-folder:hover { transform: none; }
+}

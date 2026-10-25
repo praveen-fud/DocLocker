@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { setStudentCompany, companyLogoSrc } from "../../utils/company";
 import { useBrand } from "../../context/BrandContext";
 import { emailProblem, indianMobileProblem, normalizeIndianMobile, normalizeEmail } from "../../utils/validation";
@@ -25,15 +25,15 @@ import {
   FileCheck2,
   ListChecks,
   Sparkles,
-  FolderLock,
   MonitorCheck,
   Link2,
   History,
-  Users,
   LogIn,
   ChevronDown,
   Briefcase,
   KeyRound,
+  Camera,
+  LockKeyhole,
 } from "lucide-react";
 
 import BrandLogo from "../../components/BrandLogo/BrandLogo";
@@ -48,8 +48,9 @@ import {
 import PinInput from "../../components/PinInput/PinInput";
 import { deriveApplicationId } from "../../utils/applicationId";
 import { BANK_OPTIONS } from "../../utils/bankOptions";
-import HeroScene, { HeroSkyline } from "./HeroScene";
+import { HeroOrbit, LenderMarquee, JourneyPath, AutoFillVisual, CameraVisual, ChecklistVisual, TrackerVisual, ViewerMock } from "./LandingVisuals";
 import "./Home.css";
+import "./Landing.css";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "";
 
@@ -66,13 +67,6 @@ const NAV = [
 
 const LENDERS = BANK_OPTIONS.filter((b) => b.value !== "Others");
 
-const STATS = [
-  { icon: Landmark, value: String(LENDERS.length), label: "Lending partners" },
-  { icon: ScanText, value: "AI", label: "Document reading" },
-  { icon: ShieldCheck, value: "Encrypted", label: "Document storage" },
-  { icon: Activity, value: "Live", label: "Loan tracking" },
-];
-
 // The loan file's real sequence — numbered because the order matters.
 const JOURNEY = [
   { icon: UserPlus, title: "Create your file", detail: "Your name, email and mobile number." },
@@ -81,11 +75,12 @@ const JOURNEY = [
   { icon: FileCheck2, title: "Sanction letter", detail: "Download, share, and close the loan." },
 ];
 
-const STUDENT_FEATURES = [
-  { icon: ListChecks, tone: "blue", title: "Guided checklist", text: "Every document you and your co-applicant need, grouped and ticked off as you go." },
-  { icon: Sparkles, tone: "violet", title: "AI auto-fill", text: "Passport, Aadhaar, PAN and marksheets are read for you and fill your profile." },
-  { icon: Activity, tone: "teal", title: "Live tracking", text: "See your loan status the moment your advisor or lender updates it." },
-  { icon: FolderLock, tone: "amber", title: "Secure vault", text: "Files are stored encrypted and shared only with your advisor and your lenders." },
+// The bento on "For students": one tile per thing a student actually does.
+const STUDENT_TILES = [
+  { key: "fill", icon: Sparkles, tone: "iris", title: "We read your documents", text: "Your passport, Aadhaar, PAN and marksheets fill in your profile. You check and confirm.", Visual: AutoFillVisual },
+  { key: "cam", icon: Camera, tone: "sapphire", title: "Scan with your phone", text: "Point your camera at a paper document. We frame it, crop it and check it is the right one.", Visual: CameraVisual },
+  { key: "check", icon: ListChecks, tone: "success", title: "Know what's missing", text: "One checklist for you and your co-applicant, ticked off as you go.", Visual: ChecklistVisual },
+  { key: "track", icon: Activity, tone: "gold", title: "Follow every update", text: "See the moment your advisor or a lender moves your file forward.", Visual: TrackerVisual },
 ];
 
 const BANK_FEATURES = [
@@ -165,15 +160,11 @@ function PinField({ id, label, hint, error, value, onChange, autoComplete }) {
   );
 }
 
-function SectionHead({ id, eyebrow, icon: Icon, title, text, center }) {
+function SectionHead({ id, title, text, center }) {
   return (
-    <div className={`lp-head${center ? " lp-head--center" : ""}`}>
-      <p className="lp-eyebrow">
-        <Icon size={14} aria-hidden="true" />
-        {eyebrow}
-      </p>
-      <h2 className="lp-h2" id={id}>{title}</h2>
-      {text && <p className="lp-head__text">{text}</p>}
+    <div className={`lx-head${center ? " lx-head--center" : ""}`}>
+      <h2 className="lx-head__title" id={id}>{title}</h2>
+      {text && <p className="lx-head__text">{text}</p>}
     </div>
   );
 }
@@ -256,8 +247,11 @@ function LoginMenu({ onStudent }) {
 }
 
 export default function Home() {
-  // null = closed, "new" = create application, "returning" = resume
-  const [mode, setMode] = useState(null);
+  // null = closed, "new" = create application, "returning" = resume.
+  // "Add student" in the staff workspace links here with ?apply=new, so the
+  // registration form is already open (?apply=signin opens sign-in).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [mode, setMode] = useState(() => ({ new: "new", signin: "returning" })[searchParams.get("apply")] || null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [form, setForm] = useState({
@@ -349,10 +343,17 @@ export default function Home() {
   const closeDialog = useCallback(() => {
     setMode(null);
     setError("");
+    // Closing the form drops ?apply, so a refresh shows the page itself.
+    setSearchParams((params) => {
+      if (!params.has("apply")) return params;
+      const next = new URLSearchParams(params);
+      next.delete("apply");
+      return next;
+    }, { replace: true });
     // The opener may have been inside the mobile menu, which is gone now.
     const target = returnFocusRef.current?.isConnected ? returnFocusRef.current : menuToggleRef.current;
     target?.focus?.();
-  }, []);
+  }, [setSearchParams]);
 
   const isOpen = mode !== null;
 
@@ -458,6 +459,11 @@ export default function Home() {
 
   const handleNewStudent = async (e) => {
     e.preventDefault();
+    // On a company link the student must be registered in that company.
+    if (companySlug && !company) {
+      setError("Still loading this company's details. Try again in a moment.");
+      return;
+    }
 
     const FIELDS = ["name", "email", "phone", "pin", "pinConfirm"];
     const errors = Object.fromEntries(FIELDS.map((f) => [f, validateField(f, form[f])]));
@@ -653,9 +659,7 @@ export default function Home() {
         {/* ── Hero ──────────────────────────────────────────────────────── */}
         <section className="lp-hero" aria-labelledby="lp-hero-title">
           <div className="lp-hero__bg" aria-hidden="true">
-            <span className="lp-hero__glow lp-hero__glow--a" />
-            <span className="lp-hero__glow lp-hero__glow--b" />
-            <HeroSkyline />
+            <div className="lx-hero-bg" />
           </div>
 
           <div className="lp-hero__inner">
@@ -680,17 +684,18 @@ export default function Home() {
               )}
 
               <motion.h1 className="lp-title" id="lp-hero-title" variants={rise}>
-                Your Education Loan Documents, <span className="lp-title__accent">Simplified</span>
+                <span className="lp-title__line">Study abroad.</span>
+                <span className="lp-title__line">Funded, not delayed.</span>
               </motion.h1>
 
               <motion.p className="lp-lede" variants={rise}>
-                Upload, verify and manage all your education loan documents in one secure place.
-                Our AI reads your documents and auto-fills your profile, so you can focus on your future.
+                Set up your education loan file once. Upload documents through a guided checklist,
+                and follow every lender update until your sanction letter is in hand.
               </motion.p>
 
               <motion.div className="lp-hero__ctas" variants={rise}>
                 <button type="button" className="lp-btn lp-btn--primary lp-btn--lg" onClick={() => openDialog("new")}>
-                  Get Started
+                  Start your application
                 </button>
                 <a
                   href="#how-it-works"
@@ -698,7 +703,7 @@ export default function Home() {
                   onClick={(e) => scrollToSection(e, "how-it-works")}
                 >
                   <span className="lp-btn__play"><CirclePlay size={20} aria-hidden="true" /></span>
-                  See How It Works
+                  See how it works
                 </a>
               </motion.div>
 
@@ -708,6 +713,12 @@ export default function Home() {
                   Resume your application
                 </button>
               </motion.p>
+
+              <motion.ul className="lx-trust" variants={rise}>
+                <li><LockKeyhole size={16} aria-hidden="true" /> Encrypted document vault</li>
+                <li><ScanText size={16} aria-hidden="true" /> Documents read for you</li>
+                <li><Landmark size={16} aria-hidden="true" /> {LENDERS.length} lending partners</li>
+              </motion.ul>
             </motion.div>
 
             <motion.div
@@ -716,64 +727,39 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
             >
-              <HeroScene />
+              <HeroOrbit brandName={companySlug ? brandName : ""} />
             </motion.div>
           </div>
         </section>
 
-        {/* ── Stats strip ───────────────────────────────────────────────── */}
-        <section className="lp-stats-wrap" aria-label="At a glance">
-          <ul className="lp-stats">
-            {STATS.map(({ icon: Icon, value, label }) => (
-              <li key={label} className="lp-stat">
-                <span className="lp-stat__icon"><Icon size={26} aria-hidden="true" /></span>
-                <span className="lp-stat__body">
-                  <span className="lp-stat__value">{value}</span>
-                  <span className="lp-stat__label">{label}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
+        {/* ── Lending partners ──────────────────────────────────────────── */}
+        <section className="lx-marquee-wrap" aria-label="Lending partners">
+          <LenderMarquee lenders={LENDERS} label={companySlug ? "Our lending partners" : "Lending partners on DocLocker"} />
         </section>
 
         {/* ── How it works ──────────────────────────────────────────────── */}
-        <section className="lp-section" id="how-it-works" tabIndex={-1} aria-labelledby="lp-how-title">
+        <section className="lx-section" id="how-it-works" tabIndex={-1} aria-labelledby="lp-how-title">
           <div className="lp-container">
             <SectionHead
               id="lp-how-title"
-              eyebrow="How it works"
-              icon={ListChecks}
-              title="From sign-up to sanction letter in four steps"
-              text="Your loan file moves through the same sequence every time, so you always know what comes next."
+              title="From sign-up to sanction letter"
+              text="Your loan file moves through the same four steps every time, so you always know what comes next."
               center
             />
-            <ol className="lp-steps">
-              {JOURNEY.map(({ icon: Icon, title, detail }, i) => (
-                <li key={title} className="lp-step">
-                  <span className="lp-step__top">
-                    <span className="lp-step__num">{String(i + 1).padStart(2, "0")}</span>
-                    <span className="lp-step__icon"><Icon size={22} aria-hidden="true" /></span>
-                  </span>
-                  <h3 className="lp-step__title">{title}</h3>
-                  <p className="lp-step__detail">{detail}</p>
-                </li>
-              ))}
-            </ol>
+            <JourneyPath steps={JOURNEY} />
           </div>
         </section>
 
         {/* ── For students ──────────────────────────────────────────────── */}
-        <section className="lp-section lp-section--tint" id="for-students" tabIndex={-1} aria-labelledby="lp-students-title">
-          <div className="lp-container lp-split">
-            <div className="lp-split__copy">
+        <section className="lx-section" id="for-students" tabIndex={-1} aria-labelledby="lp-students-title">
+          <div className="lp-container lx-students">
+            <div className="lx-students__copy">
               <SectionHead
                 id="lp-students-title"
-                eyebrow="For Students"
-                icon={GraduationCap}
                 title="Everything your loan file needs, in one place"
                 text={`No more chasing papers over email. Upload once, let ${companySlug ? "us" : "DocLocker"} read and organise your documents, and follow your application until the sanction letter arrives.`}
               />
-              <div className="lp-split__ctas">
+              <div className="lx-students__ctas">
                 <button type="button" className="lp-btn lp-btn--primary lp-btn--lg" onClick={() => openDialog("new")}>
                   Start your application <ArrowRight size={18} aria-hidden="true" />
                 </button>
@@ -782,12 +768,13 @@ export default function Home() {
                 </button>
               </div>
             </div>
-            <ul className="lp-features">
-              {STUDENT_FEATURES.map(({ icon: Icon, tone, title, text }) => (
-                <li key={title} className="lp-feature">
-                  <span className={`lp-feature__icon lp-tone--${tone}`}><Icon size={22} aria-hidden="true" /></span>
-                  <h3 className="lp-feature__title">{title}</h3>
-                  <p className="lp-feature__text">{text}</p>
+            <ul className="lx-bento">
+              {STUDENT_TILES.map(({ key, icon: Icon, tone, title, text, Visual }) => (
+                <li key={key} className={`lx-tile lx-tile--${key}`}>
+                  <span className={`lx-tile__icon is-${tone}`}><Icon size={20} aria-hidden="true" /></span>
+                  <h3 className="lx-tile__title">{title}</h3>
+                  <p className="lx-tile__text">{text}</p>
+                  <div className="lx-tile__visual"><Visual /></div>
                 </li>
               ))}
             </ul>
@@ -795,76 +782,56 @@ export default function Home() {
         </section>
 
         {/* ── For banks ─────────────────────────────────────────────────── */}
-        <section className="lp-section" id="for-banks" tabIndex={-1} aria-labelledby="lp-banks-title">
+        <section className="lx-section" id="for-banks" tabIndex={-1} aria-labelledby="lp-banks-title">
           <div className="lp-container">
-            <div className="lp-banks">
-              <div className="lp-banks__copy">
+            <div className="lx-desk">
+              <div>
                 <SectionHead
                   id="lp-banks-title"
-                  eyebrow="For Banks"
-                  icon={Landmark}
                   title="A secure review desk for lending partners"
-                  text="Bank officers get complete, organised student files without documents leaving the platform by email."
+                  text="Bank officers get complete, organised student files, without a single document leaving the platform by email."
                 />
-                <ul className="lp-bankfeats">
+                <ul className="lx-desk__feats">
                   {BANK_FEATURES.map(({ icon: Icon, title, text }) => (
-                    <li key={title} className="lp-bankfeat">
-                      <span className="lp-bankfeat__icon"><Icon size={20} aria-hidden="true" /></span>
+                    <li key={title} className="lx-desk__feat">
+                      <span className="lx-desk__icon"><Icon size={20} aria-hidden="true" /></span>
                       <div>
-                        <h3 className="lp-bankfeat__title">{title}</h3>
-                        <p className="lp-bankfeat__text">{text}</p>
+                        <h3>{title}</h3>
+                        <p>{text}</p>
                       </div>
                     </li>
                   ))}
                 </ul>
-                <Link to="/admin-login" className="lp-btn lp-btn--navy lp-btn--lg">
+                <Link to="/admin-login" className="lp-btn lp-btn--desk lp-btn--lg">
                   <LogIn size={18} aria-hidden="true" /> Staff &amp; lender sign in
                 </Link>
               </div>
-
-              <div className="lp-lenders">
-                <p className="lp-lenders__label">{companySlug ? "Our lending partners" : "Lending partners on DocLocker"}</p>
-                <ul className="lp-lenders__grid">
-                  {LENDERS.map((b) => (
-                    <li key={b.value} className="lp-lender">
-                      <span className="lp-lender__logo">
-                        <img src={b.logo} alt="" />
-                      </span>
-                      <span className="lp-lender__name">{b.label}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <ViewerMock />
             </div>
           </div>
         </section>
 
-        {/* ── About ─────────────────────────────────────────────────────── */}
-        <section className="lp-section lp-section--about" id="about" tabIndex={-1} aria-labelledby="lp-about-title">
+        {/* ── About + start ─────────────────────────────────────────────── */}
+        <section className="lx-section" id="about" tabIndex={-1} aria-labelledby="lp-about-title">
           <div className="lp-container">
-            <div className="lp-about">
-              <div className="lp-about__copy">
-                <SectionHead
-                  id="lp-about-title"
-                  eyebrow="About"
-                  icon={Users}
-                  title={`About ${brandName}`}
-                />
-                <p className="lp-about__text">
+            <div className="lx-final">
+              <div className="lx-final__about">
+                <SectionHead id="lp-about-title" title={`About ${brandName}`} />
+                <p>
                   {companySlug
                     ? `${brandName} handles your education loan from start to finish. Upload your papers once, your advisor keeps the file complete, and our lending partners review it securely, so everyone works from the same up-to-date file.`
                     : "DocLocker is the document workspace behind an education loan. Students upload their papers once, their finance advisor keeps the file complete, and lending partners review it securely, so everyone works from the same up-to-date file."}
                 </p>
               </div>
-              <div className="lp-cta">
-                <h3 className="lp-cta__title">Ready to start your loan file?</h3>
-                <p className="lp-cta__text">It takes about a minute to open your application.</p>
-                <div className="lp-cta__actions">
-                  <button type="button" className="lp-btn lp-btn--white lp-btn--lg" onClick={() => openDialog("new")}>
-                    Get Started
+              <div className="lx-final__card">
+                <h2>Ready to start your loan file?</h2>
+                <p>It takes about a minute to open your application. You can come back and finish it any time.</p>
+                <div className="lx-final__actions">
+                  <button type="button" className="lp-btn lp-btn--primary lp-btn--lg" onClick={() => openDialog("new")}>
+                    Start your application
                   </button>
-                  <button type="button" className="lp-btn lp-btn--outline-light lp-btn--lg" onClick={() => openDialog("returning")}>
-                    Login
+                  <button type="button" className="lp-btn lp-btn--ghost lp-btn--lg" onClick={() => openDialog("returning")}>
+                    Sign in
                   </button>
                 </div>
               </div>

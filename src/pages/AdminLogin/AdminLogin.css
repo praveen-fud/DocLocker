@@ -1,19 +1,15 @@
 /* ============================================================
    DocLocker — Staff & lender sign-in (Orbit theme)
-   The midnight brand column is the one bold element: white
-   wordmark and a single gold orbit ring. The sign-in card sits on
-   the porcelain page, light, dominant and calm.
+   Same language as the landing page: the brand image (bg.png) behind
+   everything, and one bold element — the sign-in card, frosted white,
+   with the logo's gold orbits circling behind it. Orbit, chip and
+   marquee styles come from pages/Home/Landing.css.
    ============================================================ */
 
 .al-page {
   --al-ease: cubic-bezier(0.16, 1, 0.3, 1);
   --al-gutter: clamp(16px, 4vw, 48px);
-  /* Light-on-dark text inside the brand column */
-  --al-ink: #ffffff;
-  --al-ink-2: rgba(255, 255, 255, 0.8);
-  --al-ink-3: rgba(255, 255, 255, 0.7);
-  --al-sapphire-ink: #a9bbff;
-  --al-iris-ink: #cbbcf6;
+  --al-max: 1240px;
 
   position: relative;
   min-height: 100vh;
@@ -21,244 +17,149 @@
   display: flex;
   flex-direction: column;
   padding-bottom: env(safe-area-inset-bottom);
+  overflow-x: clip;
   font-family: var(--font-body);
   color: var(--text-primary);
 }
+/* The brand image; its blue glow sits behind the card */
+.al-page.theme-orbit { background: url("../../assets/bg.png") 72% 50% / cover no-repeat fixed, var(--page-bg); }
 
 /* ── Top bar ─────────────────────────────────────────────────── */
-/* On wide screens it floats over the form column (the brand column
-   carries the full lockup); below 900px it is an ordinary bar. */
 .al-topbar {
-  position: absolute;
-  top: 0;
-  right: 0;
+  position: relative;
   z-index: 2;
-  padding: 28px calc(var(--al-gutter) + 8px) 0 0;
+  width: 100%;
+  max-width: calc(var(--al-max) + 2 * var(--al-gutter));
+  margin: 0 auto;
+  padding: 20px var(--al-gutter);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
 }
-
-.al-topbar-logo { display: none; }
-
 .al-back {
-  margin-left: auto;
-  min-height: 44px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-height: 42px;
   padding: 0 16px;
-  border-radius: 12px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-sm);
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
   text-decoration: none;
-  white-space: nowrap;
-  transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
-.al-back:hover {
-  border-color: var(--orbit-sapphire-light);
-  background: var(--surface-blue);
-  color: var(--orbit-sapphire);
-}
+.al-back:hover { background: #fff; color: var(--orbit-sapphire); }
 
-/* ── Two-column layout ───────────────────────────────────────── */
+/* ── Layout ──────────────────────────────────────────────────── */
 .al-layout {
   flex: 1;
   width: 100%;
-  min-height: 100vh;
-  min-height: 100dvh;
-  padding: 16px;
+  max-width: calc(var(--al-max) + 2 * var(--al-gutter));
+  margin: 0 auto;
+  padding: clamp(8px, 2vh, 24px) var(--al-gutter) clamp(28px, 4vh, 48px);
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
-  column-gap: 16px;
-}
-
-/* ── Brand column (midnight) ─────────────────────────────────── */
-.al-brand {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 32px;
-  padding: clamp(36px, 5vw, 72px) clamp(28px, 5vw, 72px);
-  border-radius: 24px;
-  background: var(--orbit-band);
-  box-shadow: var(--shadow-lg);
-  color: var(--al-ink);
-}
-
-/* The gold orbit: one thin ring and its satellite, nothing more.
-   The satellite is painted on the ring's lower-left arc. */
-.al-brand::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  top: -175px;
-  right: -330px;
-  width: 640px;
-  height: 340px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(242, 166, 35, 0.5);
-  background: radial-gradient(circle at 3% 67%, var(--orbit-gold) 0 5px, rgba(242, 166, 35, 0.18) 5.5px 10px, transparent 10.5px) border-box;
-  transform: rotate(-22deg);
-  pointer-events: none;
-}
-
-.al-hero { max-width: 560px; }
-
-.al-eyebrow {
-  display: inline-flex;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 520px);
+  grid-template-areas: "intro main" "partners main";
+  grid-template-rows: 1fr auto;
+  column-gap: clamp(32px, 5vw, 80px);
+  row-gap: 28px;
   align-items: center;
-  gap: 7px;
-  margin: 0 0 18px;
-  padding: 7px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--al-ink-2);
 }
-.al-eyebrow svg { color: var(--al-sapphire-ink); }
 
+/* ── Intro ───────────────────────────────────────────────────── */
+.al-intro { grid-area: intro; max-width: 560px; }
 .al-headline {
   margin: 0;
   font-family: var(--font-display);
+  font-size: clamp(32px, 2.2rem + 1.4vw, 52px);
   font-weight: 800;
-  font-size: clamp(34px, 3.4vw, 50px);
   line-height: 1.08;
-  letter-spacing: -0.035em;
-  color: var(--al-ink);
+  letter-spacing: -0.04em;
+  color: var(--orbit-midnight);
   text-wrap: balance;
 }
-.al-headline span { color: var(--al-sapphire-ink); }
-
 .al-lede {
   margin: 18px 0 0;
-  max-width: 48ch;
-  font-size: 16.5px;
-  line-height: 1.6;
-  color: var(--al-ink-2);
-}
-
-/* What DocLocker does, in order */
-.al-flow {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  width: 100%;
   max-width: 500px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  font-size: clamp(16px, 0.95rem + 0.2vw, 18px);
+  line-height: 1.65;
+  color: var(--text-secondary);
 }
-.al-flow-card {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 14px 18px 14px 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.05);
-}
+.al-flow { display: flex; flex-direction: column; gap: 16px; margin: 32px 0 0; padding: 0; list-style: none; }
+.al-flow-item { display: flex; gap: 14px; align-items: flex-start; }
 .al-flow-icon {
-  flex-shrink: 0;
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
+  flex: none;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--al-sapphire-ink);
-}
-/* Reading documents is the AI step: iris marks it */
-.al-flow-icon--blue  { background: rgba(106, 71, 194, 0.32); color: var(--al-iris-ink); }
-
-.al-flow-title {
-  margin: 0 0 3px;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--al-ink);
-}
-.al-flow-text {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.5;
-  color: var(--al-ink-3);
-}
-
-/* Partner lenders: full-colour logos on white chips */
-.al-lenders { width: 100%; max-width: 500px; }
-.al-lenders-label {
-  margin: 0 0 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--al-ink-3);
-}
-.al-lenders-row {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
-}
-.al-lender {
-  height: 52px;
-  padding: 8px 10px;
-  border-radius: 12px;
-  background: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.al-lender img {
-  max-width: 100%;
-  max-height: 34px;
-  object-fit: contain;
-}
-.al-lenders-more {
-  margin: 10px 0 0;
-  font-size: 13px;
-  color: var(--al-ink-3);
-}
-
-/* Phone copy of the strip, shown under the card on the light page */
-.al-lenders--compact { display: none; }
-.al-lenders--compact .al-lenders-label,
-.al-lenders--compact .al-lenders-more { color: var(--text-muted); }
-.al-lenders--compact .al-lender {
-  border: 1px solid var(--border);
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 13px;
   box-shadow: var(--shadow-sm);
 }
+.al-flow-icon.is-iris { background: var(--orbit-iris-tint); color: var(--orbit-iris); }
+.al-flow-icon.is-sapphire { background: #e7edff; color: var(--orbit-sapphire); }
+.al-flow-icon.is-gold { background: #fff1d6; color: var(--orbit-gold-deep); }
+.al-flow-title { margin: 0; font-size: 15.5px; font-weight: 700; color: var(--orbit-midnight); }
+.al-flow-text { margin: 2px 0 0; font-size: 14.5px; line-height: 1.5; color: var(--text-secondary); }
 
-/* ── Sign-in column ──────────────────────────────────────────── */
+.al-partners { grid-area: partners; min-width: 0; }
+.al-partners .lx-marquee__label { text-align: left; }
+.al-partners .lx-marquee__viewport { -webkit-mask-image: linear-gradient(to right, transparent, #000 4%, #000 88%, transparent); mask-image: linear-gradient(to right, transparent, #000 4%, #000 88%, transparent); }
+
+/* ── Sign-in card, in orbit ──────────────────────────────────── */
 .al-main {
+  grid-area: main;
+  position: relative;
+  isolation: isolate;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  align-items: center;
   justify-content: center;
-  gap: 28px;
-  padding: 88px clamp(8px, 3vw, 48px) 48px;
+  padding: 24px 0;
 }
-
+.lx-orbit--backdrop {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: -1;
+  width: 900px;
+  max-width: none;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.lx-orbit--backdrop .lx-ring--b { z-index: 0; }
 .al-card {
+  position: relative;
   width: 100%;
-  max-width: 448px;
+  max-width: 452px;
   padding: clamp(28px, 3vw, 40px);
-  border-radius: 22px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  box-shadow: var(--shadow-sm), var(--shadow-lg);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.9);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  backdrop-filter: blur(18px) saturate(1.3);
+  box-shadow: 0 40px 80px -36px rgba(11, 30, 74, 0.55), inset 0 1px 0 #fff;
+}
+.al-roles {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #e7edff;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--orbit-sapphire-dark);
 }
 
 .al-form { display: flex; flex-direction: column; }
@@ -439,14 +340,9 @@
 
 /* ── Motion (only when the visitor hasn't asked for less) ────── */
 @media (prefers-reduced-motion: no-preference) {
-  .al-hero,
-  .al-flow-card,
-  .al-lenders,
-  .al-card { animation: al-rise 0.6s var(--al-ease) both; }
-  .al-flow-card { animation-delay: calc(0.12s + var(--i) * 0.08s); }
-  .al-lenders { animation-delay: 0.4s; }
-  .al-lenders--compact { animation-delay: 0.2s; }
+  .al-intro, .al-card, .al-partners { animation: al-rise 0.6s var(--al-ease) both; }
   .al-card { animation-delay: 0.08s; }
+  .al-partners { animation-delay: 0.3s; }
   .al-page .spin { animation: al-spin 0.8s linear infinite; }
 }
 @keyframes al-rise {
@@ -459,40 +355,37 @@
 @media (pointer: coarse) {
   .al-reveal { width: 44px; height: 44px; right: 3px; }
 }
-
 @media (max-width: 1100px) {
   .al-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 460px); }
-  .al-lenders-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .al-brand::before { top: -130px; right: -260px; width: 420px; height: 230px; }
+  .lx-orbit--backdrop { width: 780px; }
 }
-
-/* Tablet & phone: one column — the brand column steps aside and the
-   compact logo moves into the top bar */
+/* Tablet & phone: brand first, then the card, then the lenders */
 @media (max-width: 900px) {
-  .al-topbar {
-    position: static;
-    width: 100%;
-    max-width: 480px;
-    margin: 0 auto;
-    padding: 16px var(--al-gutter);
-  }
-  .al-topbar-logo { display: inline-flex; }
+  .al-page.theme-orbit { background-attachment: scroll; background-position: 70% 0; background-size: cover; }
   .al-layout {
-    min-height: 0;
-    grid-template-columns: minmax(0, 448px);
-    justify-content: center;
-    align-items: start;
-    padding: clamp(8px, 3vh, 40px) var(--al-gutter) 32px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "intro" "main" "partners";
+    grid-template-rows: auto;
+    justify-items: center;
+    row-gap: 20px;
   }
-  .al-brand { display: none; }
-  .al-main { padding: 0; justify-content: flex-start; }
-  .al-lenders--compact { display: block; max-width: 448px; text-align: center; }
-  .al-lenders--compact .al-lenders-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .al-intro { max-width: 560px; text-align: center; }
+  .al-lede { margin-inline: auto; }
+  .al-flow { display: none; }
+  .al-main { width: 100%; padding: 8px 0; }
+  .lx-orbit--backdrop { width: 600px; opacity: 0.7; }
+  .al-partners { width: 100%; }
+  .al-partners .lx-marquee__label { text-align: center; }
 }
-
+@media (max-width: 600px) {
+  .lx-orbit--backdrop { display: none; }
+}
 @media (max-width: 480px) {
+  .al-topbar { padding-top: 14px; padding-bottom: 14px; }
   .al-back { padding: 0 12px; font-size: 13.5px; gap: 6px; }
-  .al-card { padding: 24px 20px; border-radius: 20px; }
+  .al-headline { font-size: 30px; }
+  .al-lede { font-size: 15px; }
+  .al-card { padding: 24px 20px; border-radius: 22px; }
   .al-title { font-size: 24px; }
   .al-sub { margin-bottom: 22px; font-size: 14px; }
 }

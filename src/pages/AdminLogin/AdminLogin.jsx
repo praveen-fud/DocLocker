@@ -20,6 +20,8 @@ import BrandLogo from "../../components/BrandLogo/BrandLogo";
 import { BANK_OPTIONS } from "../../utils/bankOptions";
 import { useStudent } from "../../context/StudentContext";
 import { passwordProblem } from "../../utils/adminApi";
+import { LenderMarquee, OrbitBackdrop } from "../Home/LandingVisuals";
+import "../Home/Landing.css";
 import "./AdminLogin.css";
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
@@ -36,31 +38,12 @@ async function apiPost(path, body, token) {
 // What DocLocker actually does, in the order a student's file moves through
 // it — shown on the brand panel instead of generic marketing copy.
 const FLOW = [
-  { icon: ScanText,    tone: "blue",  title: "Documents read for you",       text: "Passport, Aadhaar, PAN and marksheets fill the application automatically." },
-  { icon: ShieldCheck, tone: "teal",  title: "Names checked across every ID", text: "Mismatches are flagged before a bank ever sees the file." },
-  { icon: Landmark,    tone: "amber", title: "Shared with the right lender",  text: "Bank officers see only the students they're given access to." },
+  { icon: ScanText,    tone: "iris",     title: "Documents read for you",       text: "Passport, Aadhaar, PAN and marksheets fill the application automatically." },
+  { icon: ShieldCheck, tone: "sapphire", title: "Names checked across every ID", text: "Mismatches are flagged before a bank ever sees the file." },
+  { icon: Landmark,    tone: "gold",     title: "Shared with the right lender",  text: "Bank officers see only the students they're given access to." },
 ];
 
-const ALL_LENDERS = BANK_OPTIONS.filter((b) => b.value !== "Others");
-const LENDERS = ALL_LENDERS.slice(0, 6);
-const MORE_LENDERS = ALL_LENDERS.length - LENDERS.length;
-
-// Rendered in the brand panel on wide screens and under the card on phones.
-function LenderStrip({ className = "" }) {
-  return (
-    <div className={`al-lenders ${className}`.trim()}>
-      <p className="al-lenders-label">Lenders on DocLocker</p>
-      <ul className="al-lenders-row">
-        {LENDERS.map((b) => (
-          <li key={b.value} className="al-lender" title={b.label}>
-            <img src={b.logo} alt={b.label} />
-          </li>
-        ))}
-      </ul>
-      {MORE_LENDERS > 0 && <p className="al-lenders-more">and {MORE_LENDERS} more lending partners</p>}
-    </div>
-  );
-}
+const LENDERS = BANK_OPTIONS.filter((b) => b.value !== "Others");
 
 function Field({ id, label, icon: Icon, type = "text", value, onChange, placeholder, autoComplete, autoFocus, trailing }) {
   return (
@@ -196,32 +179,23 @@ export default function AdminLogin() {
   return (
     <div className="al-page theme-orbit">
       <header className="al-topbar">
-        {/* The brand panel carries the full lockup on wide screens */}
-        <BrandLogo size="sm" className="al-topbar-logo" />
+        <BrandLogo size="md" />
         <Link to="/" className="al-back">
           <ArrowLeft size={16} aria-hidden="true" /> Back to home
         </Link>
       </header>
 
       <div className="al-layout">
-        {/* ── Brand panel ───────────────────────────────────────────── */}
-        <aside className="al-brand" aria-label="About DocLocker">
-          <BrandLogo size="lg" tone="dark" tagline />
-
-          <div className="al-hero">
-            <p className="al-eyebrow"><ShieldCheck size={14} aria-hidden="true" /> Staff &amp; lender access</p>
-            <h2 className="al-headline">
-              Education loan files, <span>simplified</span>
-            </h2>
-            <p className="al-lede">
-              Review student documents, track every application and share verified files with lenders, all in one secure place.
-            </p>
-          </div>
-
+        {/* ── What the workspace is for ─────────────────────────────── */}
+        <section className="al-intro" aria-labelledby="al-intro-title">
+          <h2 className="al-headline" id="al-intro-title">Every loan file, ready for the bank.</h2>
+          <p className="al-lede">
+            Review student documents, track each application and share verified files with lenders, from one secure workspace.
+          </p>
           <ul className="al-flow">
-            {FLOW.map(({ icon: Icon, tone, title, text }, i) => (
-              <li key={title} className="al-flow-card" style={{ "--i": i }}>
-                <span className={`al-flow-icon al-flow-icon--${tone}`}><Icon size={20} aria-hidden="true" /></span>
+            {FLOW.map(({ icon: Icon, tone, title, text }) => (
+              <li key={title} className="al-flow-item">
+                <span className={`al-flow-icon is-${tone}`}><Icon size={19} aria-hidden="true" /></span>
                 <div>
                   <p className="al-flow-title">{title}</p>
                   <p className="al-flow-text">{text}</p>
@@ -229,15 +203,15 @@ export default function AdminLogin() {
               </li>
             ))}
           </ul>
+        </section>
 
-          <LenderStrip />
-        </aside>
-
-        {/* ── Form panel ────────────────────────────────────────────── */}
+        {/* ── Sign-in card, in orbit ─────────────────────────────────── */}
         <main className="al-main">
+          <OrbitBackdrop />
           <div className="al-card">
             {view === "login" && (
               <form onSubmit={handleLogin} className="al-form" noValidate>
+                <span className="al-roles"><ShieldCheck size={14} aria-hidden="true" /> Admins, staff and lenders</span>
                 <h1 className="al-title">Welcome back</h1>
                 <p className="al-sub">Sign in to manage students, documents and loan applications.</p>
 
@@ -395,8 +369,11 @@ export default function AdminLogin() {
             </p>
           </div>
 
-          <LenderStrip className="al-lenders--compact" />
         </main>
+
+        <section className="al-partners" aria-label="Lending partners">
+          <LenderMarquee lenders={LENDERS} label="Lenders on DocLocker" />
+        </section>
       </div>
     </div>
   );

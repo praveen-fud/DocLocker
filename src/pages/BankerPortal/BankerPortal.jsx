@@ -9,6 +9,7 @@ import { getAllStudentsFromDrive, getStudentFiles, changeOwnPassword, updateLoan
 import { DOCUMENT_SCHEMA, getTotalRequiredFields, coApplicantFields, countUploadedFields } from "../../context/schemas";
 import DocumentViewer from "../../components/DocumentViewer/DocumentViewer";
 import BrandLogo from "../../components/BrandLogo/BrandLogo";
+import CountUp from "../../components/CountUp/CountUp";
 import { getBankLogo } from "../../utils/bankOptions";
 import { getApplicationId } from "../../utils/applicationId";
 import "./BankerPortal.css";
@@ -517,7 +518,7 @@ export default function BankerPortal() {
   const sidebarHidden = isMobile && !navOpen;
 
   return (
-    <div className="bk-page theme-orbit">
+    <div className="bk-page theme-orbit orbit-backdrop">
       {/* ── Mobile top bar ── */}
       <header className="bk-topbar">
         <button
@@ -543,8 +544,11 @@ export default function BankerPortal() {
         aria-label="Banker portal"
         inert={sidebarHidden || undefined}
       >
+        {/* Soft light drifting behind the menu (decoration only) */}
+        <span className="bk-sidebar-glow is-a" aria-hidden="true" />
+        <span className="bk-sidebar-glow is-b" aria-hidden="true" />
         <div className="bk-sidebar-top">
-          <BrandLogo size="sm" tone="dark" />
+          <BrandLogo size="sm" />
           <button type="button" className="bk-icon-btn bk-sidebar-close" onClick={() => setNavOpen(false)} aria-label="Close menu">
             <X size={20} />
           </button>
@@ -628,7 +632,7 @@ export default function BankerPortal() {
             <li key={key} className={`bk-kpi bk-kpi--${key}`} title={hint}>
               <span className="bk-kpi-icon" aria-hidden="true"><Icon size={21} /></span>
               <span className="bk-kpi-text">
-                <span className="bk-kpi-value">{loading ? "–" : value}</span>
+                <span className="bk-kpi-value"><CountUp text={loading ? "–" : value} /></span>
                 <span className="bk-kpi-label">
                   {label}
                   {key === "attention" && <Info size={13} className="bk-kpi-info" aria-hidden="true" />}

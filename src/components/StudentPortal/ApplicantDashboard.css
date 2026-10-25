@@ -334,13 +334,25 @@
 @media (min-width: 900px) {
   .ad-grid {
     grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-    grid-template-areas: "file activity" "lenders activity";
-    align-items: start;
+    grid-template-areas: "file activity" "lenders lenders";
+    align-items: stretch;
     gap: 20px;
   }
   .ad-file-card { grid-area: file; }
   .ad-lenders-card { grid-area: lenders; }
-  .ad-activity-card { grid-area: activity; align-self: start; }
+  /* The feed takes Your file's height instead of setting the row's, so
+     the two cards end level; a long feed scrolls inside */
+  .ad-activity-card { grid-area: activity; contain: size; min-height: 280px; display: flex; flex-direction: column; }
+  .ad-activity-card .ad-timeline {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    /* The lower edge fades, so a longer feed reads as "scroll for more" */
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
+  }
 }
 
 /* Your file: soft sapphire */
