@@ -12,16 +12,12 @@
   .advisor-card,
   .audit-panel,
   .bar-panel,
-  .bl-group,
-  .bl-request-list,
   .tm-table,
   .tm-company,
   .dl-folder,
   .dl-table,
   .dl-missing,
   .dl-empty,
-  .docr-upload-panel,
-  .docr-results-panel,
   .sp-card:not(.sp-card--flat),
   .sp-docs-head
 ) {

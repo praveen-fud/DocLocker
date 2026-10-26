@@ -19,6 +19,9 @@ import {
   CopyCheck,
   ScanSearch,
   Timer,
+  ShieldCheck,
+  ListChecks,
+  ScanLine,
 } from "lucide-react";
 import { extractDocument } from "../../utils/driveApi";
 import "./DocumentReader.css";
@@ -72,6 +75,35 @@ const DOC_TYPES = [
     accept: ".pdf,.jpg,.jpeg,.png,.tiff,.tif,.bmp,.webp",
   },
 ];
+
+// What the reader checks on each type, in plain words. Mirrors the
+// checks VerificationChips reports once a scan comes back.
+const TYPE_CHECKS = {
+  ssc: ["Board, student and parents' names", "Every subject's grade or marks", "CGPA checked against the grade points", "Tilted photos straightened first"],
+  certificate: ["TS / AP Intermediate memos", "Every subject and paper", "Total marks and percentage", "Result and CGPA"],
+  passport: ["Photo page and address page", "MRZ check digits verified", "Issue and expiry dates", "Parents' and spouse's names"],
+  aadhaar: ["Front and back of the card", "Aadhaar number check digit", "Address and PIN code", "Full number only with consent"],
+  pan: ["PAN number and holder type", "Surname letter matched to the PAN", "Name and father's name", "Date of birth"],
+};
+
+// Grid order per type, plus the one long free-text field (if any) that
+// gets a full-width cell instead of being squeezed into the grid.
+const FIELD_KEYS = {
+  certificate: { grid: ["document_type", "state", "board", "student_name", "father_name", "mother_name",
+    "hall_ticket_number", "year_of_pass", "month_of_pass", "course", "group", "medium"] },
+  ssc: { grid: ["board", "student_name", "father_name", "mother_name", "date_of_birth",
+    "roll_number", "exam", "medium", "appearance"], wide: "school" },
+  passport: { grid: ["passport_number", "surname", "given_names", "nationality", "sex", "date_of_birth",
+    "place_of_birth", "place_of_issue", "date_of_issue", "date_of_expiry", "file_number",
+    "father_name", "mother_name", "spouse_name"], wide: "address" },
+  aadhaar: { grid: ["aadhaar_number", "name", "date_of_birth", "gender", "care_of", "relation", "pincode"], wide: "address" },
+  pan: { grid: ["pan_number", "name", "father_name", "date_of_birth"] },
+};
+const fieldKeysFor = (kind) => {
+  const k = FIELD_KEYS[kind] || FIELD_KEYS.pan;
+  return k.wide ? [...k.grid, k.wide] : k.grid;
+};
+const isEmpty = (v) => v === null || v === undefined || v === "";
 
 const FIELD_LABELS = {
   document_type: "Document Type", state: "State", board: "Board",
@@ -148,7 +180,7 @@ function ReviewBanner({ review }) {
   );
 }
 
-function VerificationChips({ kind, full }) {
+function verificationChips(kind, full) {
   const chips = [];
   if (kind === "certificate" && full && full.supported === false) {
     chips.push({ ok: false, label: "Doesn't look like a supported TS/AP Intermediate certificate" });
@@ -189,6 +221,10 @@ function VerificationChips({ kind, full }) {
       });
     }
   }
+  return chips;
+}
+
+function VerificationChips({ chips }) {
   if (chips.length === 0) return null;
   return (
     <div className="docr-chips">
@@ -202,12 +238,15 @@ function VerificationChips({ kind, full }) {
   );
 }
 
-function InfoCell({ label, value, wide }) {
-  const empty = value === null || value === undefined || value === "";
+function InfoCell({ label, value, wide, flagged }) {
+  const empty = isEmpty(value);
   return (
-    <div className={`info-cell${wide ? " docr-cell-wide" : ""}`}>
-      <div className="info-label">{label}</div>
-      <div className={`info-value${empty ? " empty" : ""}`}>{empty ? "—" : String(value)}</div>
+    <div className={`docr-field${wide ? " docr-cell-wide" : ""}${flagged ? " is-flagged" : ""}${empty ? " is-empty" : ""}`}>
+      <div className="docr-field-label">
+        {label}
+        {flagged && <span className="docr-field-flag"><AlertTriangle size={11} /> Check</span>}
+      </div>
+      <div className="docr-field-value">{empty ? "Not found" : String(value)}</div>
     </div>
   );
 }
@@ -306,18 +345,21 @@ function FieldDetailTable({ fields }) {
   );
 }
 
-// Field layout per doc type — a curated grid order plus which key (if any)
-// gets shown as a full-width cell (long free-text like an address) instead
-// of being squeezed into the regular grid.
-function ExtractedFields({ kind, flat }) {
+// Field layout per doc type (FIELD_KEYS), then each type's own extras:
+// subject tables and the result summary for certificates.
+function ExtractedFields({ kind, flat, flagged }) {
+  const keys = FIELD_KEYS[kind] || FIELD_KEYS.pan;
+  const grid = (
+    <div className="docr-grid">
+      {keys.grid.map((k) => <InfoCell key={k} label={labelFor(k)} value={flat[k]} flagged={flagged.has(k)} />)}
+      {keys.wide && <InfoCell label={labelFor(keys.wide)} value={flat[keys.wide]} wide flagged={flagged.has(keys.wide)} />}
+    </div>
+  );
+
   if (kind === "certificate") {
-    const gridKeys = ["document_type", "state", "board", "student_name", "father_name", "mother_name",
-      "hall_ticket_number", "year_of_pass", "month_of_pass", "course", "group", "medium"];
     return (
       <>
-        <div className="info-grid docr-grid">
-          {gridKeys.map((k) => <InfoCell key={k} label={labelFor(k)} value={flat[k]} />)}
-        </div>
+        {grid}
         <SubjectsTable subjects={flat.subjects} />
         <div className="docr-result-strip">
           <div className="docr-result-item">
@@ -348,14 +390,9 @@ function ExtractedFields({ kind, flat }) {
 
   if (kind === "ssc") {
     const graded = flat.result_type === "grades";
-    const gridKeys = ["board", "student_name", "father_name", "mother_name", "date_of_birth",
-      "roll_number", "exam", "medium", "appearance"];
     return (
       <>
-        <div className="info-grid docr-grid">
-          {gridKeys.map((k) => <InfoCell key={k} label={labelFor(k)} value={flat[k]} />)}
-          <InfoCell label={labelFor("school")} value={flat.school} wide />
-        </div>
+        {grid}
         <SscSubjectsTable subjects={flat.subjects} graded={graded} />
         <div className="docr-result-strip">
           {graded ? (
@@ -386,44 +423,18 @@ function ExtractedFields({ kind, flat }) {
     );
   }
 
-  if (kind === "passport") {
-    const gridKeys = ["passport_number", "surname", "given_names", "nationality", "sex", "date_of_birth",
-      "place_of_birth", "place_of_issue", "date_of_issue", "date_of_expiry", "file_number",
-      "father_name", "mother_name", "spouse_name"];
-    return (
-      <div className="info-grid docr-grid">
-        {gridKeys.map((k) => <InfoCell key={k} label={labelFor(k)} value={flat[k]} />)}
-        <InfoCell label={labelFor("address")} value={flat.address} wide />
-      </div>
-    );
-  }
-
-  if (kind === "aadhaar") {
-    const gridKeys = ["aadhaar_number", "name", "date_of_birth", "gender", "care_of", "relation", "pincode"];
-    return (
-      <div className="info-grid docr-grid">
-        {gridKeys.map((k) => <InfoCell key={k} label={labelFor(k)} value={flat[k]} />)}
-        <InfoCell label={labelFor("address")} value={flat.address} wide />
-      </div>
-    );
-  }
-
-  // pan
-  const gridKeys = ["pan_number", "name", "father_name", "date_of_birth"];
-  return (
-    <div className="info-grid docr-grid">
-      {gridKeys.map((k) => <InfoCell key={k} label={labelFor(k)} value={flat[k]} />)}
-    </div>
-  );
+  return grid;
 }
 
 function DocTypeTile({ type, active, onSelect }) {
   const Icon = type.icon;
   return (
-    <button type="button" className={`docr-type-tile${active ? " active" : ""}`} onClick={onSelect}>
-      <span className="docr-type-icon"><Icon size={20} /></span>
-      <span className="docr-type-label">{type.label}</span>
-      <span className="docr-type-hint">{type.hint}</span>
+    <button type="button" className={`docr-type-tile${active ? " active" : ""}`} aria-pressed={active} onClick={onSelect}>
+      <span className="docr-type-icon" aria-hidden="true"><Icon size={18} /></span>
+      <span className="docr-type-text">
+        <span className="docr-type-label">{type.label}</span>
+        <span className="docr-type-hint">{type.hint}</span>
+      </span>
       <span className="docr-type-files">{type.filesHint}</span>
     </button>
   );
@@ -434,7 +445,7 @@ function FileRow({ file, onRemove }) {
   const Icon = isImage ? FileImage : FileText;
   return (
     <div className="docr-file-row">
-      <Icon size={15} />
+      <span className="docr-file-icon" aria-hidden="true"><Icon size={15} /></span>
       <span className="docr-file-name">{file.name}</span>
       <span className="docr-file-size">{fmtBytes(file.size)}</span>
       <button type="button" className="docr-file-remove" onClick={onRemove} aria-label={`Remove ${file.name}`}>
@@ -528,128 +539,188 @@ export default function DocumentReader() {
     } catch { /* clipboard unavailable — silently ignore, the button just won't confirm */ }
   };
 
+  const kind = result?.kind || docType;
+  const flat = result?.flat || {};
+  const review = result?.full?.review;
+  const flagged = new Set(review?.fields_requiring_review || []);
+  const chips = result ? verificationChips(kind, result.full) : [];
+  const resultKeys = fieldKeysFor(kind);
+  const filled = resultKeys.filter((k) => !isEmpty(flat[k])).length;
+  const passed = chips.filter((c) => c.ok === true).length;
+  const judged = chips.filter((c) => c.ok !== null).length;
+  const resultStats = [
+    { key: "read", label: "Fields read", value: `${filled}/${resultKeys.length}`, tone: "blue" },
+    { key: "checks", label: "Checks passed", value: judged ? `${passed}/${judged}` : "—", tone: judged && passed === judged ? "green" : judged ? "red" : "blue" },
+    { key: "review", label: "To review", value: flagged.size, tone: flagged.size ? "gold" : "green" },
+    { key: "time", label: "Read in", value: result?.seconds != null ? `${result.seconds}s` : "—", tone: "blue" },
+  ];
+  const ActiveIcon = activeType.icon;
+  const full = files.length >= activeType.maxFiles;
+
   return (
-    <div className="docr-page animate-fade-in">
+    <div className="docr-page dh animate-fade-in">
+      {/* ── 1. What you're reading ─────────────────────────────── */}
+      <section className="docr-card docr-types" aria-labelledby="docr-step1">
+        <header className="docr-card-head">
+          <span className="docr-step" aria-hidden="true">1</span>
+          <div>
+            <h2 id="docr-step1" className="docr-card-title">Choose what you're reading</h2>
+            <p className="docr-card-sub">Each document has its own reader and its own checks</p>
+          </div>
+        </header>
+        <div className="docr-type-grid">
+          {DOC_TYPES.map((t) => (
+            <DocTypeTile key={t.id} type={t} active={t.id === docType} onSelect={() => selectType(t.id)} />
+          ))}
+        </div>
+      </section>
+
       <div className="docr-layout">
-        {/* ── Left: upload panel ─────────────────────────────────── */}
-        <div className="docr-upload-panel">
-          <div className="docr-panel-section">
-            <p className="docr-step-label">1. Choose document type</p>
-            <div className="docr-type-grid">
-              {DOC_TYPES.map((t) => (
-                <DocTypeTile key={t.id} type={t} active={t.id === docType} onSelect={() => selectType(t.id)} />
+        {/* ── 2. Add the files ───────────────────────────────────── */}
+        <section className="docr-card docr-upload-panel" aria-labelledby="docr-step2">
+          <header className="docr-card-head">
+            <span className="docr-step" aria-hidden="true">2</span>
+            <div>
+              <h2 id="docr-step2" className="docr-card-title">Add the {activeType.label}</h2>
+              <p className="docr-card-sub">{activeType.hint} · {activeType.filesHint.toLowerCase()}</p>
+            </div>
+          </header>
+
+          <div
+            className={`docr-dropzone${dragging ? " dragging" : ""}${full ? " full" : ""}`}
+            onDragOver={(e) => { e.preventDefault(); if (!full) setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}
+            onClick={() => !full && inputRef.current?.click()}
+          >
+            <span className="docr-dropzone-icon" aria-hidden="true">{full ? <CheckCircle size={20} /> : <Upload size={20} />}</span>
+            <span className="docr-dropzone-main">
+              {full
+                ? `${activeType.maxFiles} of ${activeType.maxFiles} file${activeType.maxFiles === 1 ? "" : "s"} added`
+                : <>Drop file{activeType.maxFiles > 1 ? "s" : ""} here or <strong>browse</strong></>}
+            </span>
+            <span className="docr-dropzone-note">PDF, JPG, PNG, TIFF, BMP or WEBP · up to 25 MB each</span>
+          </div>
+          <input
+            ref={inputRef}
+            type="file"
+            accept={activeType.accept}
+            multiple={activeType.maxFiles > 1}
+            style={{ display: "none" }}
+            onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
+          />
+
+          {files.length > 0 && (
+            <div className="docr-file-list">
+              {files.map((f, i) => (
+                <FileRow key={`${f.name}-${i}`} file={f} onRemove={() => removeFile(i)} />
               ))}
             </div>
-          </div>
+          )}
 
-          <div className="docr-panel-section">
-            <p className="docr-step-label">2. Upload {activeType.filesHint.toLowerCase()}</p>
-            <div
-              className={`docr-dropzone${dragging ? " dragging" : ""}${files.length >= activeType.maxFiles ? " full" : ""}`}
-              onDragOver={(e) => { e.preventDefault(); if (files.length < activeType.maxFiles) setDragging(true); }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}
-              onClick={() => files.length < activeType.maxFiles && inputRef.current?.click()}
-            >
-              <Upload size={20} />
-              <span>
-                {files.length >= activeType.maxFiles
-                  ? `${activeType.maxFiles} of ${activeType.maxFiles} files added`
-                  : <>Drop file{activeType.maxFiles > 1 ? "s" : ""} here or <strong>click to browse</strong></>}
-              </span>
-              <span className="docr-dropzone-note">PDF, JPG, PNG, TIFF, BMP or WEBP · max 25 MB each</span>
-            </div>
-            <input
-              ref={inputRef}
-              type="file"
-              accept={activeType.accept}
-              multiple={activeType.maxFiles > 1}
-              style={{ display: "none" }}
-              onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
-            />
-
-            {files.length > 0 && (
-              <div className="docr-file-list">
-                {files.map((f, i) => (
-                  <FileRow key={`${f.name}-${i}`} file={f} onRemove={() => removeFile(i)} />
-                ))}
-              </div>
-            )}
-
-            {docType === "aadhaar" && (
-              <label className="docr-consent">
-                <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-                <span>I have the holder's consent to reveal the full Aadhaar number</span>
-              </label>
-            )}
-          </div>
+          {docType === "aadhaar" && (
+            <label className="docr-consent">
+              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+              <span>I have the holder's consent to reveal the full Aadhaar number</span>
+            </label>
+          )}
 
           {error && (
-            <div className="docr-error">
+            <div className="docr-error" role="alert">
               <AlertCircle size={14} />
               <span>{error}</span>
             </div>
           )}
 
-          <button type="button" className="btn btn-primary docr-extract-btn" onClick={handleExtract} disabled={loading || files.length === 0}>
-            {loading ? <><RefreshCw size={15} className="spin" /> Reading document… {elapsed}s</> : <><ScanSearch size={16} /> Extract Document</>}
+          <button type="button" className="adm-btn adm-btn--primary docr-extract-btn" onClick={handleExtract} disabled={loading || files.length === 0}>
+            {loading ? <><RefreshCw size={15} className="spin" /> Reading… {elapsed}s</> : <><ScanSearch size={16} /> Read {activeType.label}</>}
           </button>
-          <p className="docr-timing-note"><Timer size={11} /> Usually 3–15 seconds per document</p>
-        </div>
+          <p className="docr-timing-note"><Timer size={12} /> Usually 3–15 seconds per document</p>
 
-        {/* ── Right: results panel ───────────────────────────────── */}
-        <div className="docr-results-panel">
+          <div className="docr-checks">
+            <p className="docr-checks-title"><ListChecks size={14} aria-hidden="true" /> What we check on a {activeType.label}</p>
+            <ul>
+              {(TYPE_CHECKS[docType] || []).map((c) => <li key={c}><CheckCircle size={13} aria-hidden="true" /> {c}</li>)}
+            </ul>
+          </div>
+        </section>
+
+        {/* ── 3. The result ─────────────────────────────────────── */}
+        <section className="docr-card docr-results-panel" aria-labelledby="docr-step3" aria-live="polite">
+          <header className="docr-card-head">
+            <span className="docr-step" aria-hidden="true">3</span>
+            <div>
+              <h2 id="docr-step3" className="docr-card-title">Check what was read</h2>
+              <p className="docr-card-sub">Fields marked <strong>Check</strong> need a person to confirm them</p>
+            </div>
+            {result && !loading && (
+              <div className="docr-result-head-actions">
+                <button type="button" className="docr-btn" onClick={handleCopy}>
+                  {copied ? <><CopyCheck size={13} /> Copied</> : <><Copy size={13} /> Copy data</>}
+                </button>
+                <button type="button" className="docr-btn" onClick={handleReset}>
+                  <RefreshCw size={13} /> Scan another
+                </button>
+              </div>
+            )}
+          </header>
+
           {!result && !loading && (
-            <div className="admin-empty">
-              <div className="admin-empty-icon"><ScanSearch size={30} /></div>
-              <h3>Nothing scanned yet</h3>
-              <p>Choose a document type, add a file, and hit Extract to see the structured data here.</p>
+            <div className="docr-empty">
+              <span className="docr-empty-icon" aria-hidden="true"><ActiveIcon size={26} /></span>
+              <h3>Nothing read yet</h3>
+              <p>Add the {activeType.label.toLowerCase()} and press <strong>Read</strong>. These fields come back here:</p>
+              <ul className="docr-empty-fields">
+                {fieldKeysFor(docType).map((k) => <li key={k}>{labelFor(k)}</li>)}
+              </ul>
             </div>
           )}
 
           {loading && (
-            <div className="admin-empty">
-              <div className="loading-dots"><span /><span /><span /></div>
-              <h3>Reading document…</h3>
-              <p>{elapsed}s elapsed — the certificate model and large passport scans take the longest.</p>
+            <div className="docr-empty docr-empty--loading">
+              <span className="docr-scan" aria-hidden="true"><span className="docr-scan-doc"><i /><i /><i /><i /></span><span className="docr-scan-line" /></span>
+              <h3>Reading the {activeType.label.toLowerCase()}…</h3>
+              <p>{elapsed}s so far. Certificates and large passport scans take the longest.</p>
             </div>
           )}
 
           {result && !loading && (
             <div className="docr-result animate-fade-in">
               <div className="docr-result-head">
-                {result.preview && <img src={result.preview} alt="" className="docr-preview" />}
+                {result.preview
+                  ? <img src={result.preview} alt="" className="docr-preview" />
+                  : <span className="docr-preview docr-preview--icon" aria-hidden="true"><ScanLine size={24} /></span>}
                 <div className="docr-result-head-info">
-                  <span className="docr-result-kind">{(result.kind || docType).toUpperCase()}</span>
+                  <span className="docr-result-kind">{(DOC_TYPES.find((t) => t.id === kind) || activeType).label}</span>
                   <span className="docr-result-file">{result.file}</span>
-                  <span className="docr-result-seconds">Processed in {result.seconds != null ? `${result.seconds}s` : "—"}</span>
-                </div>
-                <div className="docr-result-head-actions">
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={handleCopy}>
-                    {copied ? <><CopyCheck size={13} /> Copied</> : <><Copy size={13} /> Copy Data</>}
-                  </button>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={handleReset}>
-                    <RefreshCw size={13} /> Scan Another
-                  </button>
                 </div>
               </div>
 
-              <VerificationChips kind={result.kind || docType} full={result.full} />
-              <ReviewBanner review={result.full?.review} />
+              <dl className="docr-stats">
+                {resultStats.map((st) => (
+                  <div key={st.key} className={`docr-stat is-${st.tone}`}>
+                    <dt>{st.label}</dt>
+                    <dd>{st.value}</dd>
+                  </div>
+                ))}
+              </dl>
 
-              <ExtractedFields kind={result.kind || docType} flat={result.flat || {}} />
+              <VerificationChips chips={chips} />
+              <ReviewBanner review={review} />
+
+              <ExtractedFields kind={kind} flat={flat} flagged={flagged} />
 
               {result.full?.fields && (
                 <div className="docr-detail-toggle-wrap">
-                  <button type="button" className="docr-detail-toggle" onClick={() => setShowDetail((v) => !v)}>
-                    {showDetail ? "Hide" : "Show"} verification detail
+                  <button type="button" className="docr-detail-toggle" aria-expanded={showDetail} onClick={() => setShowDetail((v) => !v)}>
+                    <ShieldCheck size={14} aria-hidden="true" /> {showDetail ? "Hide" : "Show"} how each field was verified
                   </button>
                   {showDetail && <FieldDetailTable fields={result.full.fields} />}
                 </div>
               )}
             </div>
           )}
-        </div>
+        </section>
       </div>
     </div>
   );
