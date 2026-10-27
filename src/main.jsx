@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Analytics } from '@vercel/analytics/react'
+import { SpeedInsights } from '@vercel/speed-insights/react'
 import App from './App.jsx'
 
 // Vercel Web Analytics counts page views only. Query strings and #fragments
@@ -22,5 +23,6 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <App />
     <Analytics beforeSend={pageOnly} />
+    <SpeedInsights />
   </StrictMode>,
 )
