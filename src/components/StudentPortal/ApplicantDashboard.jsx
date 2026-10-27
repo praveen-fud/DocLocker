@@ -295,6 +295,9 @@ function buildEvents(items) {
       case "banker_access.revoke":
         events.push({ id: it.id, at: it.at, icon: Landmark, tone: "muted", text: `No longer shared with ${it.bank}` });
         break;
+      case "sanction_letter.upload":
+        events.push({ id: it.id, at: it.at, icon: FileCheck2, tone: "success", accent: "milestone", text: "Your sanction letter was added. Download it from your Overview" });
+        break;
       case "document.upload":
         bump(`up|${day}`, { id: it.id, at: it.at, icon: Upload, tone: "info", kind: "upload" }, readableName(it.file));
         break;
@@ -522,6 +525,26 @@ export default function ApplicantDashboard({ view, onViewChange, student, applic
         </div>
 
         <StatusTracker student={student} />
+
+        {student.sanctionLetter && (
+          <section className="ad-letter" aria-labelledby="ad-letter-title">
+            <span className="ad-letter__icon" aria-hidden="true"><FileCheck2 size={18} /></span>
+            <div className="ad-letter__body">
+              <h2 id="ad-letter-title">Your sanction letter is ready</h2>
+              <p>
+                The lender&apos;s approval for your education loan
+                {student.sanctionLetter.uploadedAt ? `, added ${formatAppliedOn(student.sanctionLetter.uploadedAt)}` : ""}.
+                Keep a copy for your university and visa.
+              </p>
+            </div>
+            <DownloadButton
+              label="Download letter"
+              busyLabel="Downloading…"
+              className="ad-btn ad-btn--primary ad-letter__btn"
+              onDownload={() => downloadMyDocument(student.sanctionLetter.fileId)}
+            />
+          </section>
+        )}
 
         {missing.length > 0 && (
           <section className="ad-todo" aria-labelledby="ad-todo-title">

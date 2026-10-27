@@ -434,3 +434,13 @@
 }
 
 .sp-pin-note { margin: 6px 0 0; font-size: 13px; color: var(--success-text, #15803d); }
+
+/* Sanction letter: green once it's in, gold while it's missing */
+.sp-letter.is-in { border-color: rgba(22, 163, 74, 0.28); background: linear-gradient(135deg, #ecf8f1, #ffffff 70%); }
+.sp-letter.is-missing { border-color: rgba(242, 166, 35, 0.45); background: linear-gradient(135deg, #fff4de, #ffffff 70%); }
+.sp-file-icon--letter { background: #15803d; color: #fff; }
+.sp-letter-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; }
+.sp-letter-missing { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.sp-letter-missing p { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: 13px; line-height: 1.5; color: #6b4700; }
+.sp-letter-missing p svg { flex: none; margin-top: 2px; color: #8a5a00; }
+

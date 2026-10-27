@@ -279,9 +279,23 @@ export async function updateLoanStatus(studentName, studentIdentifier, loanStatu
   return apiPut(`/api/students/${encodeURIComponent(folderKey)}/loan-status`, body);
 }
 
-// ── Upload sanction letter when loan is sanctioned ────────────────────────────
-export function uploadSanctionLetter(studentName, studentIdentifier, file) {
-  return uploadDocument({ studentName, studentIdentifier, subFolder: 'Loan_Documents', fileName: 'Sanction_Letter', file });
+// ── Sanction letter (staff, or a lender the student is shared with) ───────────
+// Saved to Loan_Documents and recorded on the student →
+// { fileId, name, uploadedBy, uploadedAt }
+export async function uploadSanctionLetter(studentName, studentIdentifier, file) {
+  const folderKey = buildFolderKey(studentName, studentIdentifier || '');
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(`${API_URL}/api/students/${encodeURIComponent(folderKey)}/sanction-letter`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: formData,
+    signal: AbortSignal.timeout(120000),
+  });
+  let data;
+  try { data = await res.json(); } catch { throw new Error('Bad JSON from the sanction letter upload'); }
+  if (!data.success) throw new Error(data.error || 'The sanction letter was not uploaded');
+  return data.sanctionLetter;
 }
 
 // ── Recover student meta from the Summary PDF via OCR + Claude ───────────────

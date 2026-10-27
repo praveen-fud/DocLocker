@@ -539,3 +539,36 @@
   align-items: start;
 }
 .doc-grid[hidden] { display: none; }
+
+/* Locked PDFs: the tip on statement/payslip/ITR slots and the Nexfile link */
+.doc-lock-tip { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.doc-lock-tip > svg { flex: none; color: var(--orbit-gold-deep, #8a5a00); }
+.doc-unlock-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(242, 166, 35, 0.45);
+  border-radius: 999px;
+  background: var(--orbit-gold-tint, #fff4de);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--orbit-gold-deep, #8a5a00);
+  text-decoration: none;
+  transition: background-color var(--transition-fast, 0.15s), border-color var(--transition-fast, 0.15s);
+}
+.doc-unlock-link:hover { border-color: var(--orbit-gold, #f2a623); background: #ffe9bf; }
+.doc-unlock-link:focus-visible { outline: 2px solid var(--orbit-sapphire, #2448c9); outline-offset: 2px; }
+.doc-unlock-link.is-compact { min-height: 24px; padding: 0 9px; font-size: 12px; }
+@media (prefers-reduced-motion: reduce) {
+  .doc-unlock-link { transition: none; }
+}
+/* A locked PDF is something the student fixes, not a failure: gold, not red */
+.doc-alert.doc-alert--locked {
+  color: var(--orbit-gold-deep, #8a5a00);
+  background: var(--orbit-gold-tint, #fff4de);
+  border-color: rgba(242, 166, 35, 0.4);
+}
+.doc-alert--locked .doc-alert__body > span { color: #6b4700; }
+

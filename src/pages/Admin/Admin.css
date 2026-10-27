@@ -1272,6 +1272,91 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
+/* Each card opens the Students page filtered to that advisor */
+button.advisor-card {
+  display: block;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 220ms var(--orbit-ease, ease), box-shadow 220ms var(--orbit-ease, ease), border-color 220ms;
+}
+.admin-shell.theme-orbit button.advisor-card:hover {
+  border-color: #ffffff;
+  box-shadow: 0 22px 44px -24px rgba(11, 30, 74, 0.38);
+  transform: translateY(-3px);
+}
+button.advisor-card:active { transform: translateY(0); }
+.advisor-card-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.advisor-card-go svg { transition: transform 0.25s var(--orbit-ease, ease); }
+button.advisor-card:hover .advisor-card-go svg { transform: translateX(3px); }
+@media (prefers-reduced-motion: reduce) {
+  .admin-shell.theme-orbit button.advisor-card:hover { transform: none; }
+}
+
+/* Sanctioned files: is the sanction letter in? */
+.adm-cell--loan { flex-wrap: wrap; gap: 4px 6px; }
+.adm-letter-flag,
+.adm-letter-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font: 700 11px/1 var(--font-body);
+  white-space: nowrap;
+}
+.adm-letter-flag {
+  border: 1px solid rgba(242, 166, 35, 0.5);
+  background: #fff4de;
+  color: #8a5a00;
+  cursor: pointer;
+}
+.adm-letter-flag:hover { border-color: var(--gold, #f2a623); background: #ffe9bf; }
+.adm-letter-ok { color: var(--success-text, #15803d); }
+.lsm-hint { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary); }
+.adm-tab.is-warn .adm-tab-count { color: #8a5a00; font-weight: 700; }
+.adm-scope-chip--warn { border-color: rgba(242, 166, 35, 0.45); background: #fff4de; }
+.adm-scope-chip--warn > svg, .adm-scope-chip--warn strong { color: #8a5a00; }
+.dh-kpi-sub.is-warn { color: #8a5a00; font-weight: 700; }
+
+/* Students page, narrowed to one advisor */
+.adm-scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 5px 6px 5px 12px;
+  border: 1px solid rgba(36, 72, 201, 0.22);
+  border-radius: 999px;
+  background: var(--primary-tint);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.adm-scope-chip > svg { color: var(--primary); }
+.adm-scope-chip strong { color: var(--primary); }
+.adm-scope-chip button {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.adm-scope-chip button:hover { color: var(--danger); }
 
 .advisor-card-top {
   display: flex;

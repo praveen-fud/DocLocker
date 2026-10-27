@@ -428,6 +428,7 @@ function attentionReasons(s, { adminLevel }) {
   if (s._parseError) reasons.push({ tone: "danger", text: "Record unreadable" });
   if (idr.overall === "mismatch") reasons.push({ tone: "danger", text: "Details don’t match" });
   if (status === "inprocess" && progress < 100) reasons.push({ tone: "warn", text: "Docs missing at lender stage" });
+  if (needsSanctionLetter(s)) reasons.push({ tone: "warn", text: "Sanction letter missing" });
   if (adminLevel && !s.advisor) reasons.push({ tone: "warn", text: "No advisor" });
   if (progress === 0) reasons.push({ tone: "info", text: "No documents yet" });
   const updated = s.updatedAt ? Date.parse(s.updatedAt) : NaN;
@@ -455,6 +456,7 @@ function DashboardHome({
   const approved = loanStats.sanctioned + loanStats.disbursed;
   const decided = approved + loanStats.rejected;
   const approvalRate = decided ? Math.round((approved / decided) * 100) : null;
+  const lettersMissing = students.filter(needsSanctionLetter).length;
   const completeShare = total ? Math.round((stats.complete / total) * 100) : 0;
   const partners = companies.filter((c) => c.kind !== "owner");
   const viaPartners = students.filter((s) => s.company && s.company.slug !== "flyurdream").length;
@@ -477,8 +479,12 @@ function DashboardHome({
     },
     {
       key: "approved", label: "Sanctioned & disbursed", value: approved, icon: BadgeCheck, tone: "green",
-      sub: approvalRate === null ? "No decisions yet" : `${approvalRate}% approval rate`,
-      open: () => onOpenStudents({ loan: "sanctioned" }),
+      // Letters still to collect come first: they're the thing to act on
+      sub: lettersMissing
+        ? `${lettersMissing} sanction letter${lettersMissing === 1 ? "" : "s"} missing`
+        : approvalRate === null ? "No decisions yet" : `${approvalRate}% approval rate`,
+      warn: lettersMissing > 0,
+      open: () => (lettersMissing ? onOpenStudents({ letters: "missing" }) : onOpenStudents({ loan: "sanctioned" })),
     },
     ...(isSuper ? [{
       key: "companies", label: "Partner companies", value: partners.length, icon: Building2, tone: "violet",
@@ -546,7 +552,7 @@ function DashboardHome({
                 <span className="dh-kpi-value"><CountUp text={dash(k.value)} /></span>
                 <ArrowUpRight size={16} className="dh-kpi-go" aria-hidden="true" />
               </span>
-              <span className={`dh-kpi-sub${k.up ? " is-up" : ""}`}>{loading ? "Loading…" : k.sub}</span>
+              <span className={`dh-kpi-sub${k.up ? " is-up" : ""}${k.warn ? " is-warn" : ""}`}>{loading ? "Loading…" : k.sub}</span>
             </button>
           );
         })}
@@ -832,6 +838,9 @@ const LOAN_STATUS_CONFIG = {
   dropped:    { label: "Dropped",     cls: "loan-dropped" },
 };
 
+// A sanctioned or disbursed loan whose sanction letter isn't in the file yet
+const needsSanctionLetter = (s) => ["sanctioned", "disbursed"].includes(s.loanStatus) && !s.sanctionLetter;
+
 // Statuses that must carry an explanatory remark (mirrors backend validation)
 const REMARK_STATUSES = ["rejected", "dropped"];
 const REMARK_LABELS = {
@@ -891,11 +900,19 @@ function LoanStatusModal({ student, onClose, onUpdated }) {
     try {
       setLoadingMsg("Updating status…");
       await updateLoanStatus(student.name, student.email || student.phone || "", status, remark, disbursementPayload);
-      if (status === "sanctioned" && sanctionFile) {
+      let letter = null;
+      if (["sanctioned", "disbursed"].includes(status) && sanctionFile) {
         setLoadingMsg("Uploading sanction letter…");
-        await uploadSanctionLetter(student.name, student.email || student.phone || "", sanctionFile);
+        try {
+          letter = await uploadSanctionLetter(student.name, student.email || student.phone || "", sanctionFile);
+        } catch (upErr) {
+          // The status is saved; say so, and keep the dialog open to retry the letter
+          onUpdated(student.name, status, remark, disbursementPayload);
+          setErr(`Status saved, but the sanction letter wasn't uploaded: ${upErr.message}`);
+          return;
+        }
       }
-      onUpdated(student.name, status, remark, disbursementPayload);
+      onUpdated(student.name, status, remark, disbursementPayload, letter);
       onClose();
     } catch (e2) {
       setErr(e2.message || "Failed to update loan status.");
@@ -925,7 +942,7 @@ function LoanStatusModal({ student, onClose, onUpdated }) {
               <button
                 key={key} type="button"
                 className={`lsm-option ${cfg.cls}${status === key ? " selected" : ""}`}
-                onClick={() => { setStatus(key); if (!REMARK_STATUSES.includes(key)) setRemark(""); if (key !== "sanctioned") setSanctionFile(null); }}
+                onClick={() => { setStatus(key); if (!REMARK_STATUSES.includes(key)) setRemark(""); if (!["sanctioned", "disbursed"].includes(key)) setSanctionFile(null); }}
               >
                 <span className="lsm-option-dot" />
                 <span>{cfg.label}</span>
@@ -949,11 +966,14 @@ function LoanStatusModal({ student, onClose, onUpdated }) {
             </div>
           )}
 
-          {status === "sanctioned" && (
+          {["sanctioned", "disbursed"].includes(status) && (
             <div className="lsm-upload-wrap">
               <label className="lsm-remark-label">
                 Sanction Letter <span className="lsm-optional">— optional</span>
               </label>
+              {!student.sanctionLetter && (
+                <p className="lsm-hint">Without it, this file shows “Letter missing” until someone uploads it.</p>
+              )}
               <label className={`lsm-file-drop${sanctionFile ? " has-file" : ""}`}>
                 <input
                   type="file"
@@ -1023,6 +1043,81 @@ function LoanStatusModal({ student, onClose, onUpdated }) {
             </button>
             <button type="submit" className="btn btn-primary" disabled={loading}>
               {loading ? <><RefreshCw size={13} className="spin" /> {loadingMsg}</> : "Update Status"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Upload (or replace) the sanction letter for a sanctioned / disbursed loan
+function SanctionLetterModal({ student, onClose, onUploaded }) {
+  const [file, setFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const replacing = Boolean(student.sanctionLetter);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!file) { setErr("Choose the sanction letter to upload."); return; }
+    setLoading(true);
+    setErr("");
+    try {
+      const letter = await uploadSanctionLetter(student.name, student.email || student.phone || "", file);
+      onUploaded(student.name, letter);
+      onClose();
+    } catch (e2) {
+      setErr(e2.message || "The sanction letter wasn't uploaded.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={() => !loading && onClose()}>
+      <div className="loan-status-modal animate-fade-in" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="slm-title">
+        <div className="lsm-header">
+          <div className="lsm-icon"><FileCheck2 size={22} /></div>
+          <div className="lsm-title-block">
+            <h3 className="lsm-title" id="slm-title">{replacing ? "Replace sanction letter" : "Upload sanction letter"}</h3>
+            <p className="lsm-sub">{displayName(student.name)} · {LOAN_STATUS_CONFIG[student.loanStatus]?.label || "Sanctioned"}</p>
+          </div>
+          <button className="lsm-close" onClick={onClose} disabled={loading} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="lsm-body">
+          <p className="lsm-hint">
+            {replacing
+              ? `The current letter (${student.sanctionLetter.name}) is replaced. The student sees the new one in their portal.`
+              : "Once it's uploaded, the student can download it from their portal and the “Letter missing” flag clears."}
+          </p>
+          <label className={`lsm-file-drop${file ? " has-file" : ""}`}>
+            <input type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: "none" }} onChange={(e) => setFile(e.target.files[0] || null)} />
+            {file ? (
+              <div className="lsm-file-selected">
+                <FileText size={15} />
+                <span className="lsm-file-name">{file.name}</span>
+                <button type="button" className="lsm-file-remove" aria-label="Remove file" onClick={(e) => { e.preventDefault(); setFile(null); }}>
+                  <X size={12} />
+                </button>
+              </div>
+            ) : (
+              <div className="lsm-file-placeholder">
+                <Upload size={16} />
+                <span>Choose the letter: PDF, JPG or PNG</span>
+              </div>
+            )}
+          </label>
+
+          {err && <p className="lsm-error">{err}</p>}
+
+          <div className="lsm-actions">
+            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={loading || !file}>
+              {loading ? <><RefreshCw size={13} className="spin" /> Uploading…</> : <><Upload size={14} /> {replacing ? "Replace letter" : "Upload letter"}</>}
             </button>
           </div>
         </form>
@@ -2082,10 +2177,13 @@ function ProfileRows({ rows }) {
 
 function StudentProfile({
   student, position, onPrev, onNext, onClose, adminRole, bankers = [], isDuplicate,
-  onLoanStatus, onEligibility, onShare, onOpenDrive, onRecover, onDelete, canManage,
+  onLoanStatus, onUploadLetter, onEligibility, onShare, onOpenDrive, onRecover, onDelete, canManage,
   canEditAdvisor, onAdvisorSave, advisorOptions, canEditConsultancy, onConsultancySave, consultancySuggestions,
 }) {
   const [tab, setTab] = useState("overview");
+  // A letter saved before letters were recorded on the student, found in
+  // their Loan_Documents folder: undefined = not looked yet, null = none
+  const [foundLetter, setFoundLetter] = useState(undefined);
   const [viewing, setViewing] = useState(null);
   const [copied, setCopied] = useState(false);
   const [photoFailed, setPhotoFailed] = useState(false);
@@ -2115,7 +2213,10 @@ function StudentProfile({
     student.summaryPdf && { id: student.summaryPdf.fileId || student.summaryPdf.id, name: "Application Form", note: "Built from the profile on every save" },
     student.eligibilityPdf && { id: student.eligibilityPdf.fileId || student.eligibilityPdf.id, name: "Eligibility Report", note: "Scores, CIBIL and readiness" },
   ].filter((g) => g && g.id);
-  const viewerFiles = [...generated, ...uploadedFiles].filter((f) => f.id).map((f) => ({ id: f.id, name: f.name }));
+  const letterStage = ["sanctioned", "disbursed"].includes(student.loanStatus);
+  const letter = student.sanctionLetter || foundLetter || null;
+  const letterFile = letter && { id: letter.fileId, name: "Sanction Letter", slot: "Loan documents" };
+  const viewerFiles = [...(letterFile ? [letterFile] : []), ...generated, ...uploadedFiles].filter((f) => f.id).map((f) => ({ id: f.id, name: f.name }));
   const lenders = (student.sharedBankers || []).map((n) => ({ name: n, bank: bankers.find((b) => b.name === n)?.bank || "" }));
   const photo = student.uploads?.applicant?.photo;
   const hasPhoto = !!photo?.id && /\.(jpe?g|png|webp|gif)$/i.test(photo.name || "") && !photoFailed;
@@ -2169,6 +2270,23 @@ function StudentProfile({
       : { ...(pin || {}), note: d.error || "The PIN couldn’t be reset. Try again." });
   };
 
+  // Older letters weren't recorded on the student: look in the file once
+  useEffect(() => {
+    if (student.sanctionLetter || foundLetter !== undefined || !letterStage) return undefined;
+    let cancelled = false;
+    callAPI("GET", `/api/students/${encodeURIComponent(pinKey)}/files`)
+      .then((d) => {
+        if (cancelled) return;
+        const files = Object.entries(d.groups || {})
+          .filter(([group]) => group.split("/").pop() === "Loan_Documents")
+          .flatMap(([, list]) => list)
+          .filter((f) => /^sanction_letter\./i.test(f.name || ""));
+        setFoundLetter(files[0] ? { fileId: files[0].id, name: files[0].name, found: true } : null);
+      })
+      .catch(() => { if (!cancelled) setFoundLetter(null); });
+    return () => { cancelled = true; };
+  }, [student.sanctionLetter, foundLetter, letterStage, pinKey]);
+
   const copyId = async () => {
     try { await navigator.clipboard.writeText(appId); setCopied(true); setTimeout(() => setCopied(false), 1400); } catch { /* blocked */ }
   };
@@ -2185,6 +2303,7 @@ function StudentProfile({
     !student.advisor && { tone: "warn", text: "No advisor is assigned yet." },
     missing.length > 0 && { tone: "info", text: `${missing.length} required document${missing.length === 1 ? "" : "s"} missing`, action: () => setTab("documents") },
     student.loanStatus === "rejected" && student.loanRemark && { tone: "danger", text: `Rejected: ${student.loanRemark}` },
+    letterStage && foundLetter === null && !student.sanctionLetter && { tone: "warn", text: "The loan is sanctioned but its sanction letter isn’t in the file yet.", action: onUploadLetter, actionLabel: "Upload" },
   ].filter(Boolean);
 
   const glance = [
@@ -2321,7 +2440,7 @@ function StudentProfile({
                         <li key={a.text} className={`sp-attn sp-attn--${a.tone}`}>
                           {a.tone === "info" ? <FileClock size={16} /> : <AlertTriangle size={16} />}
                           <span>{a.text}</span>
-                          {a.action && <button type="button" className="sp-link" onClick={a.action}>Review</button>}
+                          {a.action && <button type="button" className="sp-link" onClick={a.action}>{a.actionLabel || "Review"}</button>}
                         </li>
                       ))}
                     </ul>
@@ -2343,6 +2462,37 @@ function StudentProfile({
               </div>
 
               <div className="sp-col">
+                {letterStage && (
+                  <section className={`sp-card sp-letter${letter ? " is-in" : " is-missing"}`}>
+                    <h3 className="sp-card-title"><FileCheck2 size={16} /> Sanction letter</h3>
+                    {letter ? (
+                      <div className="sp-file">
+                        <span className="sp-file-icon sp-file-icon--letter"><FileCheck2 size={16} /></span>
+                        <span className="sp-file-text">
+                          <strong>{letter.name}</strong>
+                          <span>
+                            {letter.found
+                              ? "In Loan documents"
+                              : [letter.uploadedBy && `Uploaded by ${letter.uploadedBy}`, letter.uploadedAt && timeAgo(letter.uploadedAt)].filter(Boolean).join(" · ") || "In Loan documents"}
+                            {" · the student can download it"}
+                          </span>
+                        </span>
+                        <span className="sp-letter-actions">
+                          <button type="button" className="sp-btn sp-btn--sm" onClick={() => setViewing(letterFile)}><Eye size={15} /> View</button>
+                          <button type="button" className="sp-btn sp-btn--sm" onClick={onUploadLetter}><RefreshCw size={14} /> Replace</button>
+                        </span>
+                      </div>
+                    ) : foundLetter === undefined && !student.sanctionLetter ? (
+                      <div className="sp-loading"><div className="loading-dots"><span /><span /><span /></div></div>
+                    ) : (
+                      <div className="sp-letter-missing">
+                        <p><AlertTriangle size={15} aria-hidden="true" /> Not in the file yet. Upload the lender&apos;s letter so the student can download it.</p>
+                        <button type="button" className="sp-btn sp-btn--primary sp-btn--sm" onClick={onUploadLetter}><Upload size={14} /> Upload sanction letter</button>
+                      </div>
+                    )}
+                  </section>
+                )}
+
                 <section className="sp-card">
                   <h3 className="sp-card-title">Reports</h3>
                   {generated.length === 0 ? (
@@ -2420,6 +2570,37 @@ function StudentProfile({
                   {zipBusy ? <RefreshCw size={16} className="spin" /> : <Download size={16} />} Download all
                 </button>
               </div>
+
+                {letterStage && (
+                  <section className={`sp-card sp-card--flat sp-letter${letter ? " is-in" : " is-missing"}`}>
+                    <h3 className="sp-card-title"><FileCheck2 size={16} /> Sanction letter</h3>
+                    {letter ? (
+                      <div className="sp-file">
+                        <span className="sp-file-icon sp-file-icon--letter"><FileCheck2 size={16} /></span>
+                        <span className="sp-file-text">
+                          <strong>{letter.name}</strong>
+                          <span>
+                            {letter.found
+                              ? "In Loan documents"
+                              : [letter.uploadedBy && `Uploaded by ${letter.uploadedBy}`, letter.uploadedAt && timeAgo(letter.uploadedAt)].filter(Boolean).join(" · ") || "In Loan documents"}
+                            {" · the student can download it"}
+                          </span>
+                        </span>
+                        <span className="sp-letter-actions">
+                          <button type="button" className="sp-btn sp-btn--sm" onClick={() => setViewing(letterFile)}><Eye size={15} /> View</button>
+                          <button type="button" className="sp-btn sp-btn--sm" onClick={onUploadLetter}><RefreshCw size={14} /> Replace</button>
+                        </span>
+                      </div>
+                    ) : foundLetter === undefined && !student.sanctionLetter ? (
+                      <div className="sp-loading"><div className="loading-dots"><span /><span /><span /></div></div>
+                    ) : (
+                      <div className="sp-letter-missing">
+                        <p><AlertTriangle size={15} aria-hidden="true" /> Not in the file yet. Upload the lender&apos;s letter so the student can download it.</p>
+                        <button type="button" className="sp-btn sp-btn--primary sp-btn--sm" onClick={onUploadLetter}><Upload size={14} /> Upload sanction letter</button>
+                      </div>
+                    )}
+                  </section>
+                )}
 
               {generated.length > 0 && (
                 <section className="sp-card sp-card--flat">
@@ -2888,7 +3069,7 @@ function ActionsMenu({ label, items, icon: TriggerIcon = MoreVertical, className
   );
 }
 
-function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDelete, onOpenDrive, onViewReport, onSendToBank, onLoanStatusUpdate, onRecoverMeta, isDuplicate, showAdvisor, canManage }) {
+function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDelete, onOpenDrive, onViewReport, onSendToBank, onLoanStatusUpdate, onUploadLetter, onRecoverMeta, isDuplicate, showAdvisor, canManage }) {
   const [photoFailed, setPhotoFailed] = useState(false);
 
   const totalUploads = getTotalUploads(student);
@@ -2913,6 +3094,9 @@ function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDel
     { label: "Eligibility report", icon: BarChart3, onSelect: onViewReport },
     { label: "Bank access", icon: Send, onSelect: onSendToBank },
     { label: "Update loan status", icon: Banknote, onSelect: onLoanStatusUpdate },
+    ...(["sanctioned", "disbursed"].includes(student.loanStatus)
+      ? [{ label: student.sanctionLetter ? "Replace sanction letter" : "Upload sanction letter", icon: FileCheck2, onSelect: onUploadLetter }]
+      : []),
     ...(student.storage !== "railway" ? [{ label: "Open Drive", icon: ExternalLink, onSelect: onOpenDrive }] : []),
     ...(canManage ? [
       { label: "Recover meta", icon: ScanText, onSelect: onRecoverMeta },
@@ -2997,6 +3181,21 @@ function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDel
         </div>
         <div className="adm-cell adm-cell--loan" data-label="Loan Status">
           <LoanStatusBadge status={student.loanStatus} />
+          {needsSanctionLetter(student) && (
+            <button
+              type="button"
+              className="adm-letter-flag"
+              onClick={(e) => { e.stopPropagation(); onUploadLetter(); }}
+              title="This loan is sanctioned but its sanction letter isn't in the file. Upload it."
+            >
+              <AlertTriangle size={11} aria-hidden="true" /> Letter missing
+            </button>
+          )}
+          {student.sanctionLetter && ["sanctioned", "disbursed"].includes(student.loanStatus) && (
+            <span className="adm-letter-ok" title={`${student.sanctionLetter.name}${student.sanctionLetter.uploadedBy ? ` · uploaded by ${student.sanctionLetter.uploadedBy}` : ""}`}>
+              <CheckCircle size={11} aria-hidden="true" /> Letter in file
+            </span>
+          )}
         </div>
         <div className="adm-cell adm-cell--updated" data-label="Updated On">
           {updated ? (
@@ -4411,7 +4610,7 @@ function AdminMobileBar({ onOpenMenu, menuOpen }) {
 
 /* ─── Advisors section ────────────────────────────────────────────── */
 
-function AdvisorsSection({ students, allAdvisors }) {
+function AdvisorsSection({ students, allAdvisors, onOpenAdvisor }) {
   const rows = allAdvisors
     .map((name) => {
       const list = students.filter((s) => s.advisor === name);
@@ -4435,7 +4634,13 @@ function AdvisorsSection({ students, allAdvisors }) {
       {rows.map((r) => {
         const pct = r.total ? Math.round((r.complete / r.total) * 100) : 0;
         return (
-          <div key={r.name} className="advisor-card">
+          <button
+            key={r.name}
+            type="button"
+            className="advisor-card"
+            onClick={() => onOpenAdvisor(r.name)}
+            aria-label={`Open ${r.name}'s ${r.total} student${r.total === 1 ? "" : "s"}`}
+          >
             <div className="advisor-card-top">
               <div className="advisor-card-avatar">{r.name[0].toUpperCase()}</div>
               <div className="advisor-card-body">
@@ -4450,7 +4655,10 @@ function AdvisorsSection({ students, allAdvisors }) {
             <div className="advisor-card-bar">
               <div className="advisor-card-bar-fill" style={{ width: `${pct}%` }} />
             </div>
-          </div>
+            <span className="advisor-card-go">
+              View students <ArrowRight size={14} aria-hidden="true" />
+            </span>
+          </button>
         );
       })}
     </div>
@@ -4472,6 +4680,7 @@ const AUDIT_ACTION_LABELS = {
   "banker_access.request": "Requested bank access",
   "banker_access.approve": "Approved bank access request",
   "banker_access.reject": "Rejected bank access request",
+  "sanction_letter.upload": "Uploaded sanction letter",
 };
 
 function auditActionLabel(action) {
@@ -4489,6 +4698,7 @@ const AUDIT_ACTION_ICON = {
   banker_access: Landmark,
   company: Building2,
   document_reader: ScanSearch,
+  sanction_letter: FileCheck2,
 };
 const AUDIT_ACTION_TONE = {
   auth: "blue",
@@ -4498,6 +4708,7 @@ const AUDIT_ACTION_TONE = {
   banker_access: "teal",
   company: "violet",
   document: "blue",
+  sanction_letter: "teal",
 };
 
 // "2m ago" / "Just now" — recomputed on a slow tick (see the second effect
@@ -5309,6 +5520,9 @@ export default function Admin() {
   const [reportStudent, setReportStudent] = useState(null);
   const [bankStudent, setBankStudent] = useState(null);
   const [loanStatusStudent, setLoanStatusStudent] = useState(null);
+  const [letterStudent, setLetterStudent] = useState(null);
+  // "all" | "missing": sanctioned files whose letter isn't in yet
+  const [letterFilter, setLetterFilter] = useState("all");
   const [recoverStudent, setRecoverStudent] = useState(null);
   const [selectedKeys, setSelectedKeys] = useState(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -5403,14 +5617,17 @@ export default function Admin() {
     setStudents((prev) => prev.map((s) => s.name === name ? { ...s, sharedBankers } : s));
   };
 
-  const handleLoanStatusChange = (name, loanStatus, loanRemark, loanDisbursement) => {
+  const handleLoanStatusChange = (name, loanStatus, loanRemark, loanDisbursement, sanctionLetter) => {
     setStudents((prev) =>
       prev.map((s) =>
         s.name === name
-          ? { ...s, loanStatus, loanRemark, ...(loanDisbursement ? { loanDisbursement } : {}) }
+          ? { ...s, loanStatus, loanRemark, ...(loanDisbursement ? { loanDisbursement } : {}), ...(sanctionLetter ? { sanctionLetter } : {}) }
           : s,
       ),
     );
+  };
+  const handleLetterUploaded = (name, sanctionLetter) => {
+    setStudents((prev) => prev.map((s) => (s.name === name ? { ...s, sanctionLetter } : s)));
   };
 
   // Advisor sets/corrects a student's consultancy from the admin panel.
@@ -5582,7 +5799,8 @@ export default function Admin() {
         ? !consultancyValue
         : consultancyValue === consultancyFilter);
     const matchesCompany = companyFilter === "all" || s.company?.id === companyFilter;
-    return matchesSearch && matchesFilter && matchesLoanStatus && matchesConsultancy && matchesCompany;
+    const matchesLetter = letterFilter === "all" || needsSanctionLetter(s);
+    return matchesSearch && matchesFilter && matchesLoanStatus && matchesConsultancy && matchesCompany && matchesLetter;
   });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -5594,7 +5812,7 @@ export default function Admin() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
-  }, [search, filter, loanStatusFilter, consultancyFilter, advisorFilter, bankerFilter]);
+  }, [search, filter, loanStatusFilter, consultancyFilter, advisorFilter, bankerFilter, letterFilter]);
 
   const visibleKeys = paginated.map(studentKey);
   const allVisibleSelected = visibleKeys.length > 0 && visibleKeys.every((k) => selectedKeys.has(k));
@@ -5716,15 +5934,20 @@ export default function Admin() {
   // Quick-filter pills: each is a preset over the existing document-progress
   // and loan-status filters, so the full Filter panel stays in sync.
   const pendingDocs = stats.inProgress + stats.notStarted;
+  const lettersMissing = scopedStudents.filter(needsSanctionLetter).length;
   const QUICK_TABS = [
     { id: "all", label: "All Students", count: stats.total, doc: "all", loan: "all" },
     { id: "pendingDocs", label: "Pending Docs", count: pendingDocs, doc: "incomplete", loan: "all" },
     { id: "inprocess", label: "In Process", count: loanStats.inprocess, doc: "all", loan: "inprocess" },
     { id: "sanctioned", label: "Sanctioned", count: loanStats.sanctioned, doc: "all", loan: "sanctioned" },
+    // Only while there's something to chase
+    ...(lettersMissing || letterFilter === "missing"
+      ? [{ id: "letters", label: "Letter missing", count: lettersMissing, doc: "all", loan: "all", letters: "missing", warn: true }]
+      : []),
   ];
-  const activeQuickTab = QUICK_TABS.find((t) => t.doc === filter && t.loan === loanStatusFilter)?.id || null;
+  const activeQuickTab = QUICK_TABS.find((t) => t.doc === filter && t.loan === loanStatusFilter && (t.letters || "all") === letterFilter)?.id || null;
   const activeFilterCount =
-    [filter !== "all", loanStatusFilter !== "all", !!consultancyFilter, advisorFilter !== "all", bankerFilter !== "all", companyFilter !== "all"].filter(Boolean).length
+    [filter !== "all", loanStatusFilter !== "all", !!consultancyFilter, advisorFilter !== "all", bankerFilter !== "all", companyFilter !== "all", letterFilter !== "all"].filter(Boolean).length
     - (activeQuickTab && activeQuickTab !== "all" ? 1 : 0);
   const clearAllFilters = () => {
     setFilter("all");
@@ -5733,13 +5956,15 @@ export default function Admin() {
     setAdvisorFilter("all");
     setBankerFilter("all");
     setCompanyFilter("all");
+    setLetterFilter("all");
   };
 
   // Dashboard → the Students page with exactly this slice showing.
-  const openStudents = ({ doc = "all", loan = "all", company = "all", advisor = "all", query = "" } = {}) => {
+  const openStudents = ({ doc = "all", loan = "all", company = "all", advisor = "all", letters = "all", query = "" } = {}) => {
     clearAllFilters();
     setFilter(doc);
     setLoanStatusFilter(loan);
+    setLetterFilter(letters);
     setCompanyFilter(company);
     if (adminRole !== "advisor") setAdvisorFilter(advisor);
     setSearch(query);
@@ -5852,7 +6077,7 @@ export default function Admin() {
         )}
 
         {section === "advisors" && isAdminLevel(adminRole) && (
-          <AdvisorsSection students={students} allAdvisors={allAdvisors} />
+          <AdvisorsSection students={students} allAdvisors={allAdvisors} onOpenAdvisor={(advisor) => openStudents({ advisor })} />
         )}
 
         {section === "audit" && isAdminLevel(adminRole) && (
@@ -5897,9 +6122,9 @@ export default function Admin() {
               <button
                 key={t.id}
                 type="button"
-                className={`adm-tab${activeQuickTab === t.id ? " is-active" : ""}`}
+                className={`adm-tab${activeQuickTab === t.id ? " is-active" : ""}${t.warn ? " is-warn" : ""}`}
                 aria-pressed={activeQuickTab === t.id}
-                onClick={() => { setFilter(t.doc); setLoanStatusFilter(t.loan); }}
+                onClick={() => { setFilter(t.doc); setLoanStatusFilter(t.loan); setLetterFilter(t.letters || "all"); }}
               >
                 {t.label} <span className="adm-tab-count">({t.count})</span>
               </button>
@@ -6046,6 +6271,27 @@ export default function Admin() {
             </div>
           )}
 
+          {letterFilter === "missing" && (
+            <div className="adm-scope-chip adm-scope-chip--warn animate-fade-in">
+              <FileCheck2 size={14} aria-hidden="true" />
+              <span>Sanctioned files <strong>without a sanction letter</strong></span>
+              <button type="button" onClick={() => { setLetterFilter("all"); setPage(1); }} aria-label="Show every student">
+                <X size={13} />
+              </button>
+            </div>
+          )}
+
+          {/* Opened from an advisor's card: say whose students these are */}
+          {adminRole !== "advisor" && advisorFilter !== "all" && (
+            <div className="adm-scope-chip animate-fade-in">
+              <UserCheck size={14} aria-hidden="true" />
+              <span>Showing <strong>{advisorFilter}</strong>'s students</span>
+              <button type="button" onClick={() => { setAdvisorFilter("all"); setPage(1); }} aria-label="Show every advisor's students">
+                <X size={13} />
+              </button>
+            </div>
+          )}
+
           <div className="adm-table">
             <div className="adm-table-scroll">
               <div className={`adm-thead${showAdvisorCol ? " adm-row--advisor" : ""}`}>
@@ -6115,6 +6361,7 @@ export default function Admin() {
                         onViewReport={(e) => { if (e) e.stopPropagation(); setReportStudent(s); }}
                         onSendToBank={(e) => { if (e) e.stopPropagation(); setBankStudent(s); }}
                         onLoanStatusUpdate={(e) => { if (e) e.stopPropagation(); setLoanStatusStudent(s); }}
+                        onUploadLetter={() => setLetterStudent(s)}
                         onRecoverMeta={(e) => { if (e) e.stopPropagation(); setRecoverStudent(s); }}
                         isDuplicate={isDuplicateStudent(s)}
                         showAdvisor={showAdvisorCol}
@@ -6195,6 +6442,7 @@ export default function Admin() {
             isDuplicate={isDuplicateStudent(s)}
             canManage={isAdminLevel(adminRole)}
             onLoanStatus={() => setLoanStatusStudent(s)}
+            onUploadLetter={() => setLetterStudent(s)}
             onEligibility={() => setReportStudent(s)}
             onShare={() => setBankStudent(s)}
             onOpenDrive={() => openDriveFolder(s)}
@@ -6216,6 +6464,14 @@ export default function Admin() {
           student={loanStatusStudent}
           onClose={() => setLoanStatusStudent(null)}
           onUpdated={handleLoanStatusChange}
+        />
+      )}
+
+      {letterStudent && (
+        <SanctionLetterModal
+          student={letterStudent}
+          onClose={() => setLetterStudent(null)}
+          onUploaded={handleLetterUploaded}
         />
       )}
 

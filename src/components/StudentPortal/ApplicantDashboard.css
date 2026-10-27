@@ -312,6 +312,38 @@
 .ad-todo__body p { margin: 1px 0 0; font-size: 12.5px; line-height: 1.4; color: #5c4a22; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ad-todo .ad-todo__btn { flex: none; min-height: 36px; padding: 0 14px; font-size: 13.5px; }
 
+/* The sanction letter, once it's in: a green strip with the download */
+.ad-letter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 2px 0 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(22, 163, 74, 0.28);
+  border-radius: 14px;
+  background: #ecf8f1;
+  color: var(--ad-midnight);
+}
+.ad-letter__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #15803d;
+  color: #fff;
+}
+.ad-letter__body { flex: 1; min-width: 0; }
+.ad-letter__body h2 { margin: 0; font-size: 14.5px; font-weight: 700; color: var(--ad-midnight); }
+.ad-letter__body p { margin: 2px 0 0; font-size: 12.5px; line-height: 1.45; color: #2f5d43; }
+.ad-letter .ad-letter__btn { flex: none; min-height: 38px; padding: 0 14px; font-size: 13.5px; }
+@media (max-width: 599px) {
+  .ad-letter { flex-wrap: wrap; }
+  .ad-letter .ad-dl { width: 100%; }
+  .ad-letter .ad-letter__btn { width: 100%; justify-content: center; }
+}
+
 /* Phones: status under the greeting, everything a size smaller */
 @media (max-width: 599px) {
   .ad-hero__top { align-items: flex-start; }

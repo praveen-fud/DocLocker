@@ -19,7 +19,7 @@ const FAQ = [
   },
   {
     q: "My PDF is password-protected. What do I do?",
-    a: "Remove the password before uploading — bank statements often have one. You can unlock it for free with the link under Document guidelines.",
+    a: "Unlock it before uploading: bank statements, payslips and ITRs often have a password. Use the \"Unlock on Nexfile\" link on the document's card or under Document guidelines, then upload the unlocked file.",
   },
   {
     q: "How does auto-fill work?",

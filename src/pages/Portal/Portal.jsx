@@ -112,7 +112,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const isSubmitted = (s) => Boolean(s?.applicationSubmittedAt) || Boolean(s?.loanStatus && s.loanStatus !== "pending");
 
 // Staff-owned fields refreshed from the server on every visit.
-const STAFF_FIELDS = ["loanStatus", "loanRemark", "loanStatusUpdatedAt", "loanDisbursement", "advisor", "applicationSubmittedAt"];
+const STAFF_FIELDS = ["loanStatus", "loanRemark", "loanStatusUpdatedAt", "loanDisbursement", "advisor", "applicationSubmittedAt", "sanctionLetter"];
 
 export default function Portal() {
   const { student, setStudent, clearStudent, logoutAdmin } = useStudent();

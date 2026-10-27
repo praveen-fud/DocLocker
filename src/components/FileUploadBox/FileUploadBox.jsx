@@ -17,8 +17,11 @@ import {
   Clock3,
   Info,
   Circle,
+  LockKeyhole,
+  ExternalLink,
 } from "lucide-react";
 import { uploadDocument } from "../../utils/driveApi";
+import { PDF_UNLOCK_URL, OFTEN_LOCKED, isLockedPdf } from "../../utils/pdfUnlock";
 import CameraCapture from "../CameraCapture/CameraCapture";
 import { iconFor, splitLabel, statusFromExtraction } from "./docMeta";
 import "./FileUploadBox.css";
@@ -124,6 +127,30 @@ function friendlyError(e) {
   return e?.message || "Upload failed. Please try again.";
 }
 
+const LOCKED_MESSAGE = "This PDF is locked with a password, so we can't open it. Unlock it on Nexfile, then upload the unlocked file here.";
+
+// Opens Nexfile's PDF unlocker in a new tab
+function UnlockLink({ compact }) {
+  return (
+    <a className={`doc-unlock-link${compact ? " is-compact" : ""}`} href={PDF_UNLOCK_URL} target="_blank" rel="noopener noreferrer">
+      <LockKeyhole size={13} aria-hidden="true" /> Unlock on Nexfile <ExternalLink size={12} aria-hidden="true" />
+      <span className="sr-only"> (opens in a new tab)</span>
+    </a>
+  );
+}
+
+// Up-front tip on slots whose PDFs usually come with a password
+function LockedTip({ field }) {
+  if (!OFTEN_LOCKED.test(field.id)) return null;
+  return (
+    <p className="doc-card__hint doc-lock-tip">
+      <LockKeyhole size={13} aria-hidden="true" />
+      <span>PDF has a password? Unlock it first.</span>
+      <UnlockLink compact />
+    </p>
+  );
+}
+
 const READ_MESSAGES = {
   reading:     { icon: LoaderCircle,  tone: "info",    text: "Reading your document…" },
   read:        { icon: Sparkles,      tone: "success", text: "Details read — your profile has been filled in" },
@@ -157,6 +184,7 @@ const BADGES = {
   review:    { tone: "warning", icon: TriangleAlert, text: "Check details" },
   pages:     { tone: "warning", icon: Clock3,        text: "Page needed" },
   rejected:  { tone: "error",   icon: ShieldAlert,   text: "Not accepted" },
+  locked:    { tone: "warning", icon: LockKeyhole,   text: "Needs unlocking" },
   failed:    { tone: "error",   icon: CircleAlert,   text: "Upload failed" },
 };
 
@@ -321,6 +349,7 @@ function SingleUploadBox({ anchorId, field, studentName, studentIdentifier, subF
   const [error, setError]             = useState("");
   const [rejected, setRejected]       = useState(false);
   const [invalid, setInvalid]         = useState(false);
+  const [locked, setLocked]           = useState(false);
   const [retryFile, setRetryFile]     = useState(null);
   const [localResult, setLocalResult] = useState(null);
   const [local, setLocal]             = useState({ previewUrl: null, size: null });
@@ -340,6 +369,7 @@ function SingleUploadBox({ anchorId, field, studentName, studentIdentifier, subF
     setError("");
     setRejected(false);
     setInvalid(false);
+    setLocked(false);
     setRetryFile(null);
     setRead({ status: null, error: "" });
 
@@ -352,6 +382,13 @@ function SingleUploadBox({ anchorId, field, studentName, studentIdentifier, subF
     if (file.size > MAX_BYTES) {
       setError(`This file is ${formatBytes(file.size)}. The limit is ${MAX_LABEL} — please choose a smaller file.`);
       setInvalid(true);
+      return;
+    }
+    // A locked PDF is never sent: we couldn't open it anyway
+    if (await isLockedPdf(file)) {
+      setError(LOCKED_MESSAGE);
+      setInvalid(true);
+      setLocked(true);
       return;
     }
 
@@ -392,10 +429,10 @@ function SingleUploadBox({ anchorId, field, studentName, studentIdentifier, subF
 
   let badge = null;
   if (uploading) badge = field.reader ? "checking" : "uploading";
-  else if (error && !isUploaded) badge = rejected ? "rejected" : "failed";
+  else if (error && !isUploaded) badge = rejected ? "rejected" : locked ? "locked" : "failed";
   else if (isUploaded) badge = badgeForRead(readStatus);
 
-  const state = uploading ? "busy" : error ? "error" : isUploaded ? (badge === "review" ? "attention" : "done") : "empty";
+  const state = uploading ? "busy" : locked ? "attention" : error ? "error" : isUploaded ? (badge === "review" ? "attention" : "done") : "empty";
 
   return (
     <article id={anchorId} tabIndex={anchorId ? -1 : undefined} className={`doc-card is-${state}`} aria-labelledby={titleId} aria-describedby={error ? errorId : undefined}>
@@ -455,19 +492,21 @@ function SingleUploadBox({ anchorId, field, studentName, studentIdentifier, subF
       )}
 
       {field.pageHint && !isUploaded && !uploading && <p className="doc-card__hint">{field.pageHint}</p>}
+      {!isUploaded && !uploading && !locked && <LockedTip field={field} />}
 
       {!uploading && <ReadStatus status={readStatus} error={read.error} />}
 
       {error && (
-        <div className={`doc-alert${rejected ? " doc-alert--rejected" : ""}`} role="alert" id={errorId}>
-          {rejected ? <ShieldAlert size={16} aria-hidden="true" /> : <CircleAlert size={16} aria-hidden="true" />}
+        <div className={`doc-alert${rejected ? " doc-alert--rejected" : ""}${locked ? " doc-alert--locked" : ""}`} role="alert" id={errorId}>
+          {rejected ? <ShieldAlert size={16} aria-hidden="true" /> : locked ? <LockKeyhole size={16} aria-hidden="true" /> : <CircleAlert size={16} aria-hidden="true" />}
           <div className="doc-alert__body">
-            <strong>{rejected ? "Not uploaded" : invalid ? "File not accepted" : isUploaded ? "Replacement not uploaded" : "Upload didn't finish"}</strong>
+            <strong>{rejected ? "Not uploaded" : locked ? "This PDF has a password" : invalid ? "File not accepted" : isUploaded ? "Replacement not uploaded" : "Upload didn't finish"}</strong>
             <span>{error}</span>
             {rejected && (
               <span className="doc-alert__help">Make sure the document is clear, fully visible and matches “{splitLabel(field.label).title}”.</span>
             )}
             <div className="doc-alert__actions">
+              {locked && <UnlockLink />}
               {retryFile && (
                 <button type="button" className="doc-link-btn" onClick={() => handleFile(retryFile)}>
                   <RefreshCw size={13} aria-hidden="true" /> Try again
@@ -480,7 +519,7 @@ function SingleUploadBox({ anchorId, field, studentName, studentIdentifier, subF
               )}
             </div>
           </div>
-          <button type="button" className="doc-alert__close" onClick={() => { setError(""); setRejected(false); setInvalid(false); setRetryFile(null); }} aria-label="Dismiss message">
+          <button type="button" className="doc-alert__close" onClick={() => { setError(""); setRejected(false); setInvalid(false); setLocked(false); setRetryFile(null); }} aria-label="Dismiss message">
             <X size={14} aria-hidden="true" />
           </button>
         </div>
@@ -538,6 +577,10 @@ function MultiUploadBox({ anchorId, field, studentName, studentIdentifier, subFo
     }
     if (file.size > MAX_BYTES) {
       patch(slotKey, { status: "error", invalid: true, error: `This file is ${formatBytes(file.size)} — the limit is ${MAX_LABEL}.` });
+      return "error";
+    }
+    if (await isLockedPdf(file)) {
+      patch(slotKey, { status: "error", invalid: true, locked: true, error: LOCKED_MESSAGE });
       return "error";
     }
 
@@ -646,7 +689,9 @@ function MultiUploadBox({ anchorId, field, studentName, studentIdentifier, subFo
   let badge = null;
   let badgeText;
   if (busy) badge = field.reader ? "checking" : "uploading";
-  else if (doneCount === 0 && failed.length) badge = failed.some((f) => f.status === "rejected") ? "rejected" : "failed";
+  else if (doneCount === 0 && failed.length) {
+    badge = failed.some((f) => f.status === "rejected") ? "rejected" : failed.every((f) => f.locked) ? "locked" : "failed";
+  }
   else if (doneCount > 0 && !pagesCovered) {
     badge = "pages";
     badgeText = pages ? "Page needed" : `${doneCount} of ${pageTotal} pages`;
@@ -655,7 +700,7 @@ function MultiUploadBox({ anchorId, field, studentName, studentIdentifier, subFo
     if (badge === "uploaded" && !field.reader && doneCount > 1) badgeText = `${doneCount} files`;
   }
 
-  const state = busy ? "busy" : failed.length && !doneCount ? "error" : doneCount ? (badge === "pages" || badge === "review" ? "attention" : "done") : "empty";
+  const state = busy ? "busy" : failed.length && !doneCount ? (badge === "locked" ? "attention" : "error") : doneCount ? (badge === "pages" || badge === "review" ? "attention" : "done") : "empty";
 
   const prompt = pageTotal
     ? (doneCount > 0 ? "Add next page" : "Upload")
@@ -706,6 +751,7 @@ function MultiUploadBox({ anchorId, field, studentName, studentIdentifier, subFo
         </ul>
       )}
       {!pageTotal && field.pageHint && <p className="doc-card__hint">{field.pageHint}</p>}
+      {doneCount === 0 && !failed.some((f) => f.locked) && <LockedTip field={field} />}
 
       {queue.length > 0 && (
         <ul className="doc-files">
@@ -753,11 +799,17 @@ function MultiUploadBox({ anchorId, field, studentName, studentIdentifier, subFo
       )}
 
       {failed.map((item) => (
-        <div key={`err-${item.key}`} className={`doc-alert${item.status === "rejected" ? " doc-alert--rejected" : ""}`} role="alert">
-          {item.status === "rejected" ? <ShieldAlert size={16} aria-hidden="true" /> : <CircleAlert size={16} aria-hidden="true" />}
+        <div key={`err-${item.key}`} className={`doc-alert${item.status === "rejected" ? " doc-alert--rejected" : ""}${item.locked ? " doc-alert--locked" : ""}`} role="alert">
+          {item.status === "rejected" ? <ShieldAlert size={16} aria-hidden="true" /> : item.locked ? <LockKeyhole size={16} aria-hidden="true" /> : <CircleAlert size={16} aria-hidden="true" />}
           <div className="doc-alert__body">
-            <strong>{item.status === "rejected" ? `${item.name} was not uploaded` : `${item.name}`}</strong>
+            <strong>{item.status === "rejected" ? `${item.name} was not uploaded` : item.locked ? `${item.name} has a password` : `${item.name}`}</strong>
             <span>{item.error}</span>
+            {item.locked && (
+              <div className="doc-alert__actions">
+                <UnlockLink />
+                <button type="button" className="doc-link-btn" onClick={() => removeItem(item.key)}>Remove it</button>
+              </div>
+            )}
           </div>
         </div>
       ))}

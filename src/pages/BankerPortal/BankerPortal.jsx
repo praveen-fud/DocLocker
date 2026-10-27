@@ -48,6 +48,19 @@ function LoanChip({ status }) {
   return <span className={`bk-chip bk-chip--${key}`}>{LOAN_STATUS_CONFIG[key].label}</span>;
 }
 
+// A sanctioned or disbursed loan whose sanction letter isn't in the file yet
+const needsSanctionLetter = (s) => ["sanctioned", "disbursed"].includes(s.loanStatus) && !s.sanctionLetter;
+
+function LetterFlag({ student }) {
+  if (needsSanctionLetter(student)) {
+    return <span className="bk-letter bk-letter--missing" title="Upload the sanction letter from Update status">Letter missing</span>;
+  }
+  if (student.sanctionLetter && ["sanctioned", "disbursed"].includes(student.loanStatus)) {
+    return <span className="bk-letter bk-letter--ok" title={student.sanctionLetter.name}>Letter in file</span>;
+  }
+  return null;
+}
+
 function DocChip({ docs }) {
   return docs.complete ? (
     <span className="bk-chip bk-chip--complete" title={`All ${docs.total} required documents uploaded`}>Complete</span>
@@ -191,6 +204,7 @@ function StudentDrawer({
               <div className="bk-loan-text">
                 <h3 id="bk-loan-title" className="bk-loan-title">Loan Status</h3>
                 <LoanChip status={student.loanStatus} />
+                <LetterFlag student={student} />
               </div>
               <button type="button" className="btn btn-primary btn-sm bk-loan-update" onClick={() => onUpdateLoan(student)}>
                 Update
@@ -348,21 +362,30 @@ export default function BankerPortal() {
         loanRemark,
         disbursementPayload
       );
-      if (loanStatus === "sanctioned" && loanSanctionFile) {
-        setLoanLoadingMsg("Uploading sanction letter…");
-        await uploadSanctionLetter(
-          loanModalStudent.name,
-          studentIdentifier(loanModalStudent),
-          loanSanctionFile
-        );
-      }
-      setStudents((prev) =>
+      const applyStatus = (extra = {}) => setStudents((prev) =>
         prev.map((s) =>
           s.name === loanModalStudent.name
-            ? { ...s, loanStatus, loanRemark, ...(disbursementPayload ? { loanDisbursement: disbursementPayload } : {}) }
+            ? { ...s, loanStatus, loanRemark, ...(disbursementPayload ? { loanDisbursement: disbursementPayload } : {}), ...extra }
             : s
         )
       );
+      let sanctionLetter = null;
+      if (["sanctioned", "disbursed"].includes(loanStatus) && loanSanctionFile) {
+        setLoanLoadingMsg("Uploading sanction letter…");
+        try {
+          sanctionLetter = await uploadSanctionLetter(
+            loanModalStudent.name,
+            studentIdentifier(loanModalStudent),
+            loanSanctionFile
+          );
+        } catch (upErr) {
+          // The status is saved; keep the dialog open so the letter can be retried
+          applyStatus();
+          setLoanErr(`Status saved, but the sanction letter wasn't uploaded: ${upErr.message}`);
+          return;
+        }
+      }
+      applyStatus(sanctionLetter ? { sanctionLetter } : {});
       setLoanModalStudent(null);
     } catch (e2) {
       setLoanErr(e2.message || "Failed to update loan status.");
@@ -697,7 +720,7 @@ export default function BankerPortal() {
                       <td className="bk-td-id" data-label="Application ID">{appId || "—"}</td>
                       <td className="bk-td-course" data-label="Course">{course || "—"}</td>
                       <td className="bk-td-docs"><DocChip docs={getDocStatus(s)} /></td>
-                      <td className="bk-td-loan"><LoanChip status={s.loanStatus} /></td>
+                      <td className="bk-td-loan"><LoanChip status={s.loanStatus} /> <LetterFlag student={s} /></td>
                       <td className="bk-td-action">
                         <button
                           type="button"
@@ -772,7 +795,7 @@ export default function BankerPortal() {
                     role="radio"
                     aria-checked={loanStatus === key}
                     className={`lsm-option lsm-option--${key}${loanStatus === key ? " selected" : ""}`}
-                    onClick={() => { setLoanStatus(key); if (!REMARK_STATUSES.includes(key)) setLoanRemark(""); if (key !== "sanctioned") setLoanSanctionFile(null); }}
+                    onClick={() => { setLoanStatus(key); if (!REMARK_STATUSES.includes(key)) setLoanRemark(""); if (!["sanctioned", "disbursed"].includes(key)) setLoanSanctionFile(null); }}
                   >
                     <span className="lsm-option-dot" />
                     <span>{cfg.label}</span>
@@ -795,11 +818,16 @@ export default function BankerPortal() {
                   />
                 </div>
               )}
-              {loanStatus === "sanctioned" && (
+              {["sanctioned", "disbursed"].includes(loanStatus) && (
                 <div className="lsm-upload-wrap">
                   <span className="lsm-remark-label">
                     Sanction Letter <span className="lsm-optional">— optional</span>
                   </span>
+                  <p className="lsm-hint">
+                    {loanModalStudent.sanctionLetter
+                      ? `Already in the file: ${loanModalStudent.sanctionLetter.name}. A new upload replaces it.`
+                      : "Without it, this file shows “Letter missing” until it's uploaded."}
+                  </p>
                   <label className={`lsm-file-drop${loanSanctionFile ? " has-file" : ""}`}>
                     <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="sr-only"
                       onChange={(e) => setLoanSanctionFile(e.target.files[0] || null)} />
