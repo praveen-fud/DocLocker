@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   IdCard, GraduationCap, Award, Plane, Wallet, FolderOpen, Folder, FileText, FileImage,
-  Search, X, Download, Eye, ChevronRight, ArrowLeft, RefreshCw, AlertCircle, UserX, Users,
+  Search, X, Download, Eye, ChevronRight, ArrowLeft, RefreshCw, AlertCircle, UserX, Users, BadgeCheck,
 } from "lucide-react";
 import DocumentViewer from "../../components/DocumentViewer/DocumentViewer";
 import { downloadFile, downloadBundle } from "../../utils/driveApi";
@@ -12,7 +12,17 @@ import "./DocumentLibrary.css";
 // by student. Superadmin only. Folders are matched on the upload field id
 // (multi-file fields add "_1", "_2" …), so a co-applicant's PAN lands in the
 // same "PAN Card" folder as the student's, tagged with who it belongs to.
+//   required:  every student should have one (a Missing tab lists who doesn't)
+//   expected:  only these students should have one (same Missing tab)
+const LETTER_STAGES = new Set(["sanctioned", "disbursed"]);
 const GROUPS = [
+  {
+    id: "loan", label: "Loan", icon: BadgeCheck, folders: [
+      // From the lender, not the student: the recorded letter, or one the
+      // server found in the student's file
+      { key: "sanction_letters", label: "Sanction letters", ids: [], expected: (s) => LETTER_STAGES.has(s.loanStatus) },
+    ],
+  },
   {
     id: "identity", label: "Identity", icon: IdCard, folders: [
       { key: "passport", label: "Passport", ids: ["passport"], required: true },
@@ -113,6 +123,7 @@ function collectDocuments(students) {
         });
       }
     }
+    if (s.sanctionLetter?.fileId) docs.push({ ...base, id: s.sanctionLetter.fileId, name: s.sanctionLetter.name || "Sanction_Letter.pdf", folder: "sanction_letters", owner: "Lender", ownerType: "lender" });
     if (s.summaryPdf?.id) docs.push({ ...base, id: s.summaryPdf.id, name: "Application_Form.pdf", folder: "application_form", owner: "Generated", ownerType: "generated" });
     if (s.eligibilityPdf?.id) docs.push({ ...base, id: s.eligibilityPdf.id, name: "Eligibility_Report.pdf", folder: "eligibility", owner: "Generated", ownerType: "generated" });
   }
@@ -148,13 +159,16 @@ export default function DocumentLibrary({ students }) {
 
   const allDocs = useMemo(() => collectDocuments(students), [students]);
   const q = query.trim().toLowerCase();
-  const scoped = allDocs.filter((d) => (owner === "all" || d.ownerType === owner || (owner === "student" && d.ownerType === "generated")) && matches(d, q));
+  const scoped = allDocs.filter((d) => (owner === "all" || d.ownerType === owner || (owner === "student" && ["generated", "lender"].includes(d.ownerType))) && matches(d, q));
 
   const folder = folderKey ? FOLDER_BY_KEY.get(folderKey) : null;
   const visible = folder ? scoped.filter((d) => d.folder === folderKey) : q ? scoped : [];
   const studentsWith = (key) => new Set(allDocs.filter((d) => d.folder === key && d.ownerType !== "co").map((d) => d.student));
-  const missingStudents = folder?.required
-    ? students.filter((s) => !studentsWith(folder.key).has(s) && matches({ studentName: studentName(s), appId: getApplicationId(s), name: "", student: s }, q))
+  // Who should have this folder's document: everyone, or only some
+  const expectedFor = (f) => (f.required ? students : f.expected ? students.filter(f.expected) : []);
+  const tracksMissing = Boolean(folder?.required || folder?.expected);
+  const missingStudents = tracksMissing
+    ? expectedFor(folder).filter((s) => !studentsWith(folder.key).has(s) && matches({ studentName: studentName(s), appId: getApplicationId(s), name: "", student: s }, q))
     : [];
 
   const openFolder = (key) => {
@@ -271,7 +285,7 @@ export default function DocumentLibrary({ students }) {
         const GroupIcon = g.icon;
         const folders = g.folders
           .map((f) => ({ ...f, docs: scoped.filter((d) => d.folder === f.key) }))
-          .filter((f) => showEmpty || f.required || f.docs.length > 0);
+          .filter((f) => showEmpty || f.required || f.docs.length > 0 || (f.expected && students.some(f.expected)));
         const groupCount = folders.reduce((n, f) => n + f.docs.length, 0);
         if (!folders.length) return null;
         return (
@@ -284,7 +298,10 @@ export default function DocumentLibrary({ students }) {
             <div className="dl-folders">
               {folders.map((f) => {
                 const people = new Set(f.docs.map((d) => d.student)).size;
-                const coverage = f.required && students.length ? Math.round((studentsWith(f.key).size / students.length) * 100) : null;
+                const expectedN = expectedFor(f).length;
+                const coverage = (f.required || f.expected) && expectedN
+                  ? Math.round((expectedFor(f).filter((s) => studentsWith(f.key).has(s)).length / expectedN) * 100)
+                  : null;
                 const empty = f.docs.length === 0;
                 return (
                   <button
@@ -301,7 +318,7 @@ export default function DocumentLibrary({ students }) {
                       </span>
                     </span>
                     {coverage !== null && (
-                      <span className="dl-coverage" title={`${coverage}% of students have uploaded this`}>
+                      <span className="dl-coverage" title={f.expected ? `${coverage}% of sanctioned and disbursed loans have their letter` : `${coverage}% of students have uploaded this`}>
                         <span className="dl-coverage-bar"><span style={{ width: `${coverage}%` }} /></span>
                         <span className="dl-coverage-pct">{coverage}%</span>
                       </span>
@@ -327,7 +344,7 @@ export default function DocumentLibrary({ students }) {
                 <p>
                   {visible.length} file{visible.length === 1 ? "" : "s"}
                   {" · "}{new Set(visible.map((d) => d.student)).size} students
-                  {folder?.required && ` · ${missingStudents.length} missing`}
+                  {tracksMissing && ` · ${missingStudents.length} missing`}
                 </p>
               </div>
             </div>
@@ -349,7 +366,7 @@ export default function DocumentLibrary({ students }) {
             </div>
           </header>
 
-          {folder?.required && (
+          {tracksMissing && (
             <div className="dl-tabs" role="tablist" aria-label="Show">
               <button type="button" role="tab" aria-selected={view === "files"} className={`dl-tab${view === "files" ? " is-active" : ""}`} onClick={() => setView("files")}>
                 <FileText size={15} /> Uploaded <span>{visible.length}</span>
@@ -360,9 +377,9 @@ export default function DocumentLibrary({ students }) {
             </div>
           )}
 
-          {view === "missing" && folder?.required ? (
+          {view === "missing" && tracksMissing ? (
             missingStudents.length === 0 ? (
-              <div className="dl-empty"><Users size={26} /><p>Every student has uploaded their {folder.label}.</p></div>
+              <div className="dl-empty"><Users size={26} /><p>{folder.expected ? "Every sanctioned and disbursed loan has its sanction letter." : `Every student has uploaded their ${folder.label}.`}</p></div>
             ) : (
               <ul className="dl-missing">
                 {missingStudents.map((s) => (
@@ -372,7 +389,7 @@ export default function DocumentLibrary({ students }) {
                       <span className="dl-person-name">{studentName(s)}</span>
                       <span className="dl-person-sub">{getApplicationId(s)} · {s.email || s.phone || "No contact"}</span>
                     </span>
-                    <span className="dl-person-advisor">{s.advisor || "No advisor"}</span>
+                    <span className="dl-person-advisor">{folder.expected ? (s.loanStatus === "disbursed" ? "Disbursed" : "Sanctioned") : s.advisor || "No advisor"}</span>
                   </li>
                 ))}
               </ul>

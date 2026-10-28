@@ -18,6 +18,9 @@
 .dl-tone-tests,
 .dl-tone-admission,
 .dl-tone-financial { --dl-c: var(--primary); --dl-soft: var(--primary-tint); }
+/* Loan: the lender's documents, in the approval green */
+.dl-tone-loan      { --dl-c: var(--success-text, #15803d); --dl-soft: var(--success-bg, #e8f6ee); }
+.dl-tone-loan .dl-coverage-bar > span { background: var(--success, #16a34a); }
 .dl-tone-other     { --dl-c: var(--dl-neutral-fg); --dl-soft: var(--dl-neutral-bg); }
 
 /* ── Toolbar ── */
@@ -504,3 +507,4 @@ button.dl-crumb:hover { color: var(--primary); text-decoration: underline; text-
   .dl-folders { grid-template-columns: minmax(0, 1fr); }
   .dl-seg-btn { padding: 0 8px; font-size: 13px; }
 }
+.dl-owner--lender { background: var(--success-bg, #e8f6ee); color: var(--success-text, #15803d); }

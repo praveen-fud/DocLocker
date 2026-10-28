@@ -2277,11 +2277,14 @@ function StudentProfile({
     callAPI("GET", `/api/students/${encodeURIComponent(pinKey)}/files`)
       .then((d) => {
         if (cancelled) return;
+        // Same match as the server (services/sanctionLetter.js): any file
+        // named like a sanction letter, Loan_Documents/Sanction_Letter.* first
+        const rank = (f) => (f.section === "Loan_Documents" ? 2 : 0) + (/^sanction_letter\./i.test(f.name || "") ? 1 : 0);
         const files = Object.entries(d.groups || {})
-          .filter(([group]) => group.split("/").pop() === "Loan_Documents")
-          .flatMap(([, list]) => list)
-          .filter((f) => /^sanction_letter\./i.test(f.name || ""));
-        setFoundLetter(files[0] ? { fileId: files[0].id, name: files[0].name, found: true } : null);
+          .flatMap(([group, list]) => list.map((f) => ({ ...f, section: group.split("/").pop() })))
+          .filter((f) => /sanction/i.test(f.name || ""))
+          .sort((a, b) => rank(b) - rank(a));
+        setFoundLetter(files[0] ? { fileId: files[0].id, name: files[0].name, section: files[0].section, found: true } : null);
       })
       .catch(() => { if (!cancelled) setFoundLetter(null); });
     return () => { cancelled = true; };
@@ -2472,7 +2475,7 @@ function StudentProfile({
                           <strong>{letter.name}</strong>
                           <span>
                             {letter.found
-                              ? "In Loan documents"
+                              ? `Found in ${(letter.section || "Loan_Documents").replace(/_/g, " ")}`
                               : [letter.uploadedBy && `Uploaded by ${letter.uploadedBy}`, letter.uploadedAt && timeAgo(letter.uploadedAt)].filter(Boolean).join(" · ") || "In Loan documents"}
                             {" · the student can download it"}
                           </span>
@@ -2581,7 +2584,7 @@ function StudentProfile({
                           <strong>{letter.name}</strong>
                           <span>
                             {letter.found
-                              ? "In Loan documents"
+                              ? `Found in ${(letter.section || "Loan_Documents").replace(/_/g, " ")}`
                               : [letter.uploadedBy && `Uploaded by ${letter.uploadedBy}`, letter.uploadedAt && timeAgo(letter.uploadedAt)].filter(Boolean).join(" · ") || "In Loan documents"}
                             {" · the student can download it"}
                           </span>
