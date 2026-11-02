@@ -70,6 +70,7 @@ import {
   ScanSearch,
   CalendarDays,
   ArrowRightLeft,
+  Handshake,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
 import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter, recoverMetaFromPdf, restoreMeta, buildFolderKey, getAuditLog, downloadAllFiles, downloadBundle } from "../../utils/driveApi";
@@ -91,6 +92,9 @@ import DocumentLibrary from "./DocumentLibrary";
 import { TeamSection, CompaniesSection } from "./TeamCompanies";
 import ConverterProvider from "./converter/ConverterProvider";
 import ConverterSection from "./converter/ConverterSection";
+import ConsultanciesSection from "./Consultancies";
+import EmailDocumentsDialog, { EmailJobsToasts } from "./EmailDocuments";
+import { listedFor } from "../../utils/consultancyMatch";
 // After the section stylesheets: every page's cards as frosted glass
 import "./Surfaces.css";
 import { callAPI, isAdminLevel, ROLE_LABELS, passwordProblem } from "../../utils/adminApi";
@@ -2227,7 +2231,7 @@ function ProfileRows({ rows }) {
 
 function StudentProfile({
   student, position, onPrev, onNext, onClose, adminRole, bankers = [], isDuplicate,
-  onLoanStatus, onUploadLetter, onEligibility, onShare, onOpenDrive, onRecover, onDelete, canManage,
+  onLoanStatus, onUploadLetter, onEmailQueued, onEligibility, onShare, onOpenDrive, onRecover, onDelete, canManage,
   canEditAdvisor, onAdvisorSave, advisorOptions, canEditConsultancy, onConsultancySave, consultancySuggestions,
 }) {
   const [tab, setTab] = useState("overview");
@@ -2237,6 +2241,7 @@ function StudentProfile({
   // Documents tab: the student's folder (academic documents + passport) open
   const [studyOpen, setStudyOpen] = useState(false);
   const [studyZip, setStudyZip] = useState(false);
+  const [emailing, setEmailing] = useState(false);
   const [viewing, setViewing] = useState(null);
   const [copied, setCopied] = useState(false);
   const [photoFailed, setPhotoFailed] = useState(false);
@@ -2282,6 +2287,10 @@ function StudentProfile({
     .sort((x, y) => (folderOrder.get(x.folder) ?? 999) - (folderOrder.get(y.folder) ?? 999));
   const studyFiles = studyItems.reduce((n, it) => n + it.files.length, 0);
   const studyMissing = studyItems.filter((it) => it.required && !it.files.length).length;
+  // What goes in the email: one attachment per page, named for the slot
+  const studyAttachments = studyItems.flatMap((it) => it.files.filter((f) => f.id).map((f, idx, arr) => ({
+    id: f.id, label: arr.length > 1 ? `${it.label} (page ${idx + 1})` : it.label,
+  })));
   const zipStudy = async () => {
     const files = studyItems.flatMap((it) => it.files.filter((f) => f.id).map((f) => ({ id: f.id, path: `${name}/${f.name}` })));
     if (!files.length) return;
@@ -2530,7 +2539,7 @@ function StudentProfile({
                 {canEditConsultancy && (
                   <section className="sp-card">
                     <h3 className="sp-card-title">Consultancy</h3>
-                    <ConsultancyEditor value={p.consultantNameLoc || ""} onSave={onConsultancySave} suggestions={consultancySuggestions} />
+                    <ConsultancyEditor value={p.consultantNameLoc || ""} onSave={onConsultancySave} suggestions={consultancySuggestions} canAddNew={isAdminLevel(adminRole)} />
                   </section>
                 )}
               </div>
@@ -2666,10 +2675,17 @@ function StudentProfile({
                     </button>
                     <ChevronRight size={15} aria-hidden="true" className="sp-dir-sep" />
                     <span className="sp-dir-crumb is-current" aria-current="page"><FolderOpen size={15} aria-hidden="true" /> {name}</span>
-                    {isAdminLevel(adminRole) && studyFiles > 0 && (
-                      <button type="button" className="sp-btn sp-btn--sm sp-dir-zip" onClick={zipStudy} disabled={studyZip}>
-                        {studyZip ? <RefreshCw size={14} className="spin" /> : <Download size={14} />} Download folder
-                      </button>
+                    {studyAttachments.length > 0 && (
+                      <span className="sp-dir-actions">
+                        <button type="button" className="sp-btn sp-btn--sm sp-btn--primary" onClick={() => setEmailing(true)}>
+                          <Mail size={14} /> Send by email
+                        </button>
+                        {isAdminLevel(adminRole) && (
+                          <button type="button" className="sp-btn sp-btn--sm" onClick={zipStudy} disabled={studyZip}>
+                            {studyZip ? <RefreshCw size={14} className="spin" /> : <Download size={14} />} Download folder
+                          </button>
+                        )}
+                      </span>
                     )}
                   </nav>
                   <p className="sp-muted-text sp-study-sub">Academic documents and passport · {studyFiles} file{studyFiles === 1 ? "" : "s"}{studyMissing ? ` · ${studyMissing} required missing` : ""}</p>
@@ -2816,6 +2832,15 @@ function StudentProfile({
           onClose={() => setViewing(null)}
         />
       )}
+      {emailing && (
+        <EmailDocumentsDialog
+          studentName={name}
+          studentKey={pinKey}
+          files={studyAttachments}
+          onClose={() => setEmailing(false)}
+          onQueued={(job) => onEmailQueued?.(job)}
+        />
+      )}
       {openEntry && (
         <ActivityDetail
           entry={openEntry}
@@ -2858,7 +2883,7 @@ function ActivityItem({ entry, onOpen }) {
 
 const NEW_CONSULTANCY_OPTION = "__new__";
 
-function ConsultancyEditor({ value, onSave, suggestions = [] }) {
+function ConsultancyEditor({ value, onSave, suggestions = [], canAddNew = true }) {
   const [editing, setEditing] = useState(false);
   // "select" shows a dropdown of existing consultancy names; "new" shows a
   // free-text input — there's no fixed master list (students type their own
@@ -2867,9 +2892,15 @@ function ConsultancyEditor({ value, onSave, suggestions = [] }) {
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  // After a request: { name, matches } shown until the next edit
+  const [sent, setSent] = useState(null);
+  // A name typed by staff that's already listed is just picked
+  const typedListed = mode === "new" && draft.trim() ? listedFor(draft, suggestions.map((n) => ({ name: n }))) : null;
+  const willRequest = mode === "new" && !canAddNew && draft.trim() && !typedListed;
 
   const begin = () => {
     setErr("");
+    setSent(null);
     if (value && suggestions.includes(value)) {
       // Already-set value matches an existing option — open on the dropdown, preselected.
       setMode("select");
@@ -2894,7 +2925,9 @@ function ConsultancyEditor({ value, onSave, suggestions = [] }) {
     setSaving(true);
     setErr("");
     try {
-      await onSave(draft.trim());
+      const name = typedListed ? typedListed.name : draft.trim();
+      const out = await onSave(name);
+      if (out?.requested) setSent({ name, matches: out.matches || [] });
       setEditing(false);
     } catch (e) {
       setErr(e.message || "Could not save");
@@ -2940,7 +2973,7 @@ function ConsultancyEditor({ value, onSave, suggestions = [] }) {
             {suggestions.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
-            <option value={NEW_CONSULTANCY_OPTION}>+ Add new consultancy…</option>
+            <option value={NEW_CONSULTANCY_OPTION}>{canAddNew ? "+ Add new consultancy…" : "+ Request a new consultancy…"}</option>
           </select>
           <button className="btn btn-primary btn-sm" onClick={save} disabled={saving || !draft}>
             {saving ? "Saving…" : "Save"}
@@ -2974,8 +3007,8 @@ function ConsultancyEditor({ value, onSave, suggestions = [] }) {
               Choose existing
             </button>
           )}
-          <button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>
-            {saving ? "Saving…" : "Save"}
+          <button className="btn btn-primary btn-sm" onClick={save} disabled={saving || !draft.trim()}>
+            {saving ? "Saving…" : willRequest ? "Send request" : "Save"}
           </button>
           <button className="btn btn-secondary btn-sm" onClick={cancel} disabled={saving}>
             Cancel
@@ -2983,6 +3016,17 @@ function ConsultancyEditor({ value, onSave, suggestions = [] }) {
         </div>
       )}
 
+      {editing && typedListed && mode === "new" && (
+        <span className="field-strip-note">Already listed as “{typedListed.name}”. Saving picks that one.</span>
+      )}
+      {editing && willRequest && (
+        <span className="field-strip-note">Not on the list yet, so an admin approves it first. The student keeps their current consultancy until then.</span>
+      )}
+      {!editing && sent && (
+        <span className="field-strip-note is-sent">
+          Sent “{sent.name}” to an admin for approval{sent.matches[0] ? `. It may be the same as “${sent.matches[0].name}”, already listed.` : "."}
+        </span>
+      )}
       {err && <span className="field-strip-err">{err}</span>}
     </div>
   );
@@ -3213,6 +3257,7 @@ function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDel
   const identity = identityReportFor(student);
   const applicationId = getApplicationId(student);
   const destination = (student.personalInfo?.destinationCountry || "").trim();
+  const consultancy = (student.personalInfo?.consultantNameLoc || "").trim();
 
   // The Govt ID / KYC section's "Passport Size Photo" upload — same field
   // the student's own portal collects. Only tried as an <img> when its
@@ -3299,6 +3344,9 @@ function StudentRow({ student, isOpen, onToggle, selected, onToggleSelect, onDel
         </div>
         <div className="adm-cell adm-cell--dest" data-label="Destination">
           {destination || <span className="adm-empty-val">—</span>}
+        </div>
+        <div className="adm-cell adm-cell--consult" data-label="Consultancy" title={consultancy || undefined}>
+          {consultancy || <span className="adm-empty-val">—</span>}
         </div>
         {showAdvisor && (
           <div className="adm-cell adm-cell--advisor" data-label="Advisor">
@@ -4562,6 +4610,7 @@ function AdminSidebar({
   mobileOpen, onCloseMobile,
   setLoanStatusFilter,
   pendingBankerRequests = 0,
+  pendingConsultancyRequests = 0,
 }) {
   const [expanded, setExpanded] = useState(null);
   const drawerRef = useRef(null);
@@ -4595,6 +4644,7 @@ function AdminSidebar({
     { id: "dashboard", label: "Dashboard", icon: LayoutGrid, roles: ["superadmin", "admin", "advisor"] },
     { id: "students",  label: adminRole === "advisor" ? "My Students" : "Students", icon: Users, roles: ["superadmin", "admin", "advisor"] },
     { id: "advisors",  label: "Advisors",  icon: UserCheck,  roles: ["superadmin", "admin"] },
+    { id: "consultancies", label: "Consultancies", icon: Handshake, roles: ["superadmin", "admin", "advisor"] },
     {
       id: "loanApps", label: "Loan Applications", icon: FileText, roles: ["superadmin", "admin", "advisor"],
       subItems: LOAN_STATUS_SUBITEMS.map((s) => ({
@@ -4674,6 +4724,11 @@ function AdminSidebar({
                   {id === "banks" && pendingBankerRequests > 0 && (
                     <span className="adm-nav-badge" title={`${pendingBankerRequests} banker access request${pendingBankerRequests === 1 ? "" : "s"} awaiting review`}>
                       {pendingBankerRequests > 99 ? "99+" : pendingBankerRequests}
+                    </span>
+                  )}
+                  {id === "consultancies" && pendingConsultancyRequests > 0 && (
+                    <span className="adm-nav-badge" title={`${pendingConsultancyRequests} new consultanc${pendingConsultancyRequests === 1 ? "y" : "ies"} waiting for ${isAdminLevel(adminRole) ? "your review" : "an admin"}`}>
+                      {pendingConsultancyRequests > 99 ? "99+" : pendingConsultancyRequests}
                     </span>
                   )}
                   {subItems && <ChevronDown size={15} className={`adm-nav-chevron${isExpanded ? " is-expanded" : ""}`} />}
@@ -5693,6 +5748,9 @@ export default function Admin() {
   // of their OWN still-pending requests — the backend scopes the response by
   // role, this just reads its length either way.
   const [pendingBankerRequests, setPendingBankerRequests] = useState(0);
+  // The company's consultancy list (null until loaded, or when unavailable)
+  const [consultancies, setConsultancies] = useState(null);
+  const [pendingConsultancyRequests, setPendingConsultancyRequests] = useState(0);
   // Which sub-panel the Banks & Lenders page opens on. Lifted out of
   // BankerAccessSection so the dashboard notification can jump straight to
   // "requests" instead of the default access-management view.
@@ -5713,6 +5771,8 @@ export default function Admin() {
   const [bankStudent, setBankStudent] = useState(null);
   const [loanStatusStudent, setLoanStatusStudent] = useState(null);
   const [letterStudent, setLetterStudent] = useState(null);
+  // Emails going out in the background: [{ id, status, studentName, recipients, … }]
+  const [emailJobs, setEmailJobs] = useState([]);
   // "all" | "missing": sanctioned files whose letter isn't in yet
   const [letterFilter, setLetterFilter] = useState("all");
   const [recoverStudent, setRecoverStudent] = useState(null);
@@ -5768,6 +5828,16 @@ export default function Admin() {
     } catch { /* silent — sidebar badge just won't show a count */ }
   }, []);
 
+  const loadConsultancies = useCallback(async () => {
+    try {
+      const r = await callAPI("GET", "/api/consultancies");
+      if (r.success) {
+        setConsultancies(r.consultancies || []);
+        setPendingConsultancyRequests(r.pendingRequests || 0);
+      }
+    } catch { /* silent — editors fall back to the names on students */ }
+  }, []);
+
   useEffect(() => {
     if (!isAdmin) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -5775,11 +5845,12 @@ export default function Admin() {
     void loadBankers();
     void loadAdvisors();
     void loadPendingBankerRequests();
-    // Light polling so the sidebar badge reflects requests decided (or filed)
+    void loadConsultancies();
+    // Light polling so the sidebar badges reflect requests decided (or filed)
     // from another admin's session too, same cadence as LiveActivityFeed.
-    const id = setInterval(loadPendingBankerRequests, 30000);
+    const id = setInterval(() => { void loadPendingBankerRequests(); void loadConsultancies(); }, 30000);
     return () => clearInterval(id);
-  }, [isAdmin, loadStudents, loadBankers, loadAdvisors, loadPendingBankerRequests]);
+  }, [isAdmin, loadStudents, loadBankers, loadAdvisors, loadPendingBankerRequests, loadConsultancies]);
 
   // Deletes by the actual student object (not by name — display names are
   // not unique, e.g. two students can share a name, or a corrupted meta
@@ -5818,33 +5889,51 @@ export default function Admin() {
       ),
     );
   };
+  // Checks on queued emails until each is sent or fails; sent ones clear
+  // themselves after a while, failures stay until dismissed
+  const activeEmailIds = emailJobs.filter((j) => j.status === "queued" || j.status === "sending").map((j) => j.id).join(",");
+  useEffect(() => {
+    if (!activeEmailIds) return undefined;
+    const id = setInterval(async () => {
+      for (const jobId of activeEmailIds.split(",")) {
+        const r = await callAPI("GET", `/api/email/jobs/${jobId}`).catch(() => null);
+        if (!r?.success) continue;
+        setEmailJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, ...r.job } : j)));
+        if (r.job.status === "sent") setTimeout(() => setEmailJobs((prev) => prev.filter((j) => j.id !== jobId)), 9000);
+      }
+    }, 2000);
+    return () => clearInterval(id);
+  }, [activeEmailIds]);
+
   const handleLetterUploaded = (name, sanctionLetter) => {
     setStudents((prev) => prev.map((s) => (s.name === name ? { ...s, sanctionLetter } : s)));
   };
 
-  // Advisor sets/corrects a student's consultancy from the admin panel.
-  // Writes the same meta field the student portal fills (personalInfo.consultantNameLoc)
-  // via the staff-only /api/meta route, so portal, summary PDF, and the
-  // consultancy filter all stay in sync.
+  // Sets a student's consultancy. A listed one is saved straight away; a new
+  // name is added to the list by an admin, or sent by staff to an admin as a
+  // request (POST /api/consultancies/assign). Resolves to
+  // { requested, matches } so the editor can say which happened.
   const handleConsultancySave = async (student, value) => {
-    // Strip backend-added listing fields so only real meta goes back to Drive
-    const meta = { ...student };
-    delete meta.driveUrl;
-    delete meta._parseError;
-    const updatedMeta = {
-      ...meta,
-      personalInfo: { ...(meta.personalInfo || {}), consultantNameLoc: value },
-    };
-    const identifier = student.email || student.phone || "";
-    const folderKey = buildFolderKey(student.name, identifier);
-    const r = await callAPI("POST", "/api/meta", {
-      studentName: folderKey,
-      metaJson: JSON.stringify(updatedMeta),
-    });
+    if (consultancies === null) {
+      // Consultancy list unavailable (Drive-only): the old free-text save
+      const meta = { ...student };
+      delete meta.driveUrl;
+      delete meta._parseError;
+      const updatedMeta = { ...meta, personalInfo: { ...(meta.personalInfo || {}), consultantNameLoc: value } };
+      const r = await callAPI("POST", "/api/meta", { studentName: buildFolderKey(student.name, student.email || student.phone || ""), metaJson: JSON.stringify(updatedMeta) });
+      if (!r.success) throw new Error(r.error || "Could not save consultancy");
+      setStudents((prev) => prev.map((s) => (s.name === student.name ? { ...s, personalInfo: updatedMeta.personalInfo } : s)));
+      return { requested: false };
+    }
+    const r = await callAPI("POST", "/api/consultancies/assign", { studentKey: student.studentKey || studentAuditTarget(student), name: value });
     if (!r.success) throw new Error(r.error || "Could not save consultancy");
-    setStudents((prev) =>
-      prev.map((s) => (s.name === student.name ? { ...s, personalInfo: updatedMeta.personalInfo } : s)),
-    );
+    if (r.assigned) {
+      setStudents((prev) => prev.map((s) => (s.name === student.name ? { ...s, personalInfo: { ...(s.personalInfo || {}), consultantNameLoc: r.name } } : s)));
+      if (r.consultancy) void loadConsultancies();
+      return { requested: false, name: r.name };
+    }
+    void loadConsultancies();
+    return { requested: true, matches: r.matches || [] };
   };
 
   // Superadmin reassigns which advisor a student belongs to. Writes the
@@ -5955,13 +6044,15 @@ export default function Admin() {
   // Unique consultancy names across the advisor's scoped students — these come
   // from personalInfo.consultantNameLoc stored in each student's meta on Drive,
   // so the dropdown always reflects what's actually saved in the backend.
-  const consultancyList = Array.from(
-    new Set(
-      scopedStudents
-        .map((s) => (s.personalInfo?.consultantNameLoc || "").trim())
-        .filter(Boolean),
-    ),
-  ).sort((a, b) => a.localeCompare(b));
+  const consultancyList = consultancies !== null
+    ? consultancies.map((c) => c.name).sort((a, b) => a.localeCompare(b))
+    : Array.from(
+      new Set(
+        scopedStudents
+          .map((s) => (s.personalInfo?.consultantNameLoc || "").trim())
+          .filter(Boolean),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
 
   const filtered = scopedStudents.filter((s) => {
     const q = search.toLowerCase();
@@ -6108,6 +6199,7 @@ export default function Admin() {
       sub: isAdvisor ? "Search, filter and manage the students assigned to you." : "Search, filter, and manage every student file.",
     },
     advisors: { title: "Advisors", sub: "Workload and progress by advisor" },
+    consultancies: { title: "Consultancies", sub: isAdminLevel(adminRole) ? "One clean list of the consultancies students come through, and requests to add new ones" : "The consultancies you can choose for your students" },
     banks:    { title: "Banks & Lenders", sub: "Manage loan officers and control which students each one can see" },
     team: { title: "Team", sub: "Who can sign in, their role and their company" },
     companies: adminRole === "superadmin"
@@ -6152,8 +6244,9 @@ export default function Admin() {
   };
 
   // Dashboard → the Students page with exactly this slice showing.
-  const openStudents = ({ doc = "all", loan = "all", company = "all", advisor = "all", letters = "all", query = "" } = {}) => {
+  const openStudents = ({ doc = "all", loan = "all", company = "all", advisor = "all", letters = "all", consultancy = "", query = "" } = {}) => {
     clearAllFilters();
+    setConsultancyFilter(consultancy);
     setFilter(doc);
     setLoanStatusFilter(loan);
     setLetterFilter(letters);
@@ -6224,6 +6317,7 @@ export default function Admin() {
         onCloseMobile={closeMobileNav}
         setLoanStatusFilter={setLoanStatusFilter}
         pendingBankerRequests={pendingBankerRequests}
+        pendingConsultancyRequests={pendingConsultancyRequests}
       />
 
     <div className="admin-page admin-page--shell">
@@ -6270,6 +6364,22 @@ export default function Admin() {
 
         {section === "advisors" && isAdminLevel(adminRole) && (
           <AdvisorsSection students={students} allAdvisors={allAdvisors} onOpenAdvisor={(advisor) => openStudents({ advisor })} />
+        )}
+
+        {section === "consultancies" && (
+          consultancies === null ? (
+            <div className="admin-empty"><div className="admin-empty-icon"><Handshake size={28} /></div><h3>Loading consultancies…</h3><p>If this stays, the consultancy list isn't available on this server yet.</p></div>
+          ) : (
+            <ConsultanciesSection
+              students={scopedStudents}
+              adminRole={adminRole}
+              consultancies={consultancies}
+              onReload={loadConsultancies}
+              onStudentsChanged={loadStudents}
+              onOpenStudents={openStudents}
+              keyOf={(s) => s.studentKey || studentAuditTarget(s)}
+            />
+          )
         )}
 
         {section === "audit" && isAdminLevel(adminRole) && (
@@ -6494,6 +6604,7 @@ export default function Admin() {
                 <div className="adm-th">Student Name</div>
                 <div className="adm-th">Application ID</div>
                 <div className="adm-th">Destination</div>
+                <div className="adm-th">Consultancy</div>
                 {showAdvisorCol && <div className="adm-th adm-th--advisor">Advisor</div>}
                 <div className="adm-th">Document Status</div>
                 <div className="adm-th">Loan Status</div>
@@ -6635,6 +6746,7 @@ export default function Admin() {
             canManage={isAdminLevel(adminRole)}
             onLoanStatus={() => setLoanStatusStudent(s)}
             onUploadLetter={() => setLetterStudent(s)}
+            onEmailQueued={(job) => setEmailJobs((prev) => [...prev, job])}
             onEligibility={() => setReportStudent(s)}
             onShare={() => setBankStudent(s)}
             onOpenDrive={() => openDriveFolder(s)}
@@ -6666,6 +6778,8 @@ export default function Admin() {
           onUploaded={handleLetterUploaded}
         />
       )}
+
+      <EmailJobsToasts jobs={emailJobs} onDismiss={(id) => setEmailJobs((prev) => prev.filter((j) => j.id !== id))} />
 
       {/* Recover Meta Modal */}
       {recoverStudent && (

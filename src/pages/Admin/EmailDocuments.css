@@ -1,0 +1,66 @@
+/* Email documents: who to send to, then a notice while it goes out */
+.ed-modal { max-width: 520px; }
+.ed-loading { display: grid; place-items: center; padding: 28px 0; }
+.ed-warn { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; background: #fff4de; font-size: 13px; line-height: 1.45; color: #6b4700; }
+.ed-warn svg { flex: none; margin-top: 2px; color: #8a5a00; }
+.ed-to { display: flex; flex-direction: column; gap: 8px; margin: 0 0 14px; padding: 0; border: 0; }
+.ed-to legend { margin-bottom: 8px; padding: 0; font-size: 12.5px; font-weight: 700; color: var(--text-secondary); }
+.ed-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.ed-option:hover { border-color: var(--border-accent); }
+.ed-option.is-on { border-color: var(--primary); background: #eef2ff; box-shadow: 0 0 0 3px rgba(36, 72, 201, 0.1); }
+.ed-option.is-bad { border-color: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1); }
+.ed-option input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--primary); cursor: pointer; }
+.ed-avatar { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--primary-tint); font-size: 13px; font-weight: 800; color: var(--primary); }
+.ed-avatar.is-other { background: #fff4de; color: #8a5a00; }
+.ed-addr { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; color: var(--orbit-midnight, var(--text-primary)); }
+.ed-option--other { cursor: text; }
+.ed-other { flex: 1; min-width: 0; min-height: 34px; border: 0; outline: none; background: transparent; font: inherit; font-size: 14px; color: var(--text-primary); }
+.ed-files { margin: 14px 0 8px; padding: 10px 12px; border-radius: 12px; background: rgba(11, 30, 74, 0.04); }
+.ed-files p { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 12.5px; font-weight: 700; color: var(--text-secondary); }
+.ed-files ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.ed-files li { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; background: #fff; font-size: 12px; color: var(--text-secondary); }
+.ed-from { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-muted); }
+.ed-from strong { color: var(--text-secondary); }
+
+/* Notices, bottom right; they stack */
+.ed-toasts { position: fixed; right: 20px; bottom: 20px; z-index: 1300; display: flex; flex-direction: column; gap: 10px; width: min(380px, calc(100vw - 32px)); }
+.ed-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 12px 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-left: 4px solid var(--primary, #2448c9);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 20px 40px -20px rgba(11, 30, 74, 0.45);
+  animation: ed-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ed-toast.is-sent { border-left-color: #16a34a; }
+.ed-toast.is-failed { border-left-color: #dc2626; }
+.ed-toast-icon { flex: none; margin-top: 1px; color: var(--primary, #2448c9); }
+.ed-toast.is-sent .ed-toast-icon { color: #15803d; }
+.ed-toast.is-failed .ed-toast-icon { color: #b91c1c; }
+.ed-toast-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 1.4; color: var(--text-secondary); overflow-wrap: anywhere; }
+.ed-toast-text strong { font-size: 13.5px; color: var(--orbit-midnight, #0b1e4a); }
+.ed-toast-close { flex: none; width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--text-muted); cursor: pointer; }
+.ed-toast-close:hover { background: rgba(11, 30, 74, 0.06); color: var(--text-primary); }
+@keyframes ed-in { from { opacity: 0; transform: translateY(10px); } }
+@media (prefers-reduced-motion: reduce) {
+  .ed-toast { animation: none; }
+  .ed-option { transition: none; }
+}
+@media (max-width: 600px) {
+  .ed-toasts { right: 16px; bottom: 16px; }
+}

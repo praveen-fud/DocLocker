@@ -1,0 +1,133 @@
+/* ============================================================
+   CONSULTANCIES — the clean list, duplicates to tidy, and staff
+   requests. Built on the Banks & Lenders page (BanksLenders.css):
+   same glass cards, tabs, requests and form pieces.
+   ============================================================ */
+.cs-page .dh-kpi { cursor: pointer; }
+
+.cs-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(22, 163, 74, 0.25);
+  border-radius: 14px;
+  background: var(--success-bg, #e8f6ee);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--success-text, #15803d);
+}
+.cs-notice button { margin-left: auto; display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+.cs-notice button:hover { background: rgba(255, 255, 255, 0.7); }
+
+/* ── The list ── */
+.cs-list { display: flex; flex-direction: column; gap: 14px; padding: 20px; }
+.cs-list .bl-card-head { margin-bottom: 0; }
+.cs-rows { list-style: none; margin: 0 -8px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.cs-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px;
+  border-radius: 14px;
+  transition: background var(--transition-fast);
+}
+.cs-row:hover { background: rgba(255, 255, 255, 0.85); }
+.cs-row + .cs-row { border-top: 1px solid var(--border-dim); }
+.cs-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: #e8ecf8;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--navy-soft, #13306e);
+}
+.cs-avatar.is-typed { background: #fff4de; color: #8a5a00; }
+.cs-row-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cs-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14.5px; font-weight: 700; color: var(--orbit-midnight, var(--text-primary)); }
+.cs-row-meta { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 12.5px; color: var(--text-muted); }
+.cs-row-meta span { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.cs-aliases { color: var(--primary); font-weight: 600; cursor: help; }
+.cs-near { color: #8a5a00; font-weight: 600; }
+.cs-row-figs { display: flex; gap: 16px; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.cs-row-figs span { display: flex; flex-direction: column; align-items: flex-end; }
+.cs-row-figs strong { font-family: var(--font-display); font-size: 17px; font-weight: 800; color: var(--orbit-midnight, var(--text-primary)); font-variant-numeric: tabular-nums; }
+.cs-row-figs .is-ok strong { color: var(--success-text, #15803d); }
+.cs-row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.cs-match { width: auto; min-height: 32px; padding: 0 8px; font-size: 13px; }
+
+/* ── Duplicate checks (form, requests) ── */
+.cs-check { display: flex; align-items: flex-start; gap: 6px; margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; }
+.cs-check svg { flex: none; margin-top: 2px; }
+.cs-check.is-dup { color: #b91c1c; }
+.cs-check.is-near { color: #8a5a00; }
+.cs-check.is-new { color: var(--success-text, #15803d); }
+.cs-check strong { color: inherit; }
+
+/* ── Add / edit ── */
+.cs-form { max-width: 720px; display: flex; flex-direction: column; gap: 14px; padding: 24px; }
+.cs-form .cs-check { margin-top: -6px; }
+.cs-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+
+/* ── Tidy up ── */
+.cs-tidy { display: flex; flex-direction: column; gap: 14px; }
+.cs-count { margin-left: 6px; padding: 1px 9px; border-radius: 999px; background: var(--gold-tint, #fff4de); font-size: 13px; color: #8a5a00; }
+.cs-group { padding: 18px 20px; }
+.cs-group-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.cs-group-icon { flex: none; width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; background: linear-gradient(135deg, #f7c25c, #d98e0f); color: var(--orbit-midnight, #0b1e4a); }
+.cs-group-head h3 { margin: 0; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--orbit-midnight, var(--text-primary)); }
+.cs-group-head p { margin: 2px 0 0; font-size: 12.5px; color: var(--text-secondary); }
+.cs-members { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cs-member {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.cs-member:hover { border-color: var(--border-accent); }
+.cs-member.is-keep { border-color: var(--primary); background: #eef2ff; box-shadow: 0 0 0 3px rgba(36, 72, 201, 0.1); }
+.cs-member input { margin: 0; accent-color: var(--primary); }
+.cs-member-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; color: var(--orbit-midnight, var(--text-primary)); }
+.cs-tag { padding: 1px 8px; border-radius: 999px; background: #fff4de; font-size: 11px; font-weight: 700; color: #8a5a00; white-space: nowrap; }
+.cs-tag.is-listed { background: #e8ecf8; color: var(--navy-soft, #13306e); }
+.cs-member-count { font-size: 12.5px; color: var(--text-muted); white-space: nowrap; }
+.cs-group-foot { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-dim); }
+.cs-keep-name { flex: 1 1 260px; margin: 0; }
+.cs-keep-name .bl-input { min-height: 38px; }
+.cs-singles { padding: 12px 20px; }
+
+/* ── Requests ── */
+.bl-request.cs-request { grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.cs-request-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cs-request-name { margin: 0; font-family: var(--font-display); font-size: 15.5px; font-weight: 700; color: var(--orbit-midnight, var(--text-primary)); }
+.cs-request .cs-keep-name { flex: none; margin-top: 8px; max-width: 420px; }
+.cs-request-actions { flex-wrap: wrap; justify-content: flex-end; max-width: 420px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-row, .cs-member { transition: none; }
+}
+@media (max-width: 980px) {
+  .cs-row { grid-template-columns: 38px minmax(0, 1fr); }
+  .cs-row-figs, .cs-row-actions { grid-column: 2; justify-content: flex-start; }
+  .cs-row-figs span { align-items: flex-start; }
+}
+@media (max-width: 600px) {
+  .cs-list, .cs-group, .cs-form { padding: 16px; }
+  .cs-form-grid { grid-template-columns: minmax(0, 1fr); }
+  .cs-member { grid-template-columns: 18px minmax(0, 1fr); row-gap: 4px; }
+  .cs-tag, .cs-member-count { grid-column: 2; justify-self: start; }
+  .bl-request.cs-request { grid-template-columns: minmax(0, 1fr); }
+  .cs-request-actions { justify-content: flex-start; }
+}

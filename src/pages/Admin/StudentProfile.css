@@ -496,6 +496,7 @@ button.sp-dir-crumb:hover { background: var(--bg-hover); color: var(--primary); 
 .sp-dir-go { color: var(--text-muted); transition: transform 200ms ease; }
 .sp-dir-folder:hover .sp-dir-go { color: var(--primary); transform: translateX(2px); }
 .sp-dir-zip { margin-left: auto; }
+.sp-dir-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
 @media (prefers-reduced-motion: reduce) {
   .sp-dir-folder, .sp-dir-go { transition: none; }
   .sp-dir-folder:hover { transform: none; }

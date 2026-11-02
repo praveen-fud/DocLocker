@@ -3888,7 +3888,7 @@ button.advisor-card:hover .advisor-card-go svg { transform: translateX(3px); }
 
 /* ── Students table ────────────────────────────────────────── */
 .admin-shell .adm-table {
-  --adm-cols: 36px minmax(180px, 2.1fr) minmax(118px, 1fr) minmax(88px, 0.85fr) minmax(104px, 1fr) minmax(112px, 1fr) minmax(104px, 0.95fr) 56px;
+  --adm-cols: 36px minmax(180px, 2.1fr) minmax(118px, 1fr) minmax(88px, 0.85fr) minmax(130px, 1.15fr) minmax(104px, 1fr) minmax(112px, 1fr) minmax(104px, 0.95fr) 56px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -3909,7 +3909,7 @@ button.advisor-card:hover .advisor-card-go svg { transform: translateX(3px); }
 }
 .adm-thead.adm-row--advisor,
 .adm-row.adm-row--advisor {
-  grid-template-columns: 36px minmax(180px, 2.1fr) minmax(118px, 1fr) minmax(88px, 0.85fr) minmax(104px, 0.95fr) minmax(104px, 1fr) minmax(112px, 1fr) minmax(104px, 0.95fr) 56px;
+  grid-template-columns: 32px minmax(150px, 1.7fr) minmax(118px, 1.05fr) minmax(76px, 0.65fr) minmax(116px, 1.1fr) minmax(80px, 0.75fr) minmax(80px, 0.75fr) minmax(104px, 0.95fr) minmax(84px, 0.75fr) 48px;
 }
 .adm-thead {
   min-height: 54px;
@@ -4055,6 +4055,7 @@ button.advisor-card:hover .advisor-card-go svg { transform: translateX(3px); }
   text-overflow: ellipsis;
 }
 .adm-cell--dest,
+.adm-cell--consult,
 .adm-cell--advisor {
   white-space: nowrap;
   overflow: hidden;
@@ -4222,7 +4223,7 @@ button.advisor-card:hover .advisor-card-go svg { transform: translateX(3px); }
 
 @media (max-width: 1279px) {
   .admin-shell .adm-table {
-    --adm-cols: 32px minmax(170px, 2fr) minmax(116px, 1fr) minmax(82px, 0.8fr) minmax(104px, 0.9fr) minmax(110px, 1fr) minmax(100px, 0.9fr) 56px;
+    --adm-cols: 32px minmax(170px, 2fr) minmax(116px, 1fr) minmax(82px, 0.8fr) minmax(120px, 1.05fr) minmax(104px, 0.9fr) minmax(110px, 1fr) minmax(100px, 0.9fr) 56px;
   }
   .adm-thead,
   .adm-row {
@@ -4234,7 +4235,7 @@ button.advisor-card:hover .advisor-card-go svg { transform: translateX(3px); }
 
 @media (max-width: 1023px) {
   .admin-shell .adm-table {
-    --adm-cols: 28px minmax(160px, 2fr) minmax(112px, 1fr) minmax(76px, 0.8fr) minmax(100px, 0.9fr) minmax(108px, 1fr) minmax(96px, 0.9fr) 52px;
+    --adm-cols: 28px minmax(160px, 2fr) minmax(112px, 1fr) minmax(76px, 0.8fr) minmax(112px, 1fr) minmax(100px, 0.9fr) minmax(108px, 1fr) minmax(96px, 0.9fr) 52px;
   }
   .adm-thead,
   .adm-row {
@@ -4336,6 +4337,7 @@ button.advisor-card:hover .advisor-card-go svg { transform: translateX(3px); }
   .adm-cell--loan    { grid-column: 5; grid-row: 2; }
   .adm-cell--updated { grid-column: 2; grid-row: 3; }
   .adm-cell--advisor { grid-column: 3; grid-row: 3; }
+  .adm-cell--consult { grid-column: 4 / 6; grid-row: 3; }
   .adm-cell--advisor,
   .adm-th--advisor {
     display: flex;
@@ -4458,6 +4460,7 @@ button.advisor-card:hover .advisor-card-go svg { transform: translateX(3px); }
   .adm-cell--loan    { grid-column: 3 / 5; grid-row: 3; }
   .adm-cell--updated { grid-column: 2; grid-row: 4; }
   .adm-cell--advisor { grid-column: 3 / 5; grid-row: 4; }
+  .adm-cell--consult { grid-column: 2 / 5; grid-row: 5; }
   .table-pagination {
     justify-content: center;
   }
@@ -5051,3 +5054,8 @@ button.advisor-card:hover .advisor-card-go svg { transform: translateX(3px); }
   .adm-add-btn::after { display: none; }
   .adm-add-btn:hover .adm-add-btn__icon { transform: none; }
 }
+
+/* Consultancy editor: what happens when a name isn't listed */
+.field-strip-note { display: block; margin-top: 6px; font-size: 12.5px; line-height: 1.45; color: #8a5a00; }
+.field-strip-note.is-sent { padding: 8px 10px; border-radius: 10px; background: #fff4de; font-weight: 600; }
+
