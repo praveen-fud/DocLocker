@@ -424,7 +424,10 @@
   .dh-grid { grid-auto-flow: row dense; }
   .dh-grid:not(.dh-grid--staff) .dh-cell--docs,
   .dh-grid:not(.dh-grid--staff) .dh-cell--advisors { grid-column: 1 / span 7; }
-  .dh-grid:not(.dh-grid--staff) .dh-cell--activity { grid-column: 8 / -1; grid-row: span 2; contain: size; min-height: 320px; }
+  /* Recent activity sits beside Loan journey and takes its height (the
+     feed scrolls inside); Needs attention runs down beside the breakdowns */
+  .dh-grid:not(.dh-grid--staff) .dh-cell--activity { contain: size; min-height: 320px; }
+  .dh-grid:not(.dh-grid--staff) .dh-card--attention { grid-column: 8 / -1; grid-row: span 2; }
   .dh-grid:not(.dh-grid--staff) .dh-cell--activity .ov-activity-list { max-height: none; }
 }
 

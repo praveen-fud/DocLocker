@@ -72,7 +72,8 @@ import {
   ArrowRightLeft,
 } from "lucide-react";
 import { useStudent } from "../../context/StudentContext";
-import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter, recoverMetaFromPdf, restoreMeta, buildFolderKey, getAuditLog, downloadAllFiles } from "../../utils/driveApi";
+import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter, recoverMetaFromPdf, restoreMeta, buildFolderKey, getAuditLog, downloadAllFiles, downloadBundle } from "../../utils/driveApi";
+import { DOC_GROUPS, GROUP_OF_FOLDER, folderOfField } from "./documentFolders";
 import DocumentViewer from "../../components/DocumentViewer/DocumentViewer";
 import useFileObjectUrl from "../../hooks/useFileObjectUrl";
 import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields, coApplicantFields } from "../../context/schemas";
@@ -621,50 +622,59 @@ function DashboardHome({
           </div>
         </section>
 
-        {/* Needs attention */}
-        <section className="dh-card dh-card--attention" aria-labelledby="dh-attn-title">
-          <header className="dh-card-head">
-            <div>
-              <h2 id="dh-attn-title" className="dh-card-title">Needs attention</h2>
-              <p className="dh-card-sub">{attention.length ? `${attention.length} student${attention.length === 1 ? "" : "s"} waiting on someone` : "Nothing waiting right now"}</p>
-            </div>
-          </header>
-          {loading ? (
-            <div className="dh-empty"><div className="loading-dots"><span /><span /><span /></div></div>
-          ) : attentionShown.length === 0 ? (
-            <div className="dh-empty dh-empty--ok"><CheckCircle size={22} /><p>Every student is moving — no missing documents, unassigned files or stalled applications.</p></div>
-          ) : (
-            <ul className="dh-attn">
-              {attentionShown.map(({ s, reasons }) => (
-                <li key={studentKey(s)}>
-                  <button type="button" className="dh-attn-row" onClick={() => onOpenProfile(s, attention.map((x) => x.s))}>
-                    <span className={`dh-avatar avatar-${getAvatarVariant(s.name)}`} aria-hidden="true">{getInitials(displayName(s.name))}</span>
-                    <span className="dh-attn-text">
-                      <span className="dh-attn-name">{displayName(s.name)}</span>
-                      <span className="dh-attn-reasons">
-                        <span className={`dh-reason dh-reason--${reasons[0].tone}`}>{reasons[0].text}</span>
-                        {reasons.length > 1 && <span className="dh-more">+{reasons.length - 1} more</span>}
+        {/* Recent activity */}
+        {adminLevel && (
+          <div className="dh-cell dh-cell--activity">
+            <LiveActivityFeed onViewAll={onOpenAudit} students={students} bankers={bankers} onOpenStudent={onOpenStudentFile} />
+          </div>
+        )}
+
+        {/* Needs attention — staff, who have no activity feed */}
+        {!adminLevel && (
+          <section className="dh-card dh-card--attention" aria-labelledby="dh-attn-title">
+            <header className="dh-card-head">
+              <div>
+                <h2 id="dh-attn-title" className="dh-card-title">Needs attention</h2>
+                <p className="dh-card-sub">{attention.length ? `${attention.length} student${attention.length === 1 ? "" : "s"} waiting on someone` : "Nothing waiting right now"}</p>
+              </div>
+            </header>
+            {loading ? (
+              <div className="dh-empty"><div className="loading-dots"><span /><span /><span /></div></div>
+            ) : attentionShown.length === 0 ? (
+              <div className="dh-empty dh-empty--ok"><CheckCircle size={22} /><p>Every student is moving — no missing documents, unassigned files or stalled applications.</p></div>
+            ) : (
+              <ul className="dh-attn">
+                {attentionShown.map(({ s, reasons }) => (
+                  <li key={studentKey(s)}>
+                    <button type="button" className="dh-attn-row" onClick={() => onOpenProfile(s, attention.map((x) => x.s))}>
+                      <span className={`dh-avatar avatar-${getAvatarVariant(s.name)}`} aria-hidden="true">{getInitials(displayName(s.name))}</span>
+                      <span className="dh-attn-text">
+                        <span className="dh-attn-name">{displayName(s.name)}</span>
+                        <span className="dh-attn-reasons">
+                          <span className={`dh-reason dh-reason--${reasons[0].tone}`}>{reasons[0].text}</span>
+                          {reasons.length > 1 && <span className="dh-more">+{reasons.length - 1} more</span>}
+                        </span>
                       </span>
-                    </span>
-                    <ChevronRight size={16} className="dh-chev" aria-hidden="true" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {/* A short list leaves room to say the rest are fine */}
-          {!loading && attentionShown.length > 0 && attentionShown.length < 4 && total > attention.length && (
-            <p className="dh-attn-rest">
-              <CheckCircle size={16} aria-hidden="true" />
-              {total - attention.length} other student{total - attention.length === 1 ? " is" : "s are"} on track
-            </p>
-          )}
-          {!loading && attention.length > 0 && (
-            <button type="button" className="dh-link" onClick={() => onOpenProfile(attention[0].s, attention.map((x) => x.s))}>
-              {attention.length > 1 ? `Go through all ${attention.length}` : "Open their file"} <ArrowRight size={14} />
-            </button>
-          )}
-        </section>
+                      <ChevronRight size={16} className="dh-chev" aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {/* A short list leaves room to say the rest are fine */}
+            {!loading && attentionShown.length > 0 && attentionShown.length < 4 && total > attention.length && (
+              <p className="dh-attn-rest">
+                <CheckCircle size={16} aria-hidden="true" />
+                {total - attention.length} other student{total - attention.length === 1 ? " is" : "s are"} on track
+              </p>
+            )}
+            {!loading && attention.length > 0 && (
+              <button type="button" className="dh-link" onClick={() => onOpenProfile(attention[0].s, attention.map((x) => x.s))}>
+                {attention.length > 1 ? `Go through all ${attention.length}` : "Open their file"} <ArrowRight size={14} />
+              </button>
+            )}
+          </section>
+        )}
 
         {/* Companies (superadmin) */}
         {isSuper && companyRows.length > 0 && (
@@ -814,11 +824,51 @@ function DashboardHome({
           </section>
         )}
 
-        {/* Recent activity */}
+        {/* Needs attention */}
         {adminLevel && (
-          <div className="dh-cell dh-cell--activity">
-            <LiveActivityFeed onViewAll={onOpenAudit} students={students} bankers={bankers} onOpenStudent={onOpenStudentFile} />
-          </div>
+          <section className="dh-card dh-card--attention" aria-labelledby="dh-attn-title">
+            <header className="dh-card-head">
+              <div>
+                <h2 id="dh-attn-title" className="dh-card-title">Needs attention</h2>
+                <p className="dh-card-sub">{attention.length ? `${attention.length} student${attention.length === 1 ? "" : "s"} waiting on someone` : "Nothing waiting right now"}</p>
+              </div>
+            </header>
+            {loading ? (
+              <div className="dh-empty"><div className="loading-dots"><span /><span /><span /></div></div>
+            ) : attentionShown.length === 0 ? (
+              <div className="dh-empty dh-empty--ok"><CheckCircle size={22} /><p>Every student is moving — no missing documents, unassigned files or stalled applications.</p></div>
+            ) : (
+              <ul className="dh-attn">
+                {attentionShown.map(({ s, reasons }) => (
+                  <li key={studentKey(s)}>
+                    <button type="button" className="dh-attn-row" onClick={() => onOpenProfile(s, attention.map((x) => x.s))}>
+                      <span className={`dh-avatar avatar-${getAvatarVariant(s.name)}`} aria-hidden="true">{getInitials(displayName(s.name))}</span>
+                      <span className="dh-attn-text">
+                        <span className="dh-attn-name">{displayName(s.name)}</span>
+                        <span className="dh-attn-reasons">
+                          <span className={`dh-reason dh-reason--${reasons[0].tone}`}>{reasons[0].text}</span>
+                          {reasons.length > 1 && <span className="dh-more">+{reasons.length - 1} more</span>}
+                        </span>
+                      </span>
+                      <ChevronRight size={16} className="dh-chev" aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {/* A short list leaves room to say the rest are fine */}
+            {!loading && attentionShown.length > 0 && attentionShown.length < 4 && total > attention.length && (
+              <p className="dh-attn-rest">
+                <CheckCircle size={16} aria-hidden="true" />
+                {total - attention.length} other student{total - attention.length === 1 ? " is" : "s are"} on track
+              </p>
+            )}
+            {!loading && attention.length > 0 && (
+              <button type="button" className="dh-link" onClick={() => onOpenProfile(attention[0].s, attention.map((x) => x.s))}>
+                {attention.length > 1 ? `Go through all ${attention.length}` : "Open their file"} <ArrowRight size={14} />
+              </button>
+            )}
+          </section>
         )}
       </div>
 
@@ -2184,6 +2234,9 @@ function StudentProfile({
   // A letter saved before letters were recorded on the student, found in
   // their Loan_Documents folder: undefined = not looked yet, null = none
   const [foundLetter, setFoundLetter] = useState(undefined);
+  // Documents tab: the student's folder (academic documents + passport) open
+  const [studyOpen, setStudyOpen] = useState(false);
+  const [studyZip, setStudyZip] = useState(false);
   const [viewing, setViewing] = useState(null);
   const [copied, setCopied] = useState(false);
   const [photoFailed, setPhotoFailed] = useState(false);
@@ -2218,6 +2271,24 @@ function StudentProfile({
   const letterFile = letter && { id: letter.fileId, name: "Sanction Letter", slot: "Loan documents" };
   const viewerFiles = [...(letterFile ? [letterFile] : []), ...generated, ...uploadedFiles].filter((f) => f.id).map((f) => ({ id: f.id, name: f.name }));
   const lenders = (student.sharedBankers || []).map((n) => ({ name: n, bank: bankers.find((b) => b.name === n)?.bank || "" }));
+
+// The student's folder: their academic documents and passport, sorted
+  // the way Document Management files them
+  const folderOrder = new Map(DOC_GROUPS.flatMap((g) => g.folders.map((f, i) => [f.key, (g.id === "identity" ? 0 : 100) + i])));
+  const studyItems = groups
+    .filter((g) => !g.key.startsWith("co_"))
+    .flatMap((g) => g.items.map((it) => ({ ...it, key: `${g.key}-${it.id}`, folder: folderOfField(it.id) })))
+    .filter((it) => it.folder === "passport" || GROUP_OF_FOLDER.get(it.folder) === "academics")
+    .sort((x, y) => (folderOrder.get(x.folder) ?? 999) - (folderOrder.get(y.folder) ?? 999));
+  const studyFiles = studyItems.reduce((n, it) => n + it.files.length, 0);
+  const studyMissing = studyItems.filter((it) => it.required && !it.files.length).length;
+  const zipStudy = async () => {
+    const files = studyItems.flatMap((it) => it.files.filter((f) => f.id).map((f) => ({ id: f.id, path: `${name}/${f.name}` })));
+    if (!files.length) return;
+    setStudyZip(true);
+    try { await downloadBundle(files, `${name}_academics_passport`.replace(/[^\w]+/g, "_")); } catch { /* the browser shows the error */ }
+    setStudyZip(false);
+  };
   const photo = student.uploads?.applicant?.photo;
   const hasPhoto = !!photo?.id && /\.(jpe?g|png|webp|gif)$/i.test(photo.name || "") && !photoFailed;
   const updated = student.updatedAt ? new Date(student.updatedAt) : null;
@@ -2574,6 +2645,64 @@ function StudentProfile({
                 </button>
               </div>
 
+              {/* One folder for the student's academic documents and passport */}
+              {!studyOpen && (
+                <button type="button" className="sp-dir-folder sp-study-folder" onClick={() => setStudyOpen(true)}>
+                  <span className="sp-dir-icon" aria-hidden="true"><FolderOpen size={20} /></span>
+                  <span className="sp-dir-text">
+                    <strong>{name}</strong>
+                    <span>Academic documents &amp; passport · {studyFiles} file{studyFiles === 1 ? "" : "s"}</span>
+                  </span>
+                  {studyMissing > 0 && <span className="sp-dir-badge">{studyMissing} missing</span>}
+                  <ChevronRight size={16} className="sp-dir-go" aria-hidden="true" />
+                </button>
+              )}
+
+              {studyOpen && (
+                <section className="sp-card sp-card--flat sp-dir-open">
+                  <nav className="sp-dir-crumbs" aria-label="Folder">
+                    <button type="button" className="sp-dir-crumb" onClick={() => setStudyOpen(false)}>
+                      <ChevronLeft size={15} aria-hidden="true" /> All documents
+                    </button>
+                    <ChevronRight size={15} aria-hidden="true" className="sp-dir-sep" />
+                    <span className="sp-dir-crumb is-current" aria-current="page"><FolderOpen size={15} aria-hidden="true" /> {name}</span>
+                    {isAdminLevel(adminRole) && studyFiles > 0 && (
+                      <button type="button" className="sp-btn sp-btn--sm sp-dir-zip" onClick={zipStudy} disabled={studyZip}>
+                        {studyZip ? <RefreshCw size={14} className="spin" /> : <Download size={14} />} Download folder
+                      </button>
+                    )}
+                  </nav>
+                  <p className="sp-muted-text sp-study-sub">Academic documents and passport · {studyFiles} file{studyFiles === 1 ? "" : "s"}{studyMissing ? ` · ${studyMissing} required missing` : ""}</p>
+                  <ul className="sp-checklist">
+                    {studyItems.map((it) => {
+                      const has = it.files.length > 0;
+                      if (!has && !it.required) return null; // empty optional slots stay out of the way
+                      return (
+                        <li key={it.key} className={`sp-check${has ? " is-done" : " is-missing"}`}>
+                          <span className="sp-check-icon" aria-hidden="true">{has ? <CheckCircle size={17} /> : <AlertCircle size={17} />}</span>
+                          <span className="sp-check-text">
+                            <span className="sp-check-label">{it.label}{!it.required && <em className="sp-optional">Optional</em>}</span>
+                            <span className="sp-check-files">{has ? it.files.map((f) => f.name).join(", ") : "Not uploaded yet"}</span>
+                          </span>
+                          {has && (
+                            <span className="sp-check-actions">
+                              {it.files.map((f, idx) => (
+                                f.id
+                                  ? <button key={f.id} type="button" className="sp-btn sp-btn--sm" onClick={() => setViewing({ id: f.id, name: f.name, slot: it.label })}><Eye size={15} /> {it.files.length > 1 ? `Page ${idx + 1}` : "View"}</button>
+                                  : f.webViewLink && <a key={idx} className="sp-btn sp-btn--sm" href={f.webViewLink} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} /> Drive</a>
+                              ))}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              )}
+
+              {!studyOpen && (
+                <>
+
                 {letterStage && (
                   <section className={`sp-card sp-card--flat sp-letter${letter ? " is-in" : " is-missing"}`}>
                     <h3 className="sp-card-title"><FileCheck2 size={16} /> Sanction letter</h3>
@@ -2658,6 +2787,8 @@ function StudentProfile({
                   </section>
                 );
               })}
+                </>
+              )}
             </div>
           )}
 
@@ -4686,9 +4817,6 @@ const AUDIT_ACTION_LABELS = {
   "sanction_letter.upload": "Uploaded sanction letter",
 };
 
-function auditActionLabel(action) {
-  return AUDIT_ACTION_LABELS[action] || action;
-}
 
 // Action prefix -> a real icon (not just a dot) and the tone token that
 // already exists for KPI cards / loan-status cards, so this feed borrows
@@ -4802,16 +4930,49 @@ function activityChangeRows(entry, bankers) {
       break;
     case "admin":
       rows.push({ label: "Account", value: entry.target || "—" });
-      if (d.role) rows.push({ label: "Role", value: ACTIVITY_ROLE_LABELS[d.role] || d.role });
+      if (d.previousRole && d.role) rows.push({ label: "Role", value: `${ACTIVITY_ROLE_LABELS[d.previousRole] || d.previousRole} → ${ACTIVITY_ROLE_LABELS[d.role] || d.role}` });
+      else if (d.role) rows.push({ label: "Role", value: ACTIVITY_ROLE_LABELS[d.role] || d.role });
+      if (d.email) rows.push({ label: "Email", value: d.email });
+      if (d.status) rows.push({ label: "Status", value: d.status === "active" ? "Active" : d.status === "disabled" ? "Disabled" : d.status });
+      if (d.bank) rows.push({ label: "Lender", value: d.bank });
+      break;
+    case "auth":
+      rows.push({ label: "Account", value: entry.target || entry.actor || "—" });
+      break;
+    case "company":
+      rows.push({ label: "Company", value: entry.target || "—" });
+      if (d.slug) rows.push({ label: "Sign-up link", value: `/c/${d.slug}` });
+      if (d.admin) rows.push({ label: "Company admin", value: d.admin });
       break;
     case "student":
       if (d.count) rows.push({ label: "Records removed", value: d.count });
       if (d.documents) rows.push({ label: "Documents removed", value: d.documents });
+      if (d.storage) rows.push({ label: "Stored on", value: d.storage === "railway" ? "DocLocker storage" : "Google Drive" });
+      break;
+    case "sanction_letter":
+      if (d.fileName) rows.push({ label: "File", value: d.fileName });
+      if (d.loanStatus) rows.push({ label: "Loan status", value: LOAN_STATUS_CONFIG[d.loanStatus]?.label || d.loanStatus });
       break;
     default:
       break;
   }
+  // Anything else the entry recorded, so no detail is ever hidden
+  const shown = new Set(["banker", "requestedBy", "note", "fileName", "file", "subFolder", "docType", "check", "files", "fileCount",
+    "review", "seconds", "role", "previousRole", "email", "status", "bank", "slug", "admin", "count", "documents", "storage", "loanStatus"]);
+  for (const [k, v] of Object.entries(d)) {
+    if (shown.has(k) || v === null || v === undefined || v === "" || typeof v === "object") continue;
+    rows.push({ label: k.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()), value: String(v) });
+  }
   return rows;
+}
+
+// Entries about one student carry the student's key as their target; the
+// rest name an account, a company, a document type or a download.
+function isStudentEntry(entry) {
+  const prefix = entry.action.split(".")[0];
+  if (["auth", "admin", "company", "document_reader"].includes(prefix)) return false;
+  if (entry.action === "document.download_bundle" || entry.action === "document.extract") return false;
+  return Boolean(entry.target);
 }
 
 const ACTIVITY_SUMMARY = {
@@ -4828,9 +4989,32 @@ const ACTIVITY_SUMMARY = {
   "document.upload": "A document was uploaded.",
   "document.rejected": "An upload was rejected by the automatic check.",
   "student.delete": "The student and their documents were deleted.",
+  "student.register": "The student started their application.",
+  "applicant.submit": "The student submitted their application for review.",
+  "applicant.pin_set": "The student chose the PIN they sign in with.",
+  "applicant.pin_reset": "The student's PIN was reset. They choose a new one on their next visit.",
+  "applicant.sign_in_failed": "Someone tried to sign in to this application with the wrong PIN.",
+  "auth.login_failed": "Someone tried to sign in to this account with the wrong password.",
+  "admin.create": "A new account was created.",
+  "admin.update": "The account's details were changed.",
+  "admin.delete": "The account was removed.",
+  "admin.reset_password": "The account's password was reset.",
+  "admin.change_own_password": "The account holder changed their own password.",
+  "admin.change_own_email": "The account holder changed their own email.",
+  "company.create": "A new partner company was created.",
+  "company.update": "The company's details were changed.",
+  "company.suspend": "The company was suspended. Its team can't sign in.",
+  "company.reactivate": "The company was reactivated.",
+  "company.logo_update": "The company's logo was changed.",
+  "company.logo_remove": "The company's logo was removed.",
+  "document.download_all": "All of the student's documents were downloaded as a zip.",
+  "document.download_bundle": "A set of documents was downloaded as a zip.",
+  "document.extract": "A document was read automatically.",
+  "document_reader.extract": "A document was read with the Document Reader.",
+  "sanction_letter.upload": "The lender's sanction letter was added to the student's file.",
 };
 
-function ActivityDetail({ entry, entries, students, bankers = [], label = auditActionLabel, onClose, onOpenStudent }) {
+function ActivityDetail({ entry, entries, students, bankers = [], label = bankActivityActionLabel, onClose, onOpenStudent }) {
   const closeRef = useRef(null);
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; });
@@ -4853,7 +5037,7 @@ function ActivityDetail({ entry, entries, students, bankers = [], label = auditA
   const Icon = BANK_ACTIVITY_ACTION_ICON[prefix] || History;
   const tone = AUDIT_ACTION_TONE[prefix] || "slate";
   const student = buildStudentIndex(students).get(entry.target) || null;
-  const isStudentTarget = !["auth", "admin", "document_reader"].includes(prefix) && Boolean(entry.target);
+  const isStudentTarget = isStudentEntry(entry);
   const d = entry.details || {};
   const isLoan = entry.action === "loan_status.update";
   const prev = isLoan ? previousLoanStatus(entry, entries) : null;
@@ -5237,6 +5421,11 @@ const BANK_ACTIVITY_ACTION_LABELS = {
   "company.logo_update": "Updated the company logo",
   "company.logo_remove": "Removed the company logo",
   "summary.generate": "Generated application form",
+  "student.register": "Started an application",
+  "applicant.submit": "Submitted the application",
+  "applicant.pin_set": "Set their sign-in PIN",
+  "applicant.pin_reset": "Reset the student's PIN",
+  "applicant.sign_in_failed": "Wrong PIN entered",
 };
 function bankActivityActionLabel(action) {
   return BANK_ACTIVITY_ACTION_LABELS[action] || action;
