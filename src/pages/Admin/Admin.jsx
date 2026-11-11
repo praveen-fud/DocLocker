@@ -2308,7 +2308,7 @@ function StudentProfile({
     closeRef.current?.focus();
     const onKey = (e) => {
       if (e.key !== "Escape") return;
-      if (document.querySelector(".modal-backdrop, .dv-backdrop, .ad-backdrop, .rpt-backdrop")) return;
+      if (document.querySelector(".modal-backdrop, .dv-backdrop, .actd-backdrop, .rpt-backdrop")) return;
       onCloseRef.current();
     };
     document.addEventListener("keydown", onKey);
@@ -4799,7 +4799,40 @@ function AdminMobileBar({ onOpenMenu, menuOpen }) {
 
 /* ─── Advisors section ────────────────────────────────────────────── */
 
-function AdvisorsSection({ students, allAdvisors, onOpenAdvisor }) {
+// A superadmin can add themselves as an advisor: they then show up in the
+// advisor pickers and get a card here, like any staff advisor.
+function AdvisorSelfToggle({ name, enabled, onToggle }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const toggle = async () => {
+    setBusy(true);
+    setErr("");
+    try { await onToggle(!enabled); }
+    catch (e) { setErr(e.message || "Couldn't save that. Try again."); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className={`advisor-self${enabled ? " is-on" : ""}`}>
+      <span className="advisor-self-icon" aria-hidden="true"><UserCheck size={18} /></span>
+      <div className="advisor-self-text">
+        <p className="advisor-self-title">{enabled ? "You're an advisor" : "Work as an advisor too"}</p>
+        <p className="advisor-self-sub">
+          {enabled
+            ? `Students can be assigned to ${name}. Removing yourself keeps the students already assigned to you.`
+            : "Add yourself to the advisor list so students can be assigned to you."}
+        </p>
+        {err && <p className="advisor-self-err" role="alert">{err}</p>}
+      </div>
+      <button type="button" className={`btn btn-sm ${enabled ? "btn-secondary" : "btn-primary"}`} onClick={toggle} disabled={busy}>
+        {busy ? <RefreshCw size={14} className="spin" /> : enabled ? <X size={14} /> : <Plus size={14} />}
+        {enabled ? "Remove me" : "Add me as an advisor"}
+      </button>
+    </div>
+  );
+}
+
+function AdvisorsSection({ students, allAdvisors, onOpenAdvisor, self }) {
+  const selfToggle = self ? <AdvisorSelfToggle {...self} /> : null;
   const rows = allAdvisors
     .map((name) => {
       const list = students.filter((s) => s.advisor === name);
@@ -4810,15 +4843,20 @@ function AdvisorsSection({ students, allAdvisors, onOpenAdvisor }) {
 
   if (allAdvisors.length === 0) {
     return (
+      <>
+      {selfToggle}
       <div className="admin-empty animate-fade-in">
         <div className="admin-empty-icon"><UserCheck size={28} /></div>
         <h3>No advisors registered</h3>
-        <p>Add an advisor account from Settings → Add New Member.</p>
+        <p>Add an advisor account from Team → Add member{self ? ", or add yourself above" : ""}.</p>
       </div>
+      </>
     );
   }
 
   return (
+    <>
+    {selfToggle}
     <div className="advisor-grid animate-fade-in">
       {rows.map((r) => {
         const pct = r.total ? Math.round((r.complete / r.total) * 100) : 0;
@@ -4833,7 +4871,7 @@ function AdvisorsSection({ students, allAdvisors, onOpenAdvisor }) {
             <div className="advisor-card-top">
               <div className="advisor-card-avatar">{r.name[0].toUpperCase()}</div>
               <div className="advisor-card-body">
-                <h3>{r.name}</h3>
+                <h3>{r.name}{self?.enabled && r.name === self.name && <span className="advisor-card-you">You</span>}</h3>
                 <p>{r.total} student{r.total === 1 ? "" : "s"} assigned</p>
               </div>
             </div>
@@ -4851,6 +4889,7 @@ function AdvisorsSection({ students, allAdvisors, onOpenAdvisor }) {
         );
       })}
     </div>
+    </>
   );
 }
 
@@ -4957,7 +4996,7 @@ function activityChangeRows(entry, bankers) {
   const officer = (name) => name && rows.push({
     label: "Loan officer",
     value: (
-      <span className="ad-officer">
+      <span className="actd-officer">
         {bankOf(name) && <img src={getBankLogo(bankOf(name))} alt="" onError={(e) => { e.target.style.display = "none"; }} />}
         <span>{name}{bankOf(name) ? ` · ${bankOf(name)}` : ""}</span>
       </span>
@@ -5056,6 +5095,8 @@ const ACTIVITY_SUMMARY = {
   "admin.reset_password": "The account's password was reset.",
   "admin.change_own_password": "The account holder changed their own password.",
   "admin.change_own_email": "The account holder changed their own email.",
+  "admin.advisor_on": "The superadmin added themselves as an advisor. Students can now be assigned to them.",
+  "admin.advisor_off": "The superadmin removed themselves as an advisor. Students already assigned keep them.",
   "company.create": "A new partner company was created.",
   "company.update": "The company's details were changed.",
   "company.suspend": "The company was suspended. Its team can't sign in.",
@@ -5101,51 +5142,51 @@ function ActivityDetail({ entry, entries, students, bankers = [], label = bankAc
   const when = new Date(entry.ts);
 
   return createPortal(
-    <div className="ad-backdrop" onClick={onClose}>
+    <div className="actd-backdrop" onClick={onClose}>
       <aside
-        className="ad-panel"
+        className="actd-panel"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="ad-title"
+        aria-labelledby="actd-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className={`ad-head tone-${tone}`}>
-          <span className="ad-head-icon" aria-hidden="true"><Icon size={20} /></span>
-          <div className="ad-head-text">
-            <h2 id="ad-title">{label(entry.action)}</h2>
+        <header className={`actd-head tone-${tone}`}>
+          <span className="actd-head-icon" aria-hidden="true"><Icon size={20} /></span>
+          <div className="actd-head-text">
+            <h2 id="actd-title">{label(entry.action)}</h2>
             <p><time dateTime={entry.ts}>{when.toLocaleString("en-IN", FULL_DATE)}</time> · {timeAgo(entry.ts)}</p>
           </div>
-          <button type="button" ref={closeRef} className="ad-close" onClick={onClose} aria-label="Close details">
+          <button type="button" ref={closeRef} className="actd-close" onClick={onClose} aria-label="Close details">
             <X size={18} />
           </button>
         </header>
 
-        <div className="ad-body">
+        <div className="actd-body">
           {/* What changed */}
-          <section className="ad-section" aria-label="What changed">
-            <h3 className="ad-section-title">What happened</h3>
+          <section className="actd-section" aria-label="What changed">
+            <h3 className="actd-section-title">What happened</h3>
             {isLoan ? (
               <>
-                <div className="ad-change">
-                  <div className="ad-change-side">
-                    <span className="ad-change-label">From</span>
-                    {prev ? <LoanStatusBadge status={prev.status} /> : <span className="ad-muted">Not recorded</span>}
+                <div className="actd-change">
+                  <div className="actd-change-side">
+                    <span className="actd-change-label">From</span>
+                    {prev ? <LoanStatusBadge status={prev.status} /> : <span className="actd-muted">Not recorded</span>}
                   </div>
-                  <ArrowRight size={18} className="ad-change-arrow" aria-label="changed to" />
-                  <div className="ad-change-side">
-                    <span className="ad-change-label">To</span>
+                  <ArrowRight size={18} className="actd-change-arrow" aria-label="changed to" />
+                  <div className="actd-change-side">
+                    <span className="actd-change-label">To</span>
                     <LoanStatusBadge status={d.loanStatus} />
                   </div>
                 </div>
-                {prev?.derived && <p className="ad-hint">Previous status taken from the earlier change in the log.</p>}
+                {prev?.derived && <p className="actd-hint">Previous status taken from the earlier change in the log.</p>}
                 {d.remark && (
-                  <div className="ad-note">
-                    <span className="ad-change-label">Remark</span>
+                  <div className="actd-note">
+                    <span className="actd-change-label">Remark</span>
                     <p>{d.remark}</p>
                   </div>
                 )}
                 {disbursement.length > 0 && (
-                  <dl className="ad-grid">
+                  <dl className="actd-grid">
                     {disbursement.map((f) => (
                       <div key={f.key}>
                         <dt>{f.label}</dt>
@@ -5157,9 +5198,9 @@ function ActivityDetail({ entry, entries, students, bankers = [], label = bankAc
               </>
             ) : (
               <>
-                {ACTIVITY_SUMMARY[entry.action] && <p className="ad-summary">{ACTIVITY_SUMMARY[entry.action]}</p>}
+                {ACTIVITY_SUMMARY[entry.action] && <p className="actd-summary">{ACTIVITY_SUMMARY[entry.action]}</p>}
                 {rows.length > 0 && (
-                  <dl className="ad-rows">
+                  <dl className="actd-rows">
                     {rows.map((r) => (
                       <div key={r.label}>
                         <dt>{r.label}</dt>
@@ -5168,29 +5209,29 @@ function ActivityDetail({ entry, entries, students, bankers = [], label = bankAc
                     ))}
                   </dl>
                 )}
-                {!ACTIVITY_SUMMARY[entry.action] && rows.length === 0 && <p className="ad-summary">{label(entry.action)}.</p>}
+                {!ACTIVITY_SUMMARY[entry.action] && rows.length === 0 && <p className="actd-summary">{label(entry.action)}.</p>}
               </>
             )}
           </section>
 
           {/* Student */}
           {isStudentTarget && (
-            <section className="ad-section" aria-label="Student">
-              <h3 className="ad-section-title">Student</h3>
+            <section className="actd-section" aria-label="Student">
+              <h3 className="actd-section-title">Student</h3>
               {student ? (
-                <div className="ad-student">
-                  <div className="ad-student-top">
-                    <span className="ad-avatar" aria-hidden="true">{getInitials(displayName(student.name))}</span>
-                    <div className="ad-student-text">
-                      <p className="ad-student-name">{displayName(student.name)}</p>
-                      <p className="ad-student-id">{getApplicationId(student)}</p>
+                <div className="actd-student">
+                  <div className="actd-student-top">
+                    <span className="actd-avatar" aria-hidden="true">{getInitials(displayName(student.name))}</span>
+                    <div className="actd-student-text">
+                      <p className="actd-student-name">{displayName(student.name)}</p>
+                      <p className="actd-student-id">{getApplicationId(student)}</p>
                     </div>
-                    <span className="ad-current" title="Current loan status">
+                    <span className="actd-current" title="Current loan status">
                       <span>Now</span>
                       <LoanStatusBadge status={student.loanStatus} />
                     </span>
                   </div>
-                  <dl className="ad-rows ad-rows--compact">
+                  <dl className="actd-rows actd-rows--compact">
                     {student.email && <div><dt>Email</dt><dd>{student.email}</dd></div>}
                     {student.phone && <div><dt>Phone</dt><dd>{student.phone}</dd></div>}
                     {student.advisor && <div><dt>Advisor</dt><dd>{student.advisor}</dd></div>}
@@ -5199,34 +5240,34 @@ function ActivityDetail({ entry, entries, students, bankers = [], label = bankAc
                     )}
                   </dl>
                   {onOpenStudent && (
-                    <button type="button" className="ad-open" onClick={() => { onClose(); onOpenStudent(student); }}>
+                    <button type="button" className="actd-open" onClick={() => { onClose(); onOpenStudent(student); }}>
                       Open student file <ArrowUpRight size={15} aria-hidden="true" />
                     </button>
                   )}
                 </div>
               ) : (
-                <div className="ad-student ad-student--missing">
-                  <p className="ad-student-name">{displayName(entry.target)}</p>
-                  <p className="ad-muted">Not in the current student list. They may have been deleted.</p>
+                <div className="actd-student actd-student--missing">
+                  <p className="actd-student-name">{displayName(entry.target)}</p>
+                  <p className="actd-muted">Not in the current student list. They may have been deleted.</p>
                 </div>
               )}
             </section>
           )}
 
           {/* Who */}
-          <section className="ad-section" aria-label="Done by">
-            <h3 className="ad-section-title">Done by</h3>
-            <div className="ad-actor">
-              <span className={`ad-avatar ad-avatar--${entry.role || "other"}`} aria-hidden="true">{getInitials(entry.actor)}</span>
+          <section className="actd-section" aria-label="Done by">
+            <h3 className="actd-section-title">Done by</h3>
+            <div className="actd-actor">
+              <span className={`actd-avatar actd-avatar--${entry.role || "other"}`} aria-hidden="true">{getInitials(entry.actor)}</span>
               <div>
-                <p className="ad-student-name">{entry.actor || "Unknown"}</p>
-                <p className="ad-muted">{ACTIVITY_ROLE_LABELS[entry.role] || entry.role || "—"}</p>
+                <p className="actd-student-name">{entry.actor || "Unknown"}</p>
+                <p className="actd-muted">{ACTIVITY_ROLE_LABELS[entry.role] || entry.role || "—"}</p>
               </div>
             </div>
           </section>
         </div>
 
-        <footer className="ad-foot">Reference {String(entry.id).replace(/^db-/, "#")}</footer>
+        <footer className="actd-foot">Reference {String(entry.id).replace(/^db-/, "#")}</footer>
       </aside>
     </div>,
     document.body,
@@ -5469,6 +5510,8 @@ const BANK_ACTIVITY_ACTION_LABELS = {
   "auth.login_failed": "Failed sign-in attempt",
   "admin.update": "Updated an account",
   "admin.change_own_email": "Changed own email",
+  "admin.advisor_on": "Added themselves as an advisor",
+  "admin.advisor_off": "Removed themselves as an advisor",
   "company.create": "Created a company",
   "company.update": "Updated company details",
   "company.suspend": "Suspended a company",
@@ -5820,6 +5863,15 @@ export default function Admin() {
       if (r.success) setAllAdvisors(r.advisors || []);
     } catch { /* silent — advisor reassignment dropdown just won't show options */ }
   }, []);
+
+  // Superadmin: add or remove yourself as an advisor, then refresh the
+  // pickers so the change shows everywhere at once.
+  const setSelfAdvisor = useCallback(async (enabled) => {
+    const r = await callAPI("PUT", "/api/advisors/me", { enabled });
+    if (!r?.success) throw new Error(r?.error || "Couldn't save that. Try again.");
+    await refreshAccount();
+    await loadAdvisors();
+  }, [refreshAccount, loadAdvisors]);
 
   const loadPendingBankerRequests = useCallback(async () => {
     try {
@@ -6363,7 +6415,12 @@ export default function Admin() {
         )}
 
         {section === "advisors" && isAdminLevel(adminRole) && (
-          <AdvisorsSection students={students} allAdvisors={allAdvisors} onOpenAdvisor={(advisor) => openStudents({ advisor })} />
+          <AdvisorsSection
+            students={students}
+            allAdvisors={allAdvisors}
+            onOpenAdvisor={(advisor) => openStudents({ advisor })}
+            self={adminRole === "superadmin" ? { name: adminName, enabled: Boolean(adminAccount?.actsAsAdvisor), onToggle: setSelfAdvisor } : null}
+          />
         )}
 
         {section === "consultancies" && (
