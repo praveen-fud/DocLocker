@@ -76,6 +76,8 @@ import { useStudent } from "../../context/StudentContext";
 import { getAllStudentsFromDrive, deleteStudent, updateLoanStatus, uploadSanctionLetter, recoverMetaFromPdf, restoreMeta, buildFolderKey, getAuditLog, downloadAllFiles, downloadBundle } from "../../utils/driveApi";
 import { DOC_GROUPS, GROUP_OF_FOLDER, folderOfField } from "./documentFolders";
 import DocumentViewer from "../../components/DocumentViewer/DocumentViewer";
+import FileUploadBox from "../../components/FileUploadBox/FileUploadBox";
+import { extractPersonalAutoFill, extractCoApplicantAutoFill, getDocSourceLabel } from "../../utils/autoFillMap";
 import useFileObjectUrl from "../../hooks/useFileObjectUrl";
 import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields, coApplicantFields } from "../../context/schemas";
 import { BANK_OPTIONS, getBankLogo } from "../../utils/bankOptions";
@@ -2189,20 +2191,33 @@ function slotFiles(sectionUploads, fieldId) {
     .map(([, v]) => ({ id: v.id || v.fileId, name: v.name || v.fileName || fieldId, webViewLink: v.webViewLink }));
 }
 
+// Each slot also carries what staff need to upload into it: the schema
+// field, the section it's stored under and the folder - named exactly as
+// the student portal names them, so a staff upload is identical to the
+// student's own.
 function documentGroups(student) {
   const uploads = student.uploads || {};
   const p = student.personalInfo || {};
-  const group = (key, title, fields, sectionKey) => ({
+  const group = (key, title, fields, sectionKey, subFolder, renameOf = (f) => f.rename) => ({
     key, title,
-    items: fields.map((f) => ({ id: f.id, label: cleanDocLabel(f.label), required: !f.optional, files: slotFiles(uploads[sectionKey], f.id) })),
+    items: fields.map((f) => ({
+      id: f.id, label: cleanDocLabel(f.label), required: !f.optional, files: slotFiles(uploads[sectionKey], f.id),
+      upload: { sectionKey, subFolder, field: { ...f, rename: renameOf(f) } },
+    })),
   });
   const groups = [
-    group("applicant", "Identity & personal", DOCUMENT_SCHEMA.applicant.fields, "applicant"),
-    group("academics", "Academics & tests", DOCUMENT_SCHEMA.academics.fields, "academics"),
+    group("applicant", "Identity & personal", DOCUMENT_SCHEMA.applicant.fields, "applicant", "GOVT ID"),
+    group("academics", "Academics & tests", DOCUMENT_SCHEMA.academics.fields, "academics", "Academics"),
   ];
   for (let i = 0; i < (student.coApplicants || 0); i++) {
     const info = p[`co_info_${i}`] || {};
-    groups.push(group(`co_${i}`, `Co-applicant ${i + 1}${personName(info, "") ? ` · ${personName(info, "")}` : ""}`, coApplicantFields(info), `co_${i}`));
+    // Same rule as the portal's co-applicant step (Portal.jsx)
+    const coName = ([info.firstName, info.lastName].filter(Boolean).join(" ") || info.name || "").replace(/\s+/g, "_");
+    const statusSlug = (info.financialStatus || "financial") === "financial" ? "Financial" : "NonFinancial";
+    groups.push(group(
+      `co_${i}`, `Co-applicant ${i + 1}${personName(info, "") ? ` · ${personName(info, "")}` : ""}`, coApplicantFields(info), `co_${i}`,
+      `Loan/Co_Applicant_${i + 1}`, (f) => `Co${i + 1}_${coName || `Applicant${i + 1}`}_${statusSlug}_${f.rename}`,
+    ));
   }
   // Anything else the student added under their own names
   const known = new Set(["applicant", "academics", ...Array.from({ length: student.coApplicants || 0 }, (_, i) => `co_${i}`)]);
@@ -2214,6 +2229,115 @@ function documentGroups(student) {
     })));
   if (extra.length) groups.push({ key: "other", title: "Other documents", items: extra });
   return groups;
+}
+
+// What a staff upload changes on the student record - the same as the
+// student portal's handleUploaded: the slot's file, the read document, and
+// details read from it, filling ONLY empty fields (never what was typed).
+// record === null: a page was removed from a multi-page slot.
+function applyStaffUpload(student, sectionKey, fieldId, record) {
+  const uploads = { ...(student.uploads || {}) };
+  const section = { ...(uploads[sectionKey] || {}) };
+  if (record) section[fieldId] = record; else delete section[fieldId];
+  uploads[sectionKey] = section;
+  const next = { ...student, uploads };
+  const parsed = record?.parsedData;
+  if (!parsed) return next;
+
+  const docKey = (d) => `${d.subFolder}__${d.sourceFile}`;
+  next.uploadedDocuments = [...(student.uploadedDocuments || []).filter((d) => docKey(d) !== docKey(parsed)), parsed];
+  const info = { ...(student.personalInfo || {}) };
+  if (sectionKey.startsWith("co_")) {
+    const infoKey = `co_info_${sectionKey.slice(3)}`;
+    const co = { ...(info[infoKey] || {}) };
+    const af = extractCoApplicantAutoFill(parsed.type, parsed.fields || {});
+    for (const k of ["firstName", "lastName", "currentAddress", "permanentAddress"]) if (af[k] && !co[k]) co[k] = af[k];
+    info[infoKey] = co;
+  } else {
+    const mapped = extractPersonalAutoFill(parsed.type, parsed.fields || {});
+    const filled = { ...(student.autoFilledFields || {}) };
+    for (const [k, v] of Object.entries(mapped)) {
+      if (!info[k]) { info[k] = String(v); if (!filled[k]) filled[k] = getDocSourceLabel(parsed.type); }
+    }
+    next.autoFilledFields = filled;
+  }
+  next.personalInfo = info;
+  return next;
+}
+
+// Staff add a missing document (or another page) for a student, using the
+// same upload card as the student portal: locked-PDF check, compression,
+// the wrong-document check for ID slots, and the same file names.
+function StaffUploadDialog({ student, slot, onClose, onUploaded }) {
+  const [saveFailed, setSaveFailed] = useState(false);
+  const closeRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
+  useEffect(() => {
+    const opener = document.activeElement;
+    closeRef.current?.focus();
+    const onKey = (e) => { if (e.key === "Escape") onCloseRef.current(); };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      if (opener instanceof HTMLElement) opener.focus();
+    };
+  }, []);
+  const { sectionKey, subFolder, field } = slot.upload;
+  // Rendered inside the profile (not a portal), so the admin styles apply.
+  return (
+    <div className="modal-backdrop su-backdrop" onClick={onClose}>
+      <div className="loan-status-modal su-modal animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="su-title" onClick={(e) => e.stopPropagation()}>
+        <div className="lsm-header">
+          <div className="lsm-icon"><Upload size={20} /></div>
+          <div className="lsm-title-block">
+            <h3 className="lsm-title" id="su-title">Add {slot.label}</h3>
+            <p className="lsm-sub">For {displayName(student.name)}{slot.group ? ` · ${slot.group}` : ""}</p>
+          </div>
+          <button type="button" ref={closeRef} className="lsm-close" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="su-body">
+          <FileUploadBox
+            field={field}
+            // The student's exact folder key (as the profile's file listing
+            // uses), so the upload can never land in a new, duplicate folder.
+            studentName={student.studentKey || studentAuditTarget(student)}
+            studentIdentifier=""
+            subFolder={subFolder}
+            uploadedFiles={student.uploads?.[sectionKey] || {}}
+            onUploaded={(fieldId, record) => {
+              setSaveFailed(false);
+              Promise.resolve(onUploaded(sectionKey, fieldId, record)).then((ok) => { if (ok === false) setSaveFailed(true); });
+            }}
+          />
+          {saveFailed && (
+            <p className="su-warn" role="alert"><AlertTriangle size={15} aria-hidden="true" /> The file was uploaded, but the checklist didn&apos;t update. Close this, refresh, and check the Documents tab.</p>
+          )}
+          <p className="su-note">Saved to the student&apos;s file straight away. The student sees it in their portal, and it&apos;s recorded in the audit log.</p>
+          <div className="lsm-actions">
+            <button type="button" className="btn btn-primary" onClick={onClose}>Done</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// The upload action on a checklist row: "Upload" for a missing document,
+// "Add page" for a two-page slot (passport, Aadhaar) with one page in.
+function SlotUploadButton({ item, onUpload }) {
+  const f = item.upload?.field;
+  if (!f) return null;
+  const has = item.files.length > 0;
+  const morePages = has && f.multiple && item.files.length < (f.maxFiles || 2);
+  if (has && !morePages) return null;
+  return (
+    <button type="button" className={`sp-btn sp-btn--sm${has ? "" : " sp-btn--primary"}`} onClick={() => onUpload(item)}>
+      {has ? <Plus size={14} /> : <Upload size={14} />} {has ? "Add page" : "Upload"}
+    </button>
+  );
 }
 
 function ProfileRows({ rows }) {
@@ -2233,8 +2357,11 @@ function StudentProfile({
   student, position, onPrev, onNext, onClose, adminRole, bankers = [], isDuplicate,
   onLoanStatus, onUploadLetter, onEmailQueued, onEligibility, onShare, onOpenDrive, onRecover, onDelete, canManage,
   canEditAdvisor, onAdvisorSave, advisorOptions, canEditConsultancy, onConsultancySave, consultancySuggestions,
+  canUploadDocs, onStaffUpload,
 }) {
   const [tab, setTab] = useState("overview");
+  // Documents tab: the slot staff are adding a document to
+  const [uploadSlot, setUploadSlot] = useState(null);
   // A letter saved before letters were recorded on the student, found in
   // their Loan_Documents folder: undefined = not looked yet, null = none
   const [foundLetter, setFoundLetter] = useState(undefined);
@@ -2700,13 +2827,14 @@ function StudentProfile({
                             <span className="sp-check-label">{it.label}{!it.required && <em className="sp-optional">Optional</em>}</span>
                             <span className="sp-check-files">{has ? it.files.map((f) => f.name).join(", ") : "Not uploaded yet"}</span>
                           </span>
-                          {has && (
+                          {(has || canUploadDocs) && (
                             <span className="sp-check-actions">
                               {it.files.map((f, idx) => (
                                 f.id
                                   ? <button key={f.id} type="button" className="sp-btn sp-btn--sm" onClick={() => setViewing({ id: f.id, name: f.name, slot: it.label })}><Eye size={15} /> {it.files.length > 1 ? `Page ${idx + 1}` : "View"}</button>
                                   : f.webViewLink && <a key={idx} className="sp-btn sp-btn--sm" href={f.webViewLink} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} /> Drive</a>
                               ))}
+                              {canUploadDocs && <SlotUploadButton item={it} onUpload={(item) => setUploadSlot({ ...item, group: "Academic documents and passport" })} />}
                             </span>
                           )}
                         </li>
@@ -2787,13 +2915,14 @@ function StudentProfile({
                                 {has ? it.files.map((f) => f.name).join(", ") : "Not uploaded yet"}
                               </span>
                             </span>
-                            {has && (
+                            {(has || canUploadDocs) && (
                               <span className="sp-check-actions">
                                 {it.files.map((f, idx) => (
                                   f.id
                                     ? <button key={f.id} type="button" className="sp-btn sp-btn--sm" onClick={() => setViewing({ id: f.id, name: f.name, slot: it.label })}><Eye size={15} /> {it.files.length > 1 ? `Page ${idx + 1}` : "View"}</button>
                                     : f.webViewLink && <a key={idx} className="sp-btn sp-btn--sm" href={f.webViewLink} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} /> Drive</a>
                                 ))}
+                                {canUploadDocs && <SlotUploadButton item={it} onUpload={(item) => setUploadSlot({ ...item, group: g.title })} />}
                               </span>
                             )}
                           </li>
@@ -2830,6 +2959,14 @@ function StudentProfile({
           files={viewerFiles}
           subtitle={[name, appId, viewing.slot].filter(Boolean).join(" · ")}
           onClose={() => setViewing(null)}
+        />
+      )}
+      {uploadSlot && (
+        <StaffUploadDialog
+          student={student}
+          slot={uploadSlot}
+          onClose={() => setUploadSlot(null)}
+          onUploaded={(sectionKey, fieldId, record) => onStaffUpload?.(sectionKey, fieldId, record)}
         />
       )}
       {emailing && (
@@ -5965,6 +6102,30 @@ export default function Admin() {
   // name is added to the list by an admin, or sent by staff to an admin as a
   // request (POST /api/consultancies/assign). Resolves to
   // { requested, matches } so the editor can say which happened.
+  // A staff upload into a student's slot: record it on the student (same
+  // shape as a portal upload) and save. Saves run one after another, from
+  // the latest copy, so two pages uploaded together never overwrite each
+  // other. The file itself is already stored by the upload.
+  const uploadSaves = useRef(Promise.resolve());
+  const latestStudent = useRef(new Map());
+  const handleStaffUpload = (student, sectionKey, fieldId, record) => {
+    const key = student.studentKey || student.name;
+    uploadSaves.current = uploadSaves.current.then(async () => {
+      const base = latestStudent.current.get(key) || student;
+      const next = applyStaffUpload(base, sectionKey, fieldId, record);
+      latestStudent.current.set(key, next);
+      setStudents((prev) => prev.map((s) => ((s.studentKey || s.name) === key ? { ...s, ...next } : s)));
+      const meta = { ...next };
+      delete meta.driveUrl;
+      delete meta._parseError;
+      const r = await callAPI("POST", "/api/meta", { studentName: student.studentKey || studentAuditTarget(student), metaJson: JSON.stringify(meta) })
+        .catch(() => ({ success: false }));
+      if (!r?.success) setError(`The file was uploaded, but ${displayName(student.name)}'s checklist didn't update. Refresh and check the Documents tab.`);
+      return Boolean(r?.success);
+    });
+    return uploadSaves.current;
+  };
+
   const handleConsultancySave = async (student, value) => {
     if (consultancies === null) {
       // Consultancy list unavailable (Drive-only): the old free-text save
@@ -6812,6 +6973,8 @@ export default function Admin() {
             canEditAdvisor={isAdminLevel(adminRole)}
             onAdvisorSave={(value) => handleAdvisorSave(s, value)}
             advisorOptions={allAdvisors}
+            canUploadDocs={["superadmin", "admin", "advisor"].includes(adminRole)}
+            onStaffUpload={(sectionKey, fieldId, record) => handleStaffUpload(s, sectionKey, fieldId, record)}
             canEditConsultancy={adminRole === "advisor" || isAdminLevel(adminRole)}
             onConsultancySave={(value) => handleConsultancySave(s, value)}
             consultancySuggestions={consultancyList}

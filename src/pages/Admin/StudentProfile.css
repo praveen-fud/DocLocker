@@ -509,3 +509,17 @@ button.sp-dir-crumb:hover { background: var(--bg-hover); color: var(--primary); 
 .sp-dir-open .sp-dir-crumbs { margin-bottom: 4px; }
 .sp-study-sub { margin: 0 0 8px; }
 
+
+/* Staff upload: add a missing document from the Documents tab */
+.su-backdrop { z-index: 1150; }
+.loan-status-modal.su-modal { width: 520px; max-height: calc(100vh - 48px); display: flex; flex-direction: column; }
+.su-body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 22px 20px; }
+.su-body .doc-card { margin: 0; }
+.su-body .lsm-actions { margin-top: 16px; }
+.su-note { margin: 12px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-muted); }
+.su-warn { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; background: #fff4de; font-size: 13px; line-height: 1.45; color: #6b4700; }
+.su-warn svg { flex: none; margin-top: 2px; color: #8a5a00; }
+@media (max-width: 600px) {
+  .loan-status-modal.su-modal { max-height: calc(100vh - 24px); }
+  .su-body { padding: 16px; }
+}
