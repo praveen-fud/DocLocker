@@ -523,3 +523,11 @@ button.sp-dir-crumb:hover { background: var(--bg-hover); color: var(--primary); 
   .loan-status-modal.su-modal { max-height: calc(100vh - 24px); }
   .su-body { padding: 16px; }
 }
+
+/* Lenders the student tried before coming to us */
+.sp-prev { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.sp-prev-row { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
+.sp-prev-logo { width: 30px; height: 30px; flex: none; border-radius: 50%; object-fit: contain; background: #fff; box-shadow: 0 0 0 1px var(--border-subtle); }
+.sp-prev-text { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; font-size: 13.5px; color: var(--text-primary); }
+.sp-prev-text strong { overflow-wrap: anywhere; }
+.sp-prev-note { flex-basis: 100%; margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-secondary); overflow-wrap: anywhere; }

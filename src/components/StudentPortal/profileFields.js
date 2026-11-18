@@ -1,3 +1,5 @@
+import { priorBanksIncomplete } from "../../utils/previousLenders";
+
 // The profile details counted on each page of "Your details", and the few
 // a lender can't start without. Optional extras (test scores, CIBIL, the
 // second reference…) are left out of the count so 100% stays reachable.
@@ -62,6 +64,8 @@ export function profileProgress(info = {}) {
   const done = pages.reduce((a, p) => a + p.done, 0);
   const total = pages.reduce((a, p) => a + p.total, 0);
   const missingRequired = REQUIRED_DETAILS.filter((d) => !filled(info[d.key]));
+  // "Yes" to a lender before: each one needs why it said no.
+  if (priorBanksIncomplete(info)) missingRequired.push({ key: "priorBanks", label: "Why earlier lenders said no", page: 4 });
   return { pages, done, total, missingRequired };
 }
 

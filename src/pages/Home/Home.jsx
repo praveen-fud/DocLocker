@@ -44,7 +44,9 @@ import {
   signInApplicant,
   createApplicantPin,
   pinProblem,
+  fetchSignupAdvisors,
 } from "../../utils/applicantApi";
+import { AdvisorPicker } from "./SignupExtras";
 import PinInput from "../../components/PinInput/PinInput";
 import { deriveApplicationId } from "../../utils/applicationId";
 import { BANK_OPTIONS } from "../../utils/bankOptions";
@@ -269,7 +271,9 @@ export default function Home() {
     phone: "",
     pin: "",
     pinConfirm: "",
+    advisor: "",
   });
+  const [advisors, setAdvisors] = useState([]);
   // Per-field messages, shown once a field has been left or the form submitted
   const [fieldErrors, setFieldErrors] = useState({});
   const [lookup, setLookup] = useState("");
@@ -317,6 +321,17 @@ export default function Home() {
       .catch(() => { if (!cancelled) setCompany(false); });
     return () => { cancelled = true; };
   }, [companySlug]);
+
+  // The signup company's advisors, once the form is open and the company
+  // is known. No list (or no advisors) simply hides the picker.
+  useEffect(() => {
+    if (mode !== "new" || company === undefined || company === false) return undefined;
+    let cancelled = false;
+    fetchSignupAdvisors()
+      .then((list) => { if (!cancelled) setAdvisors(list); })
+      .catch(() => { if (!cancelled) setAdvisors([]); });
+    return () => { cancelled = true; };
+  }, [mode, company]);
 
   // A dead link wears no brand at all (BrandContext keeps it blank)
   useEffect(() => {
@@ -495,6 +510,7 @@ export default function Home() {
         phone,
         pin: form.pin,
         applicationId: deriveApplicationId({ email, phone }),
+        ...(form.advisor && { advisor: form.advisor }),
       });
       setStudent(student);
       navigate("/portal");
@@ -966,6 +982,8 @@ export default function Home() {
                       onBlur={() => touchField("phone")}
                     />
                   </Field>
+
+                  <AdvisorPicker advisors={advisors} value={form.advisor} onChange={(v) => updateField("advisor", v)} />
 
                   <PinField
                     id="lp-pin"

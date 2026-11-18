@@ -748,3 +748,7 @@
   border: 1px solid var(--border);
   padding: 2px;
 }
+
+/* ── Signup: advisor picker (SignupExtras.jsx) ── */
+.lp-select { appearance: none; padding-right: 40px; cursor: pointer; }
+.lp-select__chev { position: absolute; right: 14px; color: var(--text-muted); pointer-events: none; }

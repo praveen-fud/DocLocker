@@ -15,6 +15,7 @@
 // unstyled, 6-page PDF.
 import { companyHeaders, getStudentCompany, companyLogoSrc } from "./company";
 import { applicantHeaders } from "./applicantApi";
+import { priorBanksText } from "./previousLenders";
 import jsPDF from "jspdf";
 import { DOCUMENT_SCHEMA, getTotalRequiredFields, countUploadedFields, coApplicantFields } from "../context/schemas";
 import templateCss from "./summaryPdfTemplate.css?inline";
@@ -188,9 +189,8 @@ function buildModel(studentName, studentData) {
 
   const history = {
     appliedBefore: p.priorBankApplied,
-    bankAppliedTo: p.priorBankApplied === "Yes"
-      ? (p.priorBankName === "Others" ? p.priorBankNameCustom : p.priorBankName)
-      : "",
+    // Every lender tried before, with why it said no
+    bankAppliedTo: priorBanksText(p),
     ownsHouse: p.ownHouseStatus,
     employed: p.hasJobDetails,
     jobDetails: p.hasJobDetails === "Yes" ? p.jobSpecs : "",
@@ -630,7 +630,7 @@ function renderFamilySection(num, f) {
 function renderHistorySection(num, h) {
   const body = grid([
     row("Prior Bank Applied", h.appliedBefore),
-    row("Bank Name", h.bankAppliedTo),
+    row("Lenders & Why They Said No", h.bankAppliedTo, true),
     row("Own House", h.ownsHouse),
     row("Has Job", h.employed),
     row("Job Details", h.jobDetails),

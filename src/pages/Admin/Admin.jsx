@@ -81,6 +81,7 @@ import { extractPersonalAutoFill, extractCoApplicantAutoFill, getDocSourceLabel 
 import useFileObjectUrl from "../../hooks/useFileObjectUrl";
 import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields, coApplicantFields } from "../../context/schemas";
 import { BANK_OPTIONS, getBankLogo } from "../../utils/bankOptions";
+import { priorBanksOf, reasonLabel, reasonHint } from "../../utils/previousLenders";
 import BrandLogo from "../../components/BrandLogo/BrandLogo";
 import CountUp from "../../components/CountUp/CountUp";
 import { LenderMarquee } from "../Home/LandingVisuals";
@@ -1762,7 +1763,7 @@ function ReportModal({ student, onClose }) {
                 <div className="rpt-sc-label">Prior Bank</div>
                 <div className="rpt-sc-val">
                   {p.priorBankApplied === "Yes"
-                    ? p.priorBankName === "Others" ? p.priorBankNameCustom : p.priorBankName || "Yes"
+                    ? priorBanksOf(p).map((l) => l.bank).join(", ") || "Yes"
                     : p.priorBankApplied || "—"}
                 </div>
               </div>
@@ -2129,7 +2130,7 @@ function profileSections(student) {
       id: "loan", title: "Loan & finances", icon: Banknote, rows: [
         { label: "Loan amount", value: inr(p.loanAmount) },
         { label: "Student CIBIL", value: p.studentCibil },
-        { label: "Applied to a bank before", value: p.priorBankApplied === "Yes" ? `Yes${(p.priorBankName === "Others" ? p.priorBankNameCustom : p.priorBankName) ? ` · ${p.priorBankName === "Others" ? p.priorBankNameCustom : p.priorBankName}` : ""}` : p.priorBankApplied },
+        { label: "Applied to a bank before", value: p.priorBankApplied === "Yes" ? `Yes${priorBanksOf(p).length ? ` · ${priorBanksOf(p).map((l) => l.bank).join(", ")}` : ""}` : p.priorBankApplied },
         { label: "Family owns a house", value: p.ownHouseStatus },
         { label: "Working", value: p.hasJobDetails === "Yes" ? `Yes${p.jobSpecs ? ` · ${p.jobSpecs}` : ""}` : p.hasJobDetails, wide: p.hasJobDetails === "Yes" },
         { label: "Consultancy", value: [p.consultantNameLoc, p.consultantContact].filter(Boolean).join(" · "), wide: true },
@@ -2235,6 +2236,14 @@ function documentGroups(student) {
 // student portal's handleUploaded: the slot's file, the read document, and
 // details read from it, filling ONLY empty fields (never what was typed).
 // record === null: a page was removed from a multi-page slot.
+// A student copy as stored: without the fields the students list adds.
+function storedCopy(student) {
+  const meta = { ...student };
+  delete meta.driveUrl;
+  delete meta._parseError;
+  return meta;
+}
+
 function applyStaffUpload(student, sectionKey, fieldId, record) {
   const uploads = { ...(student.uploads || {}) };
   const section = { ...(uploads[sectionKey] || {}) };
@@ -2429,6 +2438,7 @@ function StudentProfile({
   const hasPhoto = !!photo?.id && /\.(jpe?g|png|webp|gif)$/i.test(photo.name || "") && !photoFailed;
   const updated = student.updatedAt ? new Date(student.updatedAt) : null;
   const p = student.personalInfo || {};
+  const priorBanks = priorBanksOf(p);
 
   // Esc closes — unless a dialog opened from here (viewer, loan status…) is on top.
   useEffect(() => {
@@ -2662,6 +2672,27 @@ function StudentProfile({
                   <ProfileRows rows={glance} />
                   <button type="button" className="sp-link sp-card-more" onClick={() => setTab("profile")}>See full profile <ArrowRight size={14} /></button>
                 </section>
+
+                {priorBanks.length > 0 && (
+                  <section className="sp-card" aria-labelledby="sp-prev-title">
+                    <h3 className="sp-card-title" id="sp-prev-title">
+                      <History size={16} /> Tried before
+                      <span className="sp-card-count">{priorBanks.length} lender{priorBanks.length === 1 ? "" : "s"}</span>
+                    </h3>
+                    <ul className="sp-prev">
+                      {priorBanks.map((l) => (
+                        <li key={l.bank} className="sp-prev-row">
+                          <img src={getBankLogo(l.bank)} alt="" className="sp-prev-logo" />
+                          <div className="sp-prev-text">
+                            <strong>{l.bank}</strong>
+                            {l.reason && <span className="sp-chip" title={reasonHint(l.reason)}>{reasonLabel(l.reason)}</span>}
+                            {l.note && <p className="sp-prev-note">{l.note}</p>}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
 
                 {canEditConsultancy && (
                   <section className="sp-card">
@@ -3604,9 +3635,7 @@ function GrantBankAccessModal({ student, onClose, onAccessChanged, adminRole, on
   }, [student.name, identifier]);
 
   const p = student.personalInfo || {};
-  const excludedBank = p.priorBankApplied === "Yes"
-    ? (p.priorBankName === "Others" ? p.priorBankNameCustom : p.priorBankName)
-    : "";
+  const excludedBank = priorBanksOf(p).map((l) => l.bank).join(", ");
 
   const toggleAccess = async (bankerName) => {
     const grant = !shared.has(bankerName);
@@ -6115,10 +6144,13 @@ export default function Admin() {
       const next = applyStaffUpload(base, sectionKey, fieldId, record);
       latestStudent.current.set(key, next);
       setStudents((prev) => prev.map((s) => ((s.studentKey || s.name) === key ? { ...s, ...next } : s)));
-      const meta = { ...next };
-      delete meta.driveUrl;
-      delete meta._parseError;
-      const r = await callAPI("POST", "/api/meta", { studentName: student.studentKey || studentAuditTarget(student), metaJson: JSON.stringify(meta) })
+      // base: only this upload's change lands on the stored record, so the
+      // student's own newer edits are kept (Backend services/recordMerge.js).
+      const r = await callAPI("POST", "/api/meta", {
+        studentName: student.studentKey || studentAuditTarget(student),
+        metaJson: JSON.stringify(storedCopy(next)),
+        baseJson: JSON.stringify(storedCopy(base)),
+      })
         .catch(() => ({ success: false }));
       if (!r?.success) setError(`The file was uploaded, but ${displayName(student.name)}'s checklist didn't update. Refresh and check the Documents tab.`);
       return Boolean(r?.success);
@@ -6129,11 +6161,13 @@ export default function Admin() {
   const handleConsultancySave = async (student, value) => {
     if (consultancies === null) {
       // Consultancy list unavailable (Drive-only): the old free-text save
-      const meta = { ...student };
-      delete meta.driveUrl;
-      delete meta._parseError;
+      const meta = storedCopy(student);
       const updatedMeta = { ...meta, personalInfo: { ...(meta.personalInfo || {}), consultantNameLoc: value } };
-      const r = await callAPI("POST", "/api/meta", { studentName: buildFolderKey(student.name, student.email || student.phone || ""), metaJson: JSON.stringify(updatedMeta) });
+      const r = await callAPI("POST", "/api/meta", {
+        studentName: buildFolderKey(student.name, student.email || student.phone || ""),
+        metaJson: JSON.stringify(updatedMeta),
+        baseJson: JSON.stringify(meta),
+      });
       if (!r.success) throw new Error(r.error || "Could not save consultancy");
       setStudents((prev) => prev.map((s) => (s.name === student.name ? { ...s, personalInfo: updatedMeta.personalInfo } : s)));
       return { requested: false };
@@ -6155,15 +6189,16 @@ export default function Admin() {
   // (scopedStudents above), so a reassignment immediately moves the student
   // off the old advisor's dashboard and onto the new one's.
   const handleAdvisorSave = async (student, value) => {
-    const meta = { ...student };
-    delete meta.driveUrl;
-    delete meta._parseError;
+    // This list copy may be hours old: sending it as the base means only the
+    // advisor changes on the stored record, not everything the student did since.
+    const meta = storedCopy(student);
     const updatedMeta = { ...meta, advisor: value };
     const identifier = student.email || student.phone || "";
     const folderKey = buildFolderKey(student.name, identifier);
     const r = await callAPI("POST", "/api/meta", {
       studentName: folderKey,
       metaJson: JSON.stringify(updatedMeta),
+      baseJson: JSON.stringify(meta),
     });
     if (!r.success) throw new Error(r.error || "Could not save advisor");
     setStudents((prev) =>

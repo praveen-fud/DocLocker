@@ -79,6 +79,8 @@ function signedIn(data) {
 }
 
 export const registerApplicant = async (details) => signedIn(await call('POST', '/api/applicant/register', details));
+// The signup company's advisors (names only) for the advisor picker.
+export const fetchSignupAdvisors = async () => (await call('GET', '/api/applicant/advisors')).advisors || [];
 export const lookupApplicant = (identifier) => call('POST', '/api/applicant/lookup', { identifier });
 export const signInApplicant = async (identifier, pin) => signedIn(await call('POST', '/api/applicant/sign-in', { identifier, pin }));
 export const createApplicantPin = async (identifier, pin) => signedIn(await call('POST', '/api/applicant/create-pin', { identifier, pin }));

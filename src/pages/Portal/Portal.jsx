@@ -43,6 +43,7 @@ import { DASHBOARD_TABS } from "../../components/StudentPortal/portalTabs";
 import ApplicationWizard from "../../components/StudentPortal/ApplicationWizard";
 import ApplicantDashboard from "../../components/StudentPortal/ApplicantDashboard";
 import ConfirmDialog from "../../components/StudentPortal/ConfirmDialog";
+import PriorLenders from "../../components/StudentPortal/PriorLenders";
 import HelpCenter from "../../components/StudentPortal/HelpCenter";
 import { AIVerificationPanel } from "../../components/StudentPortal/PortalRail";
 import { PROFILE_PAGES, profileProgress, pageProgress } from "../../components/StudentPortal/profileFields";
@@ -160,6 +161,9 @@ export default function Portal() {
   const reviewRef       = useRef(reviewFields);
   const saveSeq         = useRef(0);
   const editVersion     = useRef(0);
+  // The record as last loaded or saved (see persist)
+  const baseRef         = useRef(student);
+  const saveChain       = useRef(Promise.resolve());
 
   useEffect(() => { uploadsRef.current    = uploads;           }, [uploads]);
   useEffect(() => { personalRef.current   = personalInfo;      }, [personalInfo]);
@@ -231,23 +235,35 @@ export default function Portal() {
 
   // Saves the record and reports the real result to the header indicator.
   // Resolves true/false; never throws.
+  // Saves go one at a time, each sending the record as last saved (base), so
+  // the server keeps anything staff changed meanwhile, such as a document
+  // they uploaded. A save still waiting when a newer one arrives is skipped:
+  // the newer record already holds its changes.
   const persist = (record) => {
     const seq = ++saveSeq.current;
     const version = editVersion.current;
     setSaveStatus("saving");
-    return saveStudentMeta(student.name, record, studentIdentifier, { throwOnError: true })
-      .then(() => {
-        if (seq === saveSeq.current) {
-          setSaveStatus(version === editVersion.current ? "saved" : "dirty");
-          setSavedAt(Date.now());
-        }
-        return true;
-      })
-      .catch((err) => {
-        if (err?.applicantSignIn) signOut();
-        if (seq === saveSeq.current) setSaveStatus("error");
-        return false;
-      });
+    const run = saveChain.current.then(() => {
+      if (seq !== saveSeq.current) return null;
+      return saveStudentMeta(student.name, record, studentIdentifier, { throwOnError: true, base: baseRef.current })
+        .then(() => {
+          baseRef.current = record;
+          if (seq === saveSeq.current) {
+            setSaveStatus(version === editVersion.current ? "saved" : "dirty");
+            setSavedAt(Date.now());
+          }
+          return true;
+        })
+        .catch((err) => {
+          if (err?.applicantSignIn) signOut();
+          if (seq === saveSeq.current) setSaveStatus("error");
+          return false;
+        });
+    });
+    saveChain.current = run;
+    // A skipped save reports the outcome of the newer one that carried it.
+    const settle = (p) => p.then((ok) => (ok === null ? settle(saveChain.current) : ok));
+    return settle(run);
   };
 
   const markDirty = () => {
@@ -1304,32 +1320,7 @@ function PersonalAndRefsSection({ info, onChange, autoFilledFields, subStep, set
             <>
               <FormGroup title="Prior loan history & assets">
                 <SelectField label="Applied to any bank before?" k="priorBankApplied" options={NO_YES} placeholder="Select option" info={info} onChange={onChange} />
-                {info.priorBankApplied === "Yes" && (
-                  <SelectField
-                    label="Which bank?"
-                    k="priorBankName"
-                    placeholder="Select bank"
-                    options={[
-                      "HDFC Bank",
-                      "HDFC Credila Financial Services",
-                      "Avanse Financial Services",
-                      "Auxilo Finserve",
-                      "InCred Finance",
-                      "Tata Capital",
-                      "Poonawalla Fincorp",
-                      "IDFC FIRST Bank",
-                      "ICICI Bank",
-                      "Axis Bank",
-                      "YES Bank",
-                      "Others",
-                    ]}
-                    info={info}
-                    onChange={onChange}
-                  />
-                )}
-                {info.priorBankApplied === "Yes" && info.priorBankName === "Others" && (
-                  <PersonalField label="Bank name" k="priorBankNameCustom" placeholder="Type bank name here" info={info} onChange={onChange} />
-                )}
+                {info.priorBankApplied === "Yes" && <PriorLenders info={info} onChange={onChange} />}
                 <SelectField label="Family owns a house?" k="ownHouseStatus" options={YES_NO} placeholder="Select status" info={info} onChange={onChange} />
               </FormGroup>
 

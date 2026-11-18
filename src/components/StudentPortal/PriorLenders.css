@@ -1,0 +1,47 @@
+/* "Applied to any bank before?" lenders + reasons (PriorLenders.jsx) */
+.pl { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.pl-lead { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
+
+.pl-banks { display: flex; flex-wrap: wrap; gap: 8px; }
+.pl-bank {
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 38px; padding: 0 12px 0 6px;
+  border: 1px solid var(--border-strong); border-radius: 999px;
+  background: var(--surface); font: inherit; font-size: 13px; font-weight: 600; color: var(--text-secondary);
+  cursor: pointer; transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+.pl-bank:hover { border-color: var(--brand-primary); color: var(--text-primary); }
+.pl-bank[aria-pressed="true"] { border-color: var(--brand-primary); background: var(--surface-blue); color: var(--brand-primary); }
+.pl-bank__plus { margin-left: 6px; }
+.pl-logo { width: 26px; height: 26px; flex: none; border-radius: 50%; object-fit: contain; background: #fff; box-shadow: 0 0 0 1px var(--border); }
+
+.pl-card { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid var(--border); border-left-width: 3px; border-radius: var(--radius-md); background: var(--surface-subtle); }
+.pl-card.is-open { border-left-color: var(--warning); }
+.pl-card.is-done { border-left-color: var(--success); }
+.pl-card__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pl-name { flex: 1; min-width: 0; font-size: 14px; color: var(--text-primary); overflow-wrap: anywhere; }
+.pl .pl-name-input { flex: 1; min-width: 0; height: 40px; }
+.pl-remove { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border: 0; border-radius: 8px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.pl-remove:hover { background: var(--surface-muted); color: var(--text-primary); }
+.pl-q { margin: 2px 0 0; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+
+.pl-reasons { display: flex; flex-wrap: wrap; gap: 6px; }
+.pl-reason {
+  min-height: 34px; padding: 0 11px;
+  border: 1px solid var(--border-strong); border-radius: 8px;
+  background: var(--surface); font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-secondary);
+  cursor: pointer; transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+.pl-reason:hover { border-color: var(--brand-primary); color: var(--text-primary); }
+.pl-reason[aria-checked="true"] { border-color: var(--brand-primary); background: var(--brand-primary); color: #fff; }
+.pl-hint { display: flex; gap: 7px; align-items: flex-start; min-height: 36px; margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-muted); }
+.pl-hint svg { flex: none; margin-top: 2px; }
+.pl-hint.is-on { color: var(--text-secondary); }
+.pl-hint.is-on svg { color: var(--brand-primary); }
+.pl .pl-note { height: auto; min-height: 64px; padding: 10px 12px; line-height: 1.45; resize: vertical; }
+.pl-todo { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--warning-text); }
+
+.pl-add { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px dashed var(--border-strong); border-radius: 999px; background: transparent; font: inherit; font-size: 13px; font-weight: 600; color: var(--brand-primary); cursor: pointer; }
+.pl-add:hover { background: var(--surface-blue); }
+
+.pl-bank:focus-visible, .pl-reason:focus-visible, .pl-remove:focus-visible, .pl-add:focus-visible { outline: none; box-shadow: var(--focus-ring); }

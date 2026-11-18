@@ -160,7 +160,11 @@ export async function uploadDocument({ studentName, studentIdentifier, subFolder
 // throwOnError: opt in to a Promise that settles with the real outcome (and
 // rejects on failure) so the caller can show an honest "Saved" / "Couldn't
 // save" state. Without it, failures are logged and swallowed as before.
-export function saveStudentMeta(studentName, meta, studentIdentifier = '', { throwOnError = false } = {}) {
+// base: the copy of the record this editor started from. With it the server
+// applies only this editor's own changes on top of what is stored now, so a
+// save never wipes newer work by someone else (Backend services/recordMerge.js).
+export function saveStudentMeta(studentName, meta, studentIdentifier = '', { throwOnError = false, base } = {}) {
+  const baseJson = base ? { baseJson: JSON.stringify(base) } : {};
   const hasAdminToken = hasStaffSession();
   const swallow = (label) => (e) => {
     console.warn(`[DriveSync] ${label} failed${throwOnError ? '' : ' silently'}:`, e.message);
@@ -168,12 +172,12 @@ export function saveStudentMeta(studentName, meta, studentIdentifier = '', { thr
   };
   if (hasAdminToken) {
     const folderKey = buildFolderKey(studentName, studentIdentifier);
-    const req = apiPost('/api/meta', { studentName: folderKey, metaJson: JSON.stringify(meta) })
+    const req = apiPost('/api/meta', { studentName: folderKey, metaJson: JSON.stringify(meta), ...baseJson })
       .catch(swallow('saveMeta'));
     return throwOnError ? req : Promise.resolve();
   } else {
     // The application comes from the applicant's PIN session.
-    return apiPost('/api/student-meta', { metaJson: JSON.stringify(meta) })
+    return apiPost('/api/student-meta', { metaJson: JSON.stringify(meta), ...baseJson })
       .catch(swallow('student-meta'));
   }
 }
