@@ -531,3 +531,44 @@ button.sp-dir-crumb:hover { background: var(--bg-hover); color: var(--primary); 
 .sp-prev-text { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; font-size: 13.5px; color: var(--text-primary); }
 .sp-prev-text strong { overflow-wrap: anywhere; }
 .sp-prev-note { flex-basis: 100%; margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-secondary); overflow-wrap: anywhere; }
+
+/* ── Page mode: the profile replaces the main content (not a sheet over it) ── */
+.admin-container--profile { padding-top: 20px; }
+.sp-page { animation: sp-page-in 220ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes sp-page-in { from { opacity: 0; transform: translateY(8px); } }
+.sp-page .sp-sheet {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  box-shadow: var(--shadow-card);
+  animation: none;
+}
+.sp-page .sp-head { border-radius: 20px 20px 0 0; }
+.sp-page .sp-body { flex: none; overflow: visible; }
+.sp-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-surface);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+}
+.sp-back:hover { border-color: var(--border-accent); color: var(--primary); background: var(--primary-tint-strong); }
+.sp-back:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--primary-ring); }
+@media (max-width: 640px) {
+  .admin-container--profile { padding-top: 8px; }
+  .sp-page .sp-sheet { overflow: visible; border-radius: 16px; }
+  .sp-page .sp-head { border-radius: 16px 16px 0 0; }
+}
+@media (prefers-reduced-motion: reduce) { .sp-page { animation: none; } }

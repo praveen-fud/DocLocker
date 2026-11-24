@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
@@ -55,6 +55,7 @@ import {
   Menu,
   ArrowUpRight,
   ArrowRight,
+  ArrowLeft,
   Filter,
   Landmark,
   LogIn,
@@ -81,7 +82,9 @@ import { extractPersonalAutoFill, extractCoApplicantAutoFill, getDocSourceLabel 
 import useFileObjectUrl from "../../hooks/useFileObjectUrl";
 import { DOCUMENT_SCHEMA, CO_APPLICANT_SCHEMA, getTotalRequiredFields, coApplicantFields } from "../../context/schemas";
 import { BANK_OPTIONS, getBankLogo } from "../../utils/bankOptions";
-import { priorBanksOf, reasonLabel, reasonHint } from "../../utils/previousLenders";
+import { priorBanksOf } from "../../utils/previousLenders";
+import { assessLoanChance } from "../../utils/loanChance";
+import { LoanChanceCard, PriorLendersCard } from "./StudentOverview";
 import BrandLogo from "../../components/BrandLogo/BrandLogo";
 import CountUp from "../../components/CountUp/CountUp";
 import { LenderMarquee } from "../Home/LandingVisuals";
@@ -2387,8 +2390,6 @@ function StudentProfile({
   // The student's applicant PIN: null = not loaded, then { hasPin, note }
   const [pin, setPin] = useState(null);
   const closeRef = useRef(null);
-  const onCloseRef = useRef(onClose);
-  useEffect(() => { onCloseRef.current = onClose; });
 
   const canSeeActivity = isAdminLevel(adminRole);
   const name = displayName(student.name);
@@ -2438,21 +2439,13 @@ function StudentProfile({
   const hasPhoto = !!photo?.id && /\.(jpe?g|png|webp|gif)$/i.test(photo.name || "") && !photoFailed;
   const updated = student.updatedAt ? new Date(student.updatedAt) : null;
   const p = student.personalInfo || {};
-  const priorBanks = priorBanksOf(p);
 
-  // Esc closes — unless a dialog opened from here (viewer, loan status…) is on top.
+  // A page of its own: start at the top, focus on the way back.
   useEffect(() => {
-    closeRef.current?.focus();
-    const onKey = (e) => {
-      if (e.key !== "Escape") return;
-      if (document.querySelector(".modal-backdrop, .dv-backdrop, .actd-backdrop, .rpt-backdrop")) return;
-      onCloseRef.current();
-    };
-    document.addEventListener("keydown", onKey);
-    const { overflow } = document.body.style;
-    document.body.style.overflow = "hidden";
-    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = overflow; };
+    window.scrollTo({ top: 0 });
+    closeRef.current?.focus({ preventScroll: true });
   }, []);
+  const chance = useMemo(() => assessLoanChance(student), [student]);
 
   // This student's audit trail, loaded the first time Activity (or the
   // overview preview) needs it.
@@ -2545,15 +2538,15 @@ function StudentProfile({
   const loanCfg = LOAN_STATUS_CONFIG[student.loanStatus || "pending"] || LOAN_STATUS_CONFIG.pending;
 
   return (
-    <div className="sp-backdrop" onClick={onClose}>
-      <section className="sp-sheet" role="dialog" aria-modal="true" aria-labelledby="sp-name" onClick={(e) => e.stopPropagation()}>
+    <div className="sp-page">
+      <section className="sp-sheet" aria-labelledby="sp-name">
         {/* ── Header ── */}
         <header className="sp-head">
           <div className="sp-topbar">
-            <button type="button" ref={closeRef} className="sp-icon-btn" onClick={onClose} aria-label="Close student profile">
-              <X size={18} />
+            <button type="button" ref={closeRef} className="sp-back" onClick={onClose}>
+              <ArrowLeft size={16} aria-hidden="true" /> Students
             </button>
-            <span className="sp-crumb">Students <ChevronRight size={14} aria-hidden="true" /> <strong>{name}</strong></span>
+            <span className="sp-crumb" aria-hidden="true"><ChevronRight size={14} /> <strong>{name}</strong></span>
             {position && (
               <span className="sp-pager">
                 <span className="sp-pager-count">{position.index + 1} of {position.total}</span>
@@ -2647,6 +2640,7 @@ function StudentProfile({
 
         {/* ── Body ── */}
         <div className="sp-body">
+          {tab === "overview" && <LoanChanceCard chance={chance} />}
           {tab === "overview" && (
             <div className="sp-overview">
               <div className="sp-col">
@@ -2667,32 +2661,14 @@ function StudentProfile({
                   )}
                 </section>
 
+                <PriorLendersCard personalInfo={p} />
+
                 <section className="sp-card">
                   <h3 className="sp-card-title">At a glance</h3>
                   <ProfileRows rows={glance} />
                   <button type="button" className="sp-link sp-card-more" onClick={() => setTab("profile")}>See full profile <ArrowRight size={14} /></button>
                 </section>
 
-                {priorBanks.length > 0 && (
-                  <section className="sp-card" aria-labelledby="sp-prev-title">
-                    <h3 className="sp-card-title" id="sp-prev-title">
-                      <History size={16} /> Tried before
-                      <span className="sp-card-count">{priorBanks.length} lender{priorBanks.length === 1 ? "" : "s"}</span>
-                    </h3>
-                    <ul className="sp-prev">
-                      {priorBanks.map((l) => (
-                        <li key={l.bank} className="sp-prev-row">
-                          <img src={getBankLogo(l.bank)} alt="" className="sp-prev-logo" />
-                          <div className="sp-prev-text">
-                            <strong>{l.bank}</strong>
-                            {l.reason && <span className="sp-chip" title={reasonHint(l.reason)}>{reasonLabel(l.reason)}</span>}
-                            {l.note && <p className="sp-prev-note">{l.note}</p>}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                )}
 
                 {canEditConsultancy && (
                   <section className="sp-card">
@@ -5973,6 +5949,41 @@ export default function Admin() {
   // raw folder-key name) — the wrong row would appear expanded, showing one
   // student's data on another student's row.
   const [expandedKey, setExpandedKey] = useState(null);
+
+  // The profile is a page: the browser's Back button returns to the list,
+  // the list comes back where it was scrolled, and choosing another section
+  // in the sidebar leaves the profile. (Nothing about the student goes in
+  // the URL — it would end up in browser history.)
+  const profileOpen = Boolean(expandedKey);
+  const listScroll = useRef(0);
+  const profileSection = useRef(null);
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (!profileOpen) {
+      if (wasOpen.current) requestAnimationFrame(() => window.scrollTo({ top: listScroll.current }));
+      wasOpen.current = false;
+      const onScroll = () => { listScroll.current = window.scrollY; };
+      window.addEventListener("scroll", onScroll, { passive: true });
+      return () => window.removeEventListener("scroll", onScroll);
+    }
+    wasOpen.current = true;
+    profileSection.current = section;
+    window.history.pushState({ ...(window.history.state || {}), docLockerProfile: true }, "");
+    const onPop = () => { setExpandedKey(null); setProfileList(null); };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+    // Only when a profile opens or closes; `section` is read at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileOpen]);
+  useEffect(() => {
+    if (profileOpen && section !== profileSection.current) { setExpandedKey(null); setProfileList(null); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section]);
+  // Close = go back, so the browser history stays in step.
+  const closeProfile = () => {
+    if (window.history.state?.docLockerProfile) window.history.back();
+    else { setExpandedKey(null); setProfileList(null); }
+  };
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -6550,6 +6561,14 @@ export default function Admin() {
     </div>
   );
 
+  // The open student's profile: a page in place of the main content.
+  const profileSteps = profileList
+    ? profileList.map((k) => scopedStudents.find((x) => studentKey(x) === k)).filter(Boolean)
+    : filtered;
+  const profileIndex = expandedKey ? profileSteps.findIndex((x) => studentKey(x) === expandedKey) : -1;
+  const profileStudent = profileIndex >= 0 ? profileSteps[profileIndex] : null;
+  const goProfile = (i) => () => setExpandedKey(studentKey(profileSteps[i]));
+
   return (
     <div className="admin-shell theme-orbit orbit-backdrop">
       {/* Shift + drop a file anywhere here opens the File Converter */}
@@ -6571,7 +6590,38 @@ export default function Admin() {
     <div className="admin-page admin-page--shell">
       <AdminMobileBar onOpenMenu={() => setMobileNavOpen(true)} menuOpen={mobileNavOpen} />
 
-      <main className="admin-container">
+      <main className={`admin-container${profileStudent ? " admin-container--profile" : ""}`}>
+        {profileStudent && (
+          <StudentProfile
+            key={studentKey(profileStudent)}
+            student={profileStudent}
+            position={{ index: profileIndex, total: profileSteps.length }}
+            onPrev={profileIndex > 0 ? goProfile(profileIndex - 1) : null}
+            onNext={profileIndex < profileSteps.length - 1 ? goProfile(profileIndex + 1) : null}
+            onClose={closeProfile}
+            adminRole={adminRole}
+            bankers={bankers}
+            isDuplicate={isDuplicateStudent(profileStudent)}
+            canManage={isAdminLevel(adminRole)}
+            onLoanStatus={() => setLoanStatusStudent(profileStudent)}
+            onUploadLetter={() => setLetterStudent(profileStudent)}
+            onEmailQueued={(job) => setEmailJobs((prev) => [...prev, job])}
+            onEligibility={() => setReportStudent(profileStudent)}
+            onShare={() => setBankStudent(profileStudent)}
+            onOpenDrive={() => openDriveFolder(profileStudent)}
+            onRecover={() => setRecoverStudent(profileStudent)}
+            onDelete={() => setConfirmDelete(profileStudent)}
+            canEditAdvisor={isAdminLevel(adminRole)}
+            onAdvisorSave={(value) => handleAdvisorSave(profileStudent, value)}
+            advisorOptions={allAdvisors}
+            canUploadDocs={["superadmin", "admin", "advisor"].includes(adminRole)}
+            onStaffUpload={(sectionKey, fieldId, record) => handleStaffUpload(profileStudent, sectionKey, fieldId, record)}
+            canEditConsultancy={adminRole === "advisor" || isAdminLevel(adminRole)}
+            onConsultancySave={(value) => handleConsultancySave(profileStudent, value)}
+            consultancySuggestions={consultancyList}
+          />
+        )}
+        <div className="adm-main" hidden={Boolean(profileStudent)}>
         <div className="adm-header">
           <div className="adm-header-text">
             {section === "dashboard" && (
@@ -6973,49 +7023,10 @@ export default function Admin() {
         </section>
         )}
 
+        </div>
       </main>
     </div>
 
-      {/* Student profile — the selected row, with previous / next through the current list */}
-      {(() => {
-        const list = profileList
-          ? profileList.map((k) => scopedStudents.find((x) => studentKey(x) === k)).filter(Boolean)
-          : filtered;
-        const index = list.findIndex((x) => studentKey(x) === expandedKey);
-        if (index < 0) return null;
-        const s = list[index];
-        const go = (i) => () => setExpandedKey(studentKey(list[i]));
-        return (
-          <StudentProfile
-            key={studentKey(s)}
-            student={s}
-            position={{ index, total: list.length }}
-            onPrev={index > 0 ? go(index - 1) : null}
-            onNext={index < list.length - 1 ? go(index + 1) : null}
-            onClose={() => { setExpandedKey(null); setProfileList(null); }}
-            adminRole={adminRole}
-            bankers={bankers}
-            isDuplicate={isDuplicateStudent(s)}
-            canManage={isAdminLevel(adminRole)}
-            onLoanStatus={() => setLoanStatusStudent(s)}
-            onUploadLetter={() => setLetterStudent(s)}
-            onEmailQueued={(job) => setEmailJobs((prev) => [...prev, job])}
-            onEligibility={() => setReportStudent(s)}
-            onShare={() => setBankStudent(s)}
-            onOpenDrive={() => openDriveFolder(s)}
-            onRecover={() => setRecoverStudent(s)}
-            onDelete={() => setConfirmDelete(s)}
-            canEditAdvisor={isAdminLevel(adminRole)}
-            onAdvisorSave={(value) => handleAdvisorSave(s, value)}
-            advisorOptions={allAdvisors}
-            canUploadDocs={["superadmin", "admin", "advisor"].includes(adminRole)}
-            onStaffUpload={(sectionKey, fieldId, record) => handleStaffUpload(s, sectionKey, fieldId, record)}
-            canEditConsultancy={adminRole === "advisor" || isAdminLevel(adminRole)}
-            onConsultancySave={(value) => handleConsultancySave(s, value)}
-            consultancySuggestions={consultancyList}
-          />
-        );
-      })()}
 
       {/* Loan Status Modal */}
       {loanStatusStudent && (

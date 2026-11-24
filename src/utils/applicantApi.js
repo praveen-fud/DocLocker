@@ -92,10 +92,11 @@ export const fetchMyActivity = async () => (await call('GET', '/api/applicant/ac
 
 // Files come back as a blob (the session can't ride on a plain link) and
 // are handed to the browser to save.
-async function fetchBlob(path) {
+// timeoutMs: a zip of every document can take a while on a slow phone connection.
+async function fetchBlob(path, timeoutMs = 180000) {
   let res;
   try {
-    res = await fetch(`${API_URL}${path}`, { headers: { ...companyHeaders(), ...applicantHeaders() }, signal: AbortSignal.timeout(180000) });
+    res = await fetch(`${API_URL}${path}`, { headers: { ...companyHeaders(), ...applicantHeaders() }, signal: AbortSignal.timeout(timeoutMs) });
   } catch {
     throw new ApplicantError('We couldn’t reach the server. Please check your connection and try again.', 0);
   }
@@ -120,7 +121,7 @@ function saveBlob({ blob, name }) {
 
 export const openMyDocument = (fileId) => fetchBlob(`/api/applicant/documents/${encodeURIComponent(fileId)}`);
 export const downloadMyDocument = async (fileId) => saveBlob(await fetchBlob(`/api/applicant/documents/${encodeURIComponent(fileId)}?mode=download`));
-export const downloadMyZip = async (group) => saveBlob(await fetchBlob(`/api/applicant/documents-zip${group ? `?group=${encodeURIComponent(group)}` : ''}`));
+export const downloadMyZip = async (group) => saveBlob(await fetchBlob(`/api/applicant/documents-zip${group ? `?group=${encodeURIComponent(group)}` : ''}`, 10 * 60 * 1000));
 
 // The 6-digit PIN rule, mirrored from Backend/src/services/applicantPins.js.
 export function pinProblem(pin) {
